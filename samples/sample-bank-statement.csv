@@ -1,0 +1,5 @@
+Date,Description,Debit,Credit,Balance
+2026-10-01,Opening balance,,,1500.00
+2026-10-02,Customer transfer,,250.00,1750.00
+2026-10-03,Bank fee,2.50,,1747.50
+2026-10-04,Utility payment,75.00,,1672.50
