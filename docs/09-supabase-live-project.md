@@ -54,3 +54,8 @@ Before using the first-firm onboarding button, configure the Edge Function secre
 ### Invitation safety gate
 
 The live invitation endpoint now also requires the Edge Function secret `LEDGERLY_INVITATIONS_ENABLED=true`. Leave this unset: the current generic write policies do not yet enforce the full role-by-table permission matrix in `docs/04-permissions.md`. Enable invitations only after those RLS policies and cross-role tests have been implemented and verified. This is an intentional fail-closed gate, not a missing UI setting.
+
+
+## Interim write-permission gate (2026-10-20)
+
+The generic RLS write helper `private.brp_user_has_firm_role(text)` is temporarily restricted to `firm_admin` only. This is a conservative bridge, not the final role matrix: ordinary staff, reviewer, manager, and partner roles must not be provisioned for cloud writes until table-specific RLS policies and cross-role integration tests replace the generic policies. Keep `LEDGERLY_INVITATIONS_ENABLED` unset. The single-firm owner can continue local-first workflows; cloud sync remains disabled.
