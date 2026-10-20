@@ -169,7 +169,7 @@ export default function CloudAuthPanel({ config }: Props) {
         <label className="audit-field"><span>اسم مكتب التدقيق</span><input value={firmName} onChange={e => setFirmName(e.target.value)} placeholder="اسم المكتب" /></label>
         <label className="audit-field"><span>البريد الإلكتروني</span><input type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" placeholder="name@example.com" /></label>
         <label className="audit-field"><span>كلمة المرور</span><input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} placeholder="8 أحرف على الأقل" onKeyDown={e => { if (e.key === 'Enter' && !busy) void runAuth(); }} /></label>
-      </div> : null}
+      </div>
       {error ? <p className="cloud-auth-error" role="alert">{error}</p> : null}
       {notice ? <p className="cloud-auth-success" role="status">{notice}</p> : null}
       <div className="cloud-auth-actions">
