@@ -165,3 +165,18 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
  .audit-footer{margin-top:18px}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+
+
+/* Optional cloud authentication panel */
+.cloud-auth-card{border-color:var(--line,#e4e0d8)}
+.cloud-auth-mode,.cloud-auth-actions{display:flex;gap:9px;flex-wrap:wrap;margin:12px 0}
+.cloud-auth-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:14px 0}
+.cloud-auth-fields .audit-field{min-width:0}
+.cloud-auth-fields input{width:100%;min-width:0}
+.cloud-auth-note{font-size:12px;line-height:1.8;color:var(--muted,#6d716f);margin:10px 0 0}
+.cloud-auth-error,.cloud-auth-success{border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.7;margin:10px 0}
+.cloud-auth-error{background:#fff1ef;color:#9c3024;border:1px solid #f0c7c1}
+.cloud-auth-success{background:#edf8f0;color:#23623a;border:1px solid #c9e7d1}
+.cloud-auth-mode button,.cloud-auth-actions button{min-height:40px}
+.cloud-auth-card button:disabled{opacity:.6;cursor:wait}
+@media(max-width:640px){.cloud-auth-fields{grid-template-columns:1fr}}
