@@ -1,0 +1,41 @@
+name: Ledgerly Windows Installer
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "ledgerly-v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install and verify web application
+        run: |
+          npm ci
+          npm test
+          npm run build
+      - name: Install desktop packaging tools
+        working-directory: desktop
+        run: npm install --no-audit --no-fund
+      - name: Build Windows installer
+        working-directory: desktop
+        run: npm run dist
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ledgerly-Windows-Installer
+          path: desktop/release/*.exe
+          if-no-files-found: error
+          retention-days: 30
