@@ -14,6 +14,8 @@ test('invitation table is isolated from browser roles and RPC is service-role on
   assert.match(migration, /REVOKE ALL ON FUNCTION public\.ledgerly_add_firm_invited_member\([^)]+\) FROM authenticated/);
   assert.match(migration, /GRANT EXECUTE ON FUNCTION public\.ledgerly_add_firm_invited_member\([^)]+\) TO service_role/);
   assert.match(alignment, /ADD COLUMN IF NOT EXISTS row_version/);
+  assert.match(alignment, /SET status = 'expired'/);
+  assert.match(alignment, /expires_at < now_iso/);
   assert.match(denyPolicy, /TO anon, authenticated/);
   assert.match(denyPolicy, /USING \(false\)/);
   assert.match(denyPolicy, /WITH CHECK \(false\)/);
