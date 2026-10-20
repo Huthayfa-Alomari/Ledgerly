@@ -65,6 +65,11 @@ BEGIN
   IF EXISTS (SELECT 1 FROM public.app_user u WHERE pg_catalog.lower(u.email) = pg_catalog.lower(pg_catalog.btrim(p_email)) AND u.deleted_at IS NULL) THEN
     RAISE EXCEPTION 'This email is already linked to a Ledgerly user' USING ERRCODE = '23505';
   END IF;
+  UPDATE public.firm_invitation
+  SET status = 'expired', updated_at = now_iso
+  WHERE firm_id = p_firm_id AND pg_catalog.lower(email) = pg_catalog.lower(pg_catalog.btrim(p_email))
+    AND status = 'sent' AND expires_at < now_iso;
+
   IF EXISTS (SELECT 1 FROM public.firm_invitation i WHERE i.firm_id = p_firm_id AND pg_catalog.lower(i.email) = pg_catalog.lower(pg_catalog.btrim(p_email)) AND i.status = 'sent') THEN
     RAISE EXCEPTION 'A pending invitation already exists for this email' USING ERRCODE = '23505';
   END IF;
