@@ -33,6 +33,18 @@ Deno.serve(async (req: Request) => {
   if (authError || !userResult.user || userResult.user.aud !== "authenticated") {
     return json(401, { error: "The session is invalid or expired. Sign in again." });
   }
+  if (!userResult.user.email_confirmed_at) {
+    return json(403, { error: "Confirm your email before initializing the first firm." });
+  }
+
+  // Fail closed: only the explicitly configured owner email may claim the first firm.
+  const allowedBootstrapEmail = Deno.env.get("LEDGERLY_BOOTSTRAP_EMAIL")?.trim().toLowerCase();
+  if (!allowedBootstrapEmail) {
+    return json(503, { error: "First-firm setup is disabled until an administrator configures LEDGERLY_BOOTSTRAP_EMAIL." });
+  }
+  if (!userResult.user.email || userResult.user.email.toLowerCase() !== allowedBootstrapEmail) {
+    return json(403, { error: "This account is not authorized to initialize the first firm." });
+  }
 
   let payload: { firm_name?: unknown; display_name?: unknown };
   try {
