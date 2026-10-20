@@ -21,6 +21,9 @@ Deno.serve(async (req: Request) => {
   const redirectTo = Deno.env.get("LEDGERLY_INVITE_REDIRECT_URL")?.trim();
   if (!supabaseUrl || !anonKey || !serviceRoleKey) return json(500, { error: "Server authentication is not configured." });
   if (!redirectTo) return json(503, { error: "Member invitations are disabled until LEDGERLY_INVITE_REDIRECT_URL is configured." });
+  if (Deno.env.get("LEDGERLY_INVITATIONS_ENABLED")?.trim().toLowerCase() !== "true") {
+    return json(503, { error: "Member invitations remain disabled until role-specific RLS policies are validated." });
+  }
   try {
     const redirectUrl = new URL(redirectTo);
     if (redirectUrl.protocol !== "https:") return json(503, { error: "The invitation redirect must use HTTPS." });
