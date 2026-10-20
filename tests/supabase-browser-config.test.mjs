@@ -11,6 +11,9 @@ test('browser config accepts only browser-safe Supabase key variable', () => {
   assert.match(source, /payload\.role !== 'anon'/);
   assert.match(source, /sb_secret_/);
   assert.match(source, /service_role/);
+  assert.match(source, /DEFAULT_SUPABASE_URL/);
+  assert.match(source, /DEFAULT_SUPABASE_PUBLISHABLE_KEY/);
+  assert.doesNotMatch(source, /sb_secret_[A-Za-z0-9_]{20,}/);
 });
 
 test('environment example explicitly forbids service-role credentials in Vite variables', () => {
