@@ -75,7 +75,7 @@ WITH CHECK (
       AND wp.firm_id = working_paper_version.firm_id
       AND private.brp_user_has_role_in_scope(
         wp.firm_id, wp.engagement_id,
-        ARRAY['managing_partner','engagement_partner','manager','reviewer','eqcr']::text[]
+        ARRAY['managing_partner','engagement_partner','manager','senior','staff','reviewer','eqcr']::text[]
       )
   )
 );
