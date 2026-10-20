@@ -85,3 +85,30 @@ test('planning and completion checklist values are isolated by engagement', () =
   assert.match(app, /const key=\x60\$\{scope\}::\$\{s\}\x60/);
   assert.match(app, /scope==='global'\?checked\[s\]:false/);
 });
+
+test('AI copilot requires explicit consent and submits only a minimized engagement summary', () => {
+  assert.match(app, /import AuditCopilot from '\.\/components\/AuditCopilot'/);
+  assert.match(app, /module==='ai-assistant'/);
+  assert.match(app, /const aiCopilotContext = useMemo/);
+  assert.match(app, /ref:'TB-'/);
+  const panel = readFileSync(new URL('../src/components/AuditCopilot.tsx', import.meta.url), 'utf8');
+  assert.match(panel, /checked={consent}/);
+  assert.match(panel, /if \(!consent\)/);
+  assert.match(panel, /ledgerly-ai-assistant/);
+  assert.match(panel, /لا تُرسل أسماء العملاء أو أرقامهم الضريبية/);
+  assert.match(panel, /sourceRefs: Array\.isArray/);
+  assert.match(css, /\.ai-consent/);
+});
+
+test('AI edge function is gated, authenticated, server-key only, and does not store requests', () => {
+  const edge = readFileSync(new URL('../supabase/functions/ledgerly-ai-assistant/index.ts', import.meta.url), 'utf8');
+  assert.match(edge, /LEDGERLY_AI_ENABLED/);
+  assert.match(edge, /auth\.getUser\(token\)/);
+  assert.match(edge, /app_user/);
+  assert.match(edge, /role_assignment/);
+  assert.match(edge, /Deno\.env\.get\("OPENAI_API_KEY"\)/);
+  assert.match(edge, /store: false/);
+  assert.match(edge, /Sanitized summary/);
+  assert.match(edge, /Never approve workpapers/);
+  assert.doesNotMatch(edge, /console\.log\(.*context/i);
+});
