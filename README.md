@@ -1,6 +1,6 @@
-# Bank Reconciliation Pro — Audit Platform Build 1.0 UI Refresh
+# Ledgerly — External Audit Practice Platform
 
-A bilingual Arabic/English, local-first browser app for importing bank statements and ledger exports, reviewing column mapping, validating rows, and producing conservative first-pass matching suggestions.
+Ledgerly is a bilingual Arabic/English external-audit practice platform, packaged as a Windows desktop application. It includes client and engagement workflows, planning and risks, trial-balance review, working papers, evidence indexing, findings, reporting, and bank reconciliation.
 
 ## Strategic direction (approved) — Audit Practice Platform
 
@@ -52,12 +52,27 @@ The current UI now includes an application shell and initial local workflows for
 - Node.js 20.19+ or 22.12+
 - npm
 
-## Run
+## Run for development
 ```bash
-npm install
+npm ci
 npm run dev
 ```
-Open the local URL printed by Vite (usually `http://127.0.0.1:5173`).
+
+## Windows desktop application
+The Windows desktop shell uses Electron with Node integration disabled, context isolation enabled, and sandboxing enabled. The app remains local-first; this packaging step does not activate cloud sync or authentication.
+
+To build a Windows installer on a Windows machine:
+```powershell
+npm ci
+npm test
+npm run build
+cd desktop
+npm install
+npm run dist
+```
+The installer is written to `desktop/release/`. In GitHub, run **Actions → Ledgerly Windows Installer → Run workflow** to build a Windows installer artifact, or push a tag such as `ledgerly-v1.0.0` to trigger the workflow. The installer artifact is currently x64 Windows.
+
+User data is kept in the Electron app's user-data directory and is not deleted by the uninstaller. Before replacing an existing browser-only installation, export a JSON backup from the current browser app and keep it safely; browser LocalStorage does not automatically transfer into the Windows app.
 
 ## Checks
 ```bash
@@ -73,6 +88,11 @@ The current regression suite covers the reconciliation core, engagement workflow
 3. Confirm the opening-balance row is labelled as a balance rather than a transaction.
 4. Run matching with a 0-day date window. The sample should produce 3 suggested matches, 0 unmatched bank transactions, 0 unmatched ledger transactions, and 0 ambiguous cases.
 5. Inspect all suggestions manually; matching is advisory and does not post journal entries.
+
+## Product identity and Windows packaging
+- Product name is **Ledgerly** across the app title and Windows installer.
+- The existing web application is packaged into a Windows desktop shell; this is not a rewrite and retains the current local-first data model.
+- Windows installer creation is automated with GitHub Actions. The installer must pass the Windows build workflow before it is treated as a verified release.
 
 ## Patch notes (2026-10-18)
 - Fixed fuzzy header detection so blank/short headers cannot accidentally map to financial fields.

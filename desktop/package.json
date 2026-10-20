@@ -1,0 +1,52 @@
+{
+  "name": "ledgerly-windows",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Ledgerly Windows desktop shell",
+  "main": "main.cjs",
+  "scripts": {
+    "dist": "electron-builder --win nsis --x64",
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "37.2.6",
+    "electron-builder": "26.0.12"
+  },
+  "build": {
+    "appId": "com.ledgerly.audit",
+    "productName": "Ledgerly",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.cjs",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../dist",
+        "to": "app-dist"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "Ledgerly-Setup-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Ledgerly",
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}
