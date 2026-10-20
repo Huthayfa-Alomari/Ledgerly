@@ -8,8 +8,8 @@ const migration = readFileSync(
 );
 
 test('firm identity uses a single canonical scoped read policy', () => {
-  assert.match(migration, /DROP POLICY IF EXISTS brp_firm_member_read ON public\\.firm/);
-  assert.match(migration, /DROP POLICY IF EXISTS brp_firm_isolation ON public\\.firm/);
+  assert.match(migration, /DROP POLICY IF EXISTS brp_firm_member_read ON public\.firm/);
+  assert.match(migration, /DROP POLICY IF EXISTS brp_firm_isolation ON public\.firm/);
   assert.match(migration, /CREATE POLICY ledgerly_firm_read/);
 });
 
