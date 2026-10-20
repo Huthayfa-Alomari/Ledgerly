@@ -17,3 +17,7 @@ test('all existing public policies referencing membership helper are rewritten b
   assert.match(sql, /private\.brp_user_has_firm_access/i);
   assert.match(sql, /REVOKE ALL ON FUNCTION public\.brp_user_has_firm_access\(text\) FROM PUBLIC, anon, authenticated/i);
 });
+
+test('migration fails closed if any public RLS policy still references the old helper', () => {
+  assert.match(sql, /IF EXISTS \([\s\S]*?public\.brp_user_has_firm_access[\s\S]*?RAISE EXCEPTION 'Security migration aborted/i);
+});
