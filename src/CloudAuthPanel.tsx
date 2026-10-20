@@ -117,19 +117,19 @@ export default function CloudAuthPanel({ config }: Props) {
     }
     setBusy(true); setError(''); setNotice('');
     try {
-      const response = await fetch(`${config.config.url}/rest/v1/rpc/ledgerly_bootstrap_first_firm`, {
+      const response = await fetch(`${config.config.url}/functions/v1/ledgerly-bootstrap-first-firm`, {
         method: 'POST',
         headers: {
           apikey: config.config.anonKey,
           Authorization: `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ p_firm_name: firmName.trim(), p_display_name: displayName.trim() }),
+        body: JSON.stringify({ firm_name: firmName.trim(), display_name: displayName.trim() }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const message = data.message || data.details || data.hint || 'تعذرت تهيئة المكتب.';
-        if (String(message).includes('Initial firm already exists')) {
+        const message = data.error || data.message || data.details || data.hint || 'تعذرت تهيئة المكتب.';
+        if (String(message).includes('already exists')) {
           throw new Error('تم إنشاء المكتب الأول مسبقًا. الحسابات الجديدة تحتاج دعوة من مدير المكتب.');
         }
         if (response.status === 401 || response.status === 403) throw new Error('الجلسة غير مخوّلة أو انتهت. سجّل الدخول من جديد.');
