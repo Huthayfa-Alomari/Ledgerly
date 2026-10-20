@@ -49,3 +49,8 @@ Before using the first-firm onboarding button, configure the Edge Function secre
 - The `firm_invitation` table has RLS enabled, an explicit deny policy for `anon` and `authenticated`, and no browser grants. The latest Supabase Security Advisor check returned no findings after the deny policy was added.
 - Before sending invitations, configure the Edge Function secret `LEDGERLY_INVITE_REDIRECT_URL` to an HTTPS callback hosted for the application and add that URL to Supabase Auth's allowed redirect URLs. Configure production SMTP for invitation email delivery. These settings cannot safely be inferred from the repository.
 - Invitations are not considered end-to-end validated until a real invite email is received, accepted, and the invited user can sign in with the intended firm role. Audit-data synchronization and evidence upload remain disabled.
+
+
+### Invitation safety gate
+
+The live invitation endpoint now also requires the Edge Function secret `LEDGERLY_INVITATIONS_ENABLED=true`. Leave this unset: the current generic write policies do not yet enforce the full role-by-table permission matrix in `docs/04-permissions.md`. Enable invitations only after those RLS policies and cross-role tests have been implemented and verified. This is an intentional fail-closed gate, not a missing UI setting.
