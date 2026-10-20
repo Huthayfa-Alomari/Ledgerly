@@ -72,5 +72,24 @@ BEGIN
   END LOOP;
 END $$;
 
+-- Fail closed if any public policy still points at the old helper.
+-- Because migrations run transactionally, this aborts before revoking the old function.
+DO $
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM pg_policy pol
+    JOIN pg_class cls ON cls.oid = pol.polrelid
+    JOIN pg_namespace ns ON ns.oid = cls.relnamespace
+    WHERE ns.nspname = 'public'
+      AND (
+        coalesce(pg_get_expr(pol.polqual, pol.polrelid), '') ILIKE '%public.brp_user_has_firm_access%'
+        OR coalesce(pg_get_expr(pol.polwithcheck, pol.polrelid), '') ILIKE '%public.brp_user_has_firm_access%'
+      )
+  ) THEN
+    RAISE EXCEPTION 'Security migration aborted: at least one public RLS policy still references public.brp_user_has_firm_access';
+  END IF;
+END $;
+
 -- Policies now use the non-exposed private helper; prevent direct RPC calls to the old function.
 REVOKE ALL ON FUNCTION public.brp_user_has_firm_access(text) FROM PUBLIC, anon, authenticated;
