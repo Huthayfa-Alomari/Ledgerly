@@ -69,3 +69,12 @@ test('trial balance analytics reports traceable exceptions and documents limitat
   assert.match(engine, /material-closing-balance/);
   assert.match(engine, /does not infer accounting correctness or issue an audit conclusion/);
 });
+
+test('completion report includes an evidence-to-workpaper traceability matrix', () => {
+  assert.match(app, /const evidenceTraceability = useMemo/);
+  assert.match(app, /مصفوفة تتبّع الأدلة/);
+  assert.match(app, /مرجع ورقة العمل غير موجود/);
+  assert.match(app, /تصدير مصفوفة التتبع/);
+  assert.match(app, /لا يثبت كفاية الدليل أو ملاءمته/);
+  assert.match(css, /\.traceability-card/);
+});

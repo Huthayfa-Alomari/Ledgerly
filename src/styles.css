@@ -219,3 +219,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .tb-issues-table td:nth-child(4){min-width:260px;white-space:normal}
 .tb-analytics-empty{padding:16px;border:1px solid #dce9df;border-radius:9px;background:#f6fbf7;color:#355b43;font-size:12px;line-height:1.8}
 @media(max-width:720px){.tb-analytics-controls{grid-template-columns:1fr}.tb-difference-strip{display:grid;grid-template-columns:1fr}.tb-issues-table td:nth-child(4){min-width:190px}}
+
+
+/* Evidence-to-workpaper traceability matrix */
+.traceability-card{margin:16px 0}
+.traceability-card .audit-table td{vertical-align:top;line-height:1.7}
+.traceability-card .audit-table td:first-child{min-width:190px}
+.traceability-card .audit-table td:nth-child(4){min-width:180px;white-space:normal}
+.traceability-card .table-sub{display:block;margin-top:4px;color:#7b887f;font-size:10px}
+.traceability-card .audit-pill.risk-pill{white-space:nowrap}
+@media(max-width:720px){.traceability-card .audit-table td:first-child{min-width:160px}.traceability-card .audit-table td:nth-child(4){min-width:150px}}
