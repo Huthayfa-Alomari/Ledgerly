@@ -117,6 +117,10 @@ BEGIN
   CREATE POLICY ledgerly_app_user_read ON public.app_user
     FOR SELECT TO authenticated
     USING (private.brp_user_has_role_in_scope(firm_id, NULL, ARRAY['firm_admin','managing_partner','engagement_partner','manager','senior','staff','reviewer','eqcr']::text[]));
+  -- The local PIN verifier must never be selectable through the browser Data API.
+  REVOKE ALL ON public.app_user FROM anon, authenticated;
+  GRANT SELECT (id, firm_id, display_name, email, status, created_at, updated_at, deleted_at)
+    ON public.app_user TO authenticated;
   REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.app_user FROM anon, authenticated;
 
   CREATE POLICY ledgerly_role_assignment_read ON public.role_assignment
