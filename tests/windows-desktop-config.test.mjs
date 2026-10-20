@@ -10,6 +10,11 @@ test('application metadata uses Ledgerly branding', () => {
   assert.match(html, /Ledgerly — External Audit Practice Platform/);
 });
 
+test('Vite emits relative asset paths for file-based desktop loading', () => {
+  const vite = read('../vite.config.ts');
+  assert.match(vite, /base: '\.\/'/);
+});
+
 test('Windows package creates a named NSIS installer without deleting local data on uninstall', () => {
   const pkg = JSON.parse(read('../desktop/package.json'));
   assert.equal(pkg.build.productName, 'Ledgerly');
