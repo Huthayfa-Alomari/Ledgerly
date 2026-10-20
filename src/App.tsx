@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import Reconciliation from './Reconciliation';
+import AuditPriorityPanel from './components/AuditPriorityPanel';
 import CloudAuthPanel from './CloudAuthPanel';
 import * as XLSX from 'xlsx';
 import './styles.css';
@@ -56,6 +57,20 @@ function App() {
  const currentTB = db.trialBalance.filter(r=>!activeEngagement || r.engagementId===activeEngagement.id);
  const tbTotals = useMemo(()=>currentTB.reduce((a,r)=>({openingDebit:a.openingDebit+r.openingDebit,openingCredit:a.openingCredit+r.openingCredit,debit:a.debit+r.debit,credit:a.credit+r.credit,closingDebit:a.closingDebit+r.closingDebit,closingCredit:a.closingCredit+r.closingCredit}),{openingDebit:0,openingCredit:0,debit:0,credit:0,closingDebit:0,closingCredit:0}),[currentTB]);
  const stats = useMemo(()=>({clients:db.clients.filter(c=>c.status==='نشط').length,open:db.engagements.filter(e=>e.status!=='مغلق').length,workpapers:db.workpapers.filter(w=>w.status!=='معتمد').length,findings:db.findings.filter(f=>f.status!=='مغلقة').length}),[db]);
+ const dashboardSignals = useMemo(()=>{
+  const openEngagements=db.engagements.filter(e=>e.status!=='مغلق');
+  const pendingIndependence=openEngagements.filter(e=>e.independenceStatus!=='مكتمل'||!db.clients.find(c=>c.id===e.clientId)?.independenceChecked);
+  const openRisks=db.risks.filter(r=>r.status!=='مغلق'&&r.status!=='مكتمل');
+  const reviewQueue=db.workpapers.filter(w=>w.status!=='معتمد');
+  const openFindings=db.findings.filter(f=>f.status!=='مغلقة');
+  const unlinkedEvidence=db.evidence.filter(ev=>!ev.workpaperRef||!db.workpapers.some(w=>w.engagementId===ev.engagementId&&w.ref===ev.workpaperRef));
+  const unbalancedTB=db.engagements.filter(e=>{
+   const rows=db.trialBalance.filter(r=>r.engagementId===e.id);
+   const difference=rows.reduce((sum,r)=>sum+r.closingDebit-r.closingCredit,0);
+   return rows.length>0&&Math.abs(difference)>0.005;
+  });
+  return {pendingIndependence,openRisks,reviewQueue,openFindings,unlinkedEvidence,unbalancedTB};
+ },[db]);
  const startForm=(defaults:Record<string,string>={})=>{setForm(defaults);setShowForm(true);};
  const update=(k:string,v:string)=>setForm(p=>({...p,[k]:v}));
  function loadDemoData(){
@@ -114,6 +129,14 @@ function App() {
    {module==='dashboard'&&<>
     <section className="audit-welcome"><div><span className="audit-kicker">نظام إدارة أعمال التدقيق</span><h2>من قبول العميل إلى إقفال ملف التدقيق.</h2><p>مساحة عمل موحدة لإدارة ملفات التدقيق، المخاطر، أوراق العمل، الأدلة والملاحظات. ابدأ بإنشاء عميل ثم افتح ملف تدقيق للسنة المالية.</p></div><div className="welcome-mark">L<span>LEDGERLY</span></div></section>
     <div className="audit-stats"><Stat label="العملاء النشطون" value={stats.clients} hint="سجل العملاء" icon="♙"/><Stat label="ملفات تدقيق مفتوحة" value={stats.open} hint="كل السنوات المالية" icon="▤"/><Stat label="أوراق بانتظار الاعتماد" value={stats.workpapers} hint="تحتاج إلى مراجعة" icon="▧"/><Stat label="ملاحظات غير مغلقة" value={stats.findings} hint="نتائج التدقيق" icon="⚑"/></div>
+    <AuditPriorityPanel items={[
+     {id:'independence',title:'قبول واستقلالية غير مكتملة',detail:'تحقق من حالة العميل وإقرارات المهمة',count:dashboardSignals.pendingIndependence.length,onOpen:()=>setModule('engagements')},
+     {id:'risks',title:'مخاطر مفتوحة',detail:'راجع الاستجابة وإجراءات التدقيق المرتبطة',count:dashboardSignals.openRisks.length,onOpen:()=>setModule('planning')},
+     {id:'workpapers',title:'أوراق تحتاج مراجعة',detail:'لا تُعامل المسودة كعمل معتمد',count:dashboardSignals.reviewQueue.length,onOpen:()=>setModule('workpapers')},
+     {id:'trial-balance',title:'موازين غير متوازنة',detail:'فرق المدين والدائن الختامي لكل ملف مستورد',count:dashboardSignals.unbalancedTB.length,onOpen:()=>setModule('trial-balance')},
+     {id:'evidence',title:'أدلة غير مرتبطة بورقة عمل',detail:'راجع مرجع ورقة العمل لكل سجل دليل',count:dashboardSignals.unlinkedEvidence.length,onOpen:()=>setModule('evidence')},
+     {id:'findings',title:'ملاحظات غير مغلقة',detail:'تحقق من المعالجة والأثر والتوصية',count:dashboardSignals.openFindings.length,onOpen:()=>setModule('findings')}
+    ]} />
     <div className="audit-content-grid"><section className="audit-card"><div className="audit-card-head"><div><h3>مسار ملف التدقيق</h3><p>المراحل المقترحة لسير العمل</p></div><span className="soft-tag">Workflow</span></div><div className="workflow">{['قبول العميل والاستقلالية','التخطيط وتقييم المخاطر','استيراد ميزان المراجعة','تنفيذ إجراءات التدقيق','مراجعة أوراق العمل','معالجة الملاحظات','التقارير والإقفال'].map((s,i)=><div className="workflow-row" key={s}><span className="workflow-num">{String(i+1).padStart(2,'0')}</span><span>{s}</span><span className="workflow-state">{i===0&&db.clients.length?'جاهز للمتابعة':i===1&&db.engagements.length?'ابدأ المراجعة':'بانتظار التنفيذ'}</span></div>)}</div></section><section className="audit-card"><div className="audit-card-head"><div><h3>إجراءات سريعة</h3><p>ابدأ من أهم سجلات النظام</p></div></div><div className="quick-actions"><button className="demo-action" onClick={loadDemoData}>◈ تحميل بيانات تجريبية <span>إضافة عميل وملف تدقيق وسجلات وهمية دون حذف بياناتك الحالية</span></button><button onClick={()=>{setModule('clients');startForm({});}}>＋ إضافة عميل جديد <span>بيانات المنشأة والتواصل</span></button><button onClick={()=>{setModule('engagements');startForm({year:String(new Date().getFullYear()),framework:'IFRS',type:'تدقيق سنوي'});}}>＋ فتح ملف تدقيق <span>تحديد السنة ونوع المهمة</span></button><button onClick={()=>setModule('reconciliation')}>⇄ تشغيل المطابقة البنكية <span>مقارنة كشف البنك ودفتر الأستاذ</span></button><button onClick={()=>setModule('reports')}>▥ عرض التقارير والإقفال <span>مراجعة الجاهزية والتصدير</span></button></div></section></div>
     <section className="audit-card"><div className="audit-card-head"><div><h3>آخر ملفات التدقيق</h3><p>حسب آخر الملفات التي أُنشئت محليًا</p></div><button className="audit-text-button" onClick={()=>setModule('engagements')}>عرض الكل ←</button></div>{db.engagements.length?<div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>العميل</th><th>السنة المالية</th><th>نوع المهمة</th><th>الحالة</th><th></th></tr></thead><tbody>{db.engagements.slice(0,5).map(e=><tr key={e.id}><td>{db.clients.find(c=>c.id===e.clientId)?.name||'عميل محذوف'}</td><td>{e.year}</td><td>{e.type}</td><td><span className="audit-pill">{e.status}</span></td><td><button className="audit-text-button" onClick={()=>{setSelectedEngagement(e.id);setModule('workpapers');}}>فتح الملف</button></td></tr>)}</tbody></table></div>:<Empty text="لا توجد ملفات تدقيق بعد. أضف عميلًا ثم أنشئ ملف التدقيق الأول."/>}</section>
    </>}

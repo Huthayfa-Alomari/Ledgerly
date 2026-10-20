@@ -32,3 +32,22 @@ test('UI refresh supports mobile navigation and reduced-motion preferences', () 
   assert.match(css, /@media\(prefers-reduced-motion:reduce\)/);
   assert.match(css, /button:focus-visible/);
 });
+
+test('dashboard surfaces actionable audit-priority signals with navigation to each module', () => {
+  assert.match(app, /import AuditPriorityPanel from '\.\/components\/AuditPriorityPanel'/);
+  for (const key of ['pendingIndependence', 'openRisks', 'reviewQueue', 'unbalancedTB', 'unlinkedEvidence', 'openFindings']) {
+    assert.ok(app.includes(key), `dashboard should calculate ${key}`);
+  }
+  for (const module of ['engagements', 'planning', 'workpapers', 'trial-balance', 'evidence', 'findings']) {
+    assert.ok(app.includes(`onOpen:()=>setModule('${module}')`), `priority item should navigate to ${module}`);
+  }
+});
+
+test('priority panel clearly labels administrative checks and is keyboard/mobile friendly', () => {
+  const panel = readFileSync(new URL('../src/components/AuditPriorityPanel.tsx', import.meta.url), 'utf8');
+  assert.match(panel, /aria-labelledby="audit-priority-heading"/);
+  assert.match(panel, /administrative indicators, not a conclusion about compliance/i);
+  assert.match(panel, /items\.map\(\(item\)/);
+  assert.match(css, /\.priority-item:focus-visible/);
+  assert.match(css, /\.priority-grid\{grid-template-columns:1fr\}/);
+});
