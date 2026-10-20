@@ -32,6 +32,8 @@ export default function CloudAuthPanel({ config }: Props) {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  const configUrl = config.configured ? config.config.url : '';
+  const anonKey = config.configured ? config.config.anonKey : '';
 
   const saveSession = (next: CloudSession | null) => {
     setSession(next);
@@ -58,11 +60,11 @@ export default function CloudAuthPanel({ config }: Props) {
   }, []);
 
   useEffect(() => {
-    if (!session?.expires_at || !session.refresh_token || !config.configured) return;
+    if (!session?.expires_at || !session.refresh_token || !configUrl || !anonKey) return;
     const wait = Math.max(1000, session.expires_at * 1000 - Date.now() - 60000);
     const timer = window.setTimeout(async () => {
       try {
-        const refreshed = await authRequest(config.config, 'token?grant_type=refresh_token', { refresh_token: session.refresh_token });
+        const refreshed = await authRequest({ url: configUrl, anonKey }, 'token?grant_type=refresh_token', { refresh_token: session.refresh_token });
         saveSession(refreshed as CloudSession);
       } catch {
         saveSession(null);
@@ -71,7 +73,7 @@ export default function CloudAuthPanel({ config }: Props) {
       }
     }, Math.min(wait, 2147480000));
     return () => window.clearTimeout(timer);
-  }, [session?.expires_at, session?.refresh_token, config]);
+  }, [session?.expires_at, session?.refresh_token, configUrl, anonKey]);
 
   const runAuth = async () => {
     if (!config.configured) return;
