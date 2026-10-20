@@ -32,6 +32,11 @@ export default function CloudAuthPanel({ config }: Props) {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteName, setInviteName] = useState('');
+  const [inviteRole, setInviteRole] = useState('staff');
+  const [inviteNotice, setInviteNotice] = useState('');
+  const [inviteError, setInviteError] = useState('');
   const configUrl = config.configured ? config.config.url : '';
   const anonKey = config.configured ? config.config.anonKey : '';
 
@@ -145,6 +150,32 @@ export default function CloudAuthPanel({ config }: Props) {
     }
   };
 
+  const sendInvitation = async () => {
+    if (!config.configured || !session?.access_token) return;
+    setBusy(true); setInviteError(''); setInviteNotice('');
+    try {
+      if (!inviteEmail.trim() || !inviteName.trim()) throw new Error('أدخل بريد العضو واسمه.');
+      const response = await fetch(`${config.config.url}/functions/v1/ledgerly-invite-member`, {
+        method: 'POST',
+        headers: {
+          apikey: config.config.anonKey,
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: inviteEmail.trim().toLowerCase(), display_name: inviteName.trim(), role: inviteRole }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || data.message || 'تعذر إرسال الدعوة.');
+      setInviteNotice('تم إرسال دعوة العضو بالبريد الإلكتروني. يجب أن تكون إعدادات البريد ورابط العودة مهيأة في Supabase.');
+      setInviteEmail('');
+      setInviteName('');
+    } catch (e) {
+      setInviteError(e instanceof Error ? e.message : 'تعذر إرسال الدعوة.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const signOut = async () => {
     if (config.configured && session?.access_token) {
       try {
@@ -163,6 +194,18 @@ export default function CloudAuthPanel({ config }: Props) {
     <div className="audit-card-head"><div><h3>حساب Ledgerly السحابي</h3><p className="muted-copy">مصادقة Supabase منفصلة عن البيانات المحلية. لا يتم رفع العملاء أو أوراق العمل تلقائيًا.</p></div><span className={session ? 'audit-pill' : 'audit-pill risk-pill'}>{session ? 'مسجّل الدخول' : 'غير مسجّل'}</span></div>
     {!config.configured ? <p className="cloud-auth-note">اضبط VITE_SUPABASE_URL وVITE_SUPABASE_ANON_KEY بمفتاح publishable/anon فقط لتفعيل المصادقة.</p> : <>
       {session ? <div className="summary-lines"><div><strong>الحساب</strong><span>{session.user?.email || email || 'حساب موثّق'}</span></div><div><strong>حالة البيانات</strong><span>محلية؛ لم تُفعّل المزامنة</span></div></div> : null}
+      {session ? <div className="cloud-invite-panel">
+        <h4>دعوة عضو إلى مكتب التدقيق</h4>
+        <p className="cloud-auth-note">متاحة لمدير المكتب أو الشريك الإداري. يلزم إعداد رابط عودة HTTPS وبريد الدعوات في Supabase.</p>
+        <div className="cloud-auth-fields">
+          <label className="audit-field"><span>اسم العضو</span><input value={inviteName} onChange={e => setInviteName(e.target.value)} placeholder="الاسم الكامل" /></label>
+          <label className="audit-field"><span>البريد الإلكتروني</span><input type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder="member@example.com" /></label>
+          <label className="audit-field"><span>الدور</span><select value={inviteRole} onChange={e => setInviteRole(e.target.value)}><option value="engagement_partner">شريك المهمة</option><option value="manager">مدير تدقيق</option><option value="senior">مدقق أول</option><option value="staff">مساعد تدقيق</option><option value="reviewer">مراجع مستقل</option><option value="eqcr">مراجع جودة مستقل</option></select></label>
+        </div>
+        {inviteError ? <p className="cloud-auth-error" role="alert">{inviteError}</p> : null}
+        {inviteNotice ? <p className="cloud-auth-success" role="status">{inviteNotice}</p> : null}
+        <button type="button" className="audit-secondary" disabled={busy} onClick={() => void sendInvitation()}>{busy ? 'جارٍ التنفيذ…' : 'إرسال دعوة عضو'}</button>
+      </div> : null}
       <div className="cloud-auth-mode"><button type="button" className={mode === 'login' ? 'audit-primary' : 'audit-secondary'} onClick={() => { setMode('login'); setError(''); }}>تسجيل الدخول</button><button type="button" className={mode === 'signup' ? 'audit-primary' : 'audit-secondary'} onClick={() => { setMode('signup'); setError(''); }}>إنشاء حساب</button></div>
       <div className="cloud-auth-fields">
         <label className="audit-field"><span>اسم المستخدم</span><input value={displayName} onChange={e => setDisplayName(e.target.value)} autoComplete="name" placeholder="الاسم الكامل" /></label>
