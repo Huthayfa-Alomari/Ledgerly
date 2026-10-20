@@ -51,3 +51,21 @@ test('priority panel clearly labels administrative checks and is keyboard/mobile
   assert.match(css, /\.priority-item:focus-visible/);
   assert.match(css, /\.priority-grid\{grid-template-columns:1fr\}/);
 });
+
+test('trial balance analytics engine is integrated into the existing audit module', () => {
+  assert.match(app, /import \{ analyzeTrialBalance \} from '\.\/lib\/trial-balance-analytics\.mjs'/);
+  assert.match(app, /const tbAnalytics = useMemo\(\(\)=>analyzeTrialBalance\(currentTB/);
+  assert.match(app, /تحليلات ميزان المراجعة/);
+  assert.match(app, /تصدير نتائج التحليل/);
+  assert.match(app, /وثّق استنتاجك في ورقة العمل/);
+  assert.match(css, /\.tb-analytics-card/);
+});
+
+test('trial balance analytics reports traceable exceptions and documents limitations', () => {
+  const engine = readFileSync(new URL('../src/lib/trial-balance-analytics.mjs', import.meta.url), 'utf8');
+  assert.match(engine, /unbalanced-/);
+  assert.match(engine, /duplicate-account-code/);
+  assert.match(engine, /dual-sided-closing-balance/);
+  assert.match(engine, /material-closing-balance/);
+  assert.match(engine, /does not infer accounting correctness or issue an audit conclusion/);
+});
