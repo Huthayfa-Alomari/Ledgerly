@@ -36,3 +36,8 @@ The React app continues to keep audit records in local browser/Electron storage.
 - The RPC `ledgerly_bootstrap_first_firm(uuid, text, text)` is granted to `service_role` only, uses a transaction-scoped advisory lock, and rejects attempts to create a second firm. The first user receives the `firm_admin` role.
 - Security Advisor: no findings at the latest check. This is not a substitute for live authentication, authorization, and tenant-isolation testing.
 - The app still does not upload or synchronize clients, engagements, trial balances, working papers, or evidence. Do not use this as a cloud-ready multi-user deployment until invitation, membership, synchronization, and cross-tenant tests are complete.
+
+
+### First-firm bootstrap allowlist
+
+Before using the first-firm onboarding button, configure the Edge Function secret `LEDGERLY_BOOTSTRAP_EMAIL` in Supabase Dashboard → Edge Functions → Secrets with the exact owner email address. The Edge Function fails closed when the secret is missing, rejects other addresses, and requires the account email to be verified. Do not place this value in Vite variables or commit it to Git. The bootstrap function is intentionally not available to ordinary browser roles; only the service-role client used by the JWT-verified Edge Function can execute the database RPC.
