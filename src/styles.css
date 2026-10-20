@@ -180,3 +180,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .cloud-auth-mode button,.cloud-auth-actions button{min-height:40px}
 .cloud-auth-card button:disabled{opacity:.6;cursor:wait}
 @media(max-width:640px){.cloud-auth-fields{grid-template-columns:1fr}}
+
+.cloud-invite-panel{border-top:1px solid var(--line,#e4e0d8);margin-top:16px;padding-top:16px}
+.cloud-invite-panel h4{margin:0 0 6px;font-size:14px}
+.cloud-invite-panel .cloud-auth-fields{margin:12px 0}
