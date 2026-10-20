@@ -25,21 +25,36 @@ function sanitize(input: unknown) {
   const tb = x.trialBalance && typeof x.trialBalance === "object" ? x.trialBalance as Record<string, unknown> : {};
   const d = tb.differences && typeof tb.differences === "object" ? tb.differences as Record<string, unknown> : {};
   const tc = tb.counts && typeof tb.counts === "object" ? tb.counts as Record<string, unknown> : {};
+  const allowedIssueTitles: Record<string, string> = {
+    "invalid-data": "قيمة رقمية غير صالحة",
+    "negative-amount": "مبلغ سالب يحتاج تحققًا",
+    "missing-code": "رقم الحساب غير موجود",
+    "missing-name": "اسم الحساب غير موجود",
+    "dual-sided-closing-balance": "رصيد ختامي على الجانبين",
+    "duplicate-account-code": "رقم حساب مكرر",
+    "material-closing-balance": "رصيد ختامي يساوي/يتجاوز الأهمية النسبية",
+    "material-movement": "حركة إجمالية تساوي/تتجاوز الأهمية النسبية",
+    "unbalanced-opening": "فرق في إجمالي الرصيد الافتتاحي",
+    "unbalanced-movement": "فرق في إجمالي الحركة",
+    "unbalanced-closing": "فرق في إجمالي الرصيد الختامي",
+  };
   const raw = Array.isArray(tb.issues) ? tb.issues.slice(0, 20) : [];
   const issues = raw.map((entry, i) => {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new Error("invalid issue");
     const q = entry as Record<string, unknown>;
+    const candidate = typeof q.category === "string" ? q.category : "";
+    const category = Object.hasOwn(allowedIssueTitles, candidate) ? candidate : "invalid-data";
     return {
       ref: typeof q.ref === "string" && /^TB-\d{2}$/.test(q.ref) ? q.ref : `TB-${String(i + 1).padStart(2, "0")}`,
-      severity: ["error", "warning", "info"].includes(String(q.severity)) ? String(q.severity) : "info",
-      category: typeof q.category === "string" ? q.category.slice(0, 60) : "unknown",
-      title: typeof q.title === "string" ? q.title.slice(0, 120) : "Exception",
+      severity: category.startsWith("unbalanced-") || category === "invalid-data" ? "error" : category.startsWith("material-") ? "info" : "warning",
+      category,
+      title: allowedIssueTitles[category],
       amount: typeof q.amount === "number" && Number.isFinite(q.amount) ? number(q.amount) : null,
     };
   });
   return {
     fiscalYear: typeof x.fiscalYear === "string" && /^\d{4}$/.test(x.fiscalYear) ? x.fiscalYear : "",
-    engagementType: typeof x.engagementType === "string" ? x.engagementType.slice(0, 60) : "",
+    engagementType: ["تدقيق سنوي", "تدقيق مرحلي", "مهمة خاصة", "إجراءات متفق عليها"].includes(String(x.engagementType)) ? String(x.engagementType) : "",
     counts: {
       riskCount: count(c.riskCount), openRiskCount: count(c.openRiskCount),
       workpaperCount: count(c.workpaperCount), approvedWorkpaperCount: count(c.approvedWorkpaperCount),
