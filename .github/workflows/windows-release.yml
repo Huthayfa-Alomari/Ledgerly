@@ -3,6 +3,7 @@ name: Ledgerly Windows Installer
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     tags:
       - "ledgerly-v*"
 
