@@ -24,6 +24,9 @@ test('business writes are table-specific and not granted to firm_admin by defaul
   assert.match(migration, /ledgerly_insert_scope/);
   assert.match(migration, /ledgerly_engagement_update/);
   assert.doesNotMatch(migration, /CREATE POLICY brp_firm_role_write/);
+  assert.match(migration, /REVOKE ALL ON public\\.app_user FROM anon, authenticated/);
+  assert.match(migration, /GRANT SELECT \\(id, firm_id, display_name, email, status, created_at, updated_at, deleted_at\\)/);
+  assert.doesNotMatch(migration, /GRANT SELECT \\([^)]*auth_secret/);
 });
 
 test('browser invitation, schema metadata, and physical deletes stay blocked', () => {
