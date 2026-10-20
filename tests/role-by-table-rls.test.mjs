@@ -33,7 +33,7 @@ test('browser invitation, schema metadata, and physical deletes stay blocked', (
   assert.match(migration, /ledgerly_invitation_deny_browser_access[\s\S]*?USING \(false\) WITH CHECK \(false\)/);
   assert.match(migration, /schema_version_deny_browser[\s\S]*?USING \(false\) WITH CHECK \(false\)/);
   assert.match(migration, /REVOKE DELETE, TRUNCATE ON public\.%I FROM anon, authenticated/);
-  assert.match(migration, /REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public\.firm_invitation FROM anon, authenticated/);
+  assert.match(migration, /REVOKE ALL ON public\.firm_invitation FROM anon, authenticated/);
 });
 
 test('audit event chain is server-write-only and change log is append-only for browser roles', () => {
