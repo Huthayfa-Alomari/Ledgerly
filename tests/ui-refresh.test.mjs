@@ -78,3 +78,10 @@ test('completion report includes an evidence-to-workpaper traceability matrix', 
   assert.match(app, /لا يثبت كفاية الدليل أو ملاءمته/);
   assert.match(css, /\.traceability-card/);
 });
+
+test('planning and completion checklist values are isolated by engagement', () => {
+  assert.equal((app.match(/scope={activeEngagement\?\.id\|\|'global'}/g) || []).length, 2);
+  assert.equal((app.match(/\[\x60\$\{activeEngagement\?\.id\|\|'global'\}::\$\{item\}\x60\]:checked/g) || []).length, 2);
+  assert.match(app, /const key=\x60\$\{scope\}::\$\{s\}\x60/);
+  assert.match(app, /scope==='global'\?checked\[s\]:false/);
+});
