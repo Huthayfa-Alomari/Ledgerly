@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
-    "test": "node --test"
+    "test": "node --test tests/"
   },
   "dependencies": {
     "pdfjs-dist": "^5.4.149",
