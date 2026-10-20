@@ -43,3 +43,5 @@ export default function AuditPriorityPanel({ items, note = 'These are administra
     </section>
   );
 }
+
+export type AuditPriorityNote = ReactNode;
