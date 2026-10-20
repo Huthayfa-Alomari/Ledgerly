@@ -1,4 +1,4 @@
-# Security hardening overlay (not yet deployed)
+# Security hardening overlay (partially deployed)
 
 This overlay addresses a critical weakness in the initial draft: its broad `FOR ALL` firm-isolation policies allow any member who can reach the Data API to attempt writes across the firm, including self-provisioning users or role assignments.
 
@@ -17,4 +17,5 @@ This overlay addresses a critical weakness in the initial draft: its broad `FOR 
 - The initial schema stores IDs as `TEXT`; bootstrap must ensure `app_user.id = auth.users.id::text`.
 - `SECURITY DEFINER` is used only for membership/role lookups to avoid RLS recursion; it is in the non-exposed `private` schema, has an empty search path, and explicit execute grants.
 - `change_log` entries submitted by a browser are not tamper-proof audit evidence. For a reliable audit trail, route sensitive events through trusted server-side functions and restrict direct writes.
-- No cloud connection or migration has been run from this build. No user database has been modified.
+- Applied to the dedicated Supabase project `delvbdvjdmcblqiqaxsd`: the `move_membership_helper_private` migration moved the membership predicate into `private`, rewrote all 157 dependent public RLS policies, and revoked direct browser-role execution of the public helper. Post-deployment checks confirmed 0 policies still reference the public helper and all 43 public tables retain RLS.
+- The broader overlay in `202610190002_security_hardening.sql` has **not** been applied. Cloud authentication, tenant membership provisioning, file storage, and application data sync are still not wired into the UI.
