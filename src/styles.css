@@ -184,3 +184,19 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .cloud-invite-panel{border-top:1px solid var(--line,#e4e0d8);margin-top:16px;padding-top:16px}
 .cloud-invite-panel h4{margin:0 0 6px;font-size:14px}
 .cloud-invite-panel .cloud-auth-fields{margin:12px 0}
+
+
+/* Actionable audit dashboard */
+.dashboard-priority{margin:0 0 20px}
+.priority-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.priority-item{display:flex;align-items:center;gap:12px;min-width:0;text-align:right;padding:14px;border:1px solid var(--audit-line,#e1e8e2);border-radius:10px;background:#fff;color:inherit;cursor:pointer;font:inherit;transition:border-color .16s ease,background .16s ease,transform .16s ease}
+.priority-item:hover{border-color:#a9c8b4;background:#fbfdfb;transform:translateY(-1px)}
+.priority-item:focus-visible{outline:3px solid #b6d9c1;outline-offset:2px}
+.priority-count{display:grid;place-items:center;flex:0 0 38px;height:38px;border-radius:9px;background:#f1f5f2;color:#285b43;font-size:18px;font-weight:750;font-variant-numeric:tabular-nums}
+.priority-copy{display:grid;gap:4px;min-width:0;flex:1}
+.priority-copy strong{font-size:12px;color:#263c31}
+.priority-copy small{font-size:10px;line-height:1.6;color:#77857c}
+.priority-arrow{color:#779182;font-size:17px}
+.priority-disclaimer{margin:14px 0 0;color:#849087;font-size:10px;line-height:1.8}
+@media(max-width:720px){.priority-grid{grid-template-columns:1fr}.priority-item{padding:12px}.priority-copy strong{font-size:11px}}
+@media(prefers-reduced-motion:reduce){.priority-item{transition:none}.priority-item:hover{transform:none}}
