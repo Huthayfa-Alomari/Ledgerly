@@ -32,3 +32,12 @@ test('Electron window disables Node integration and enables context isolation an
   assert.match(main, /webSecurity: true/);
   assert.match(main, /setWindowOpenHandler/);
 });
+
+test('version tags publish the built installer as a permanent GitHub Release asset', () => {
+  const workflow = read('../.github/workflows/windows-release.yml');
+  assert.match(workflow, /tags:\s*\n\s*- "ledgerly-v\*"/);
+  assert.match(workflow, /permissions:\s*\n\s*contents: write/);
+  assert.match(workflow, /if: startsWith\(github\.ref, 'refs\/tags\/ledgerly-v'\)/);
+  assert.match(workflow, /uses: softprops\/action-gh-release@v2/);
+  assert.match(workflow, /files: desktop\/release\/\*\.exe/);
+});
