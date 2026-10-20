@@ -59,7 +59,7 @@ npm run dev
 ```
 
 ## Windows desktop application
-The Windows desktop shell uses Electron with Node integration disabled, context isolation enabled, and sandboxing enabled. The app remains local-first; this packaging step does not activate cloud sync or authentication.
+The Windows desktop shell uses Electron with Node integration disabled, context isolation enabled, and sandboxing enabled. The app remains local-first. The bundled public Supabase project URL/publishable key enable the optional sign-in UI in the Windows build; audit-data cloud sync and evidence upload remain disabled.
 
 To build a Windows installer on a Windows machine:
 ```powershell
@@ -158,7 +158,7 @@ Verification: `node --test` passes 33 tests. A production build remains unverifi
 
 ## Supabase project status
 
-The dedicated Supabase project has been created. See [docs/09-supabase-live-project.md](docs/09-supabase-live-project.md) for the project reference, applied live schema, security gate, and remaining integration work. The app is not yet cloud-connected; do not replay the earlier draft SQL migrations against the live project without reconciling them first.
+The dedicated Supabase project has been created. See [docs/09-supabase-live-project.md](docs/09-supabase-live-project.md) for the project reference, applied live schema, security gate, and remaining integration work. Optional Supabase email/password authentication and first-firm onboarding are implemented. Audit-record synchronization and evidence upload are still disabled; do not replay the earlier draft SQL migrations against the live project without reconciling them first.
 
 
 ## Build 1.0 — UI/UX refresh (2026-10-19)
@@ -177,3 +177,11 @@ The dedicated Supabase project has been created. See [docs/09-supabase-live-proj
 من لوحة المتابعة اضغط «تحميل بيانات تجريبية». الزر متاح حتى لو كانت لديك سجلات محلية، ويضيف سجلات تدريبية دون حذف البيانات الموجودة. إذا كانت بيانات التدريب موجودة مسبقًا، ستظهر رسالة بذلك بدل تكرارها. هذه السجلات وهمية وليست ملفات عميل حقيقية.
 
 ملفات CSV لاختبار المطابقة البنكية موجودة داخل مجلد `samples/`: `sample-bank-statement.csv` و`sample-ledger.csv`.
+
+
+## Optional cloud sign-in and first-firm setup
+
+- The browser-safe Supabase project URL and publishable key are included as public client configuration so the packaged Windows app can show sign-up/sign-in without build-time secrets. They are not service-role credentials; RLS remains the data access boundary.
+- You can override the defaults for a staging project with `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`. Never use a `service_role` or `sb_secret_` key in the app.
+- First-firm initialization is restricted to a verified owner email. Configure the Supabase Edge Function secret `LEDGERLY_BOOTSTRAP_EMAIL` as documented in [the live project notes](docs/09-supabase-live-project.md) before using the button.
+- Authentication does **not** synchronize the app's local clients, engagements, working papers, trial balances, or evidence. Cloud sync must be implemented and tenant-isolation tested before multiple users rely on shared audit records.
