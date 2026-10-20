@@ -1,3 +1,18 @@
+-- The firm table uses id rather than firm_id, so the generic tenant-table policy sweep
+-- does not cover it. Remove the earlier permissive policies before retaining one canonical policy.
+DROP POLICY IF EXISTS brp_firm_member_read ON public.firm;
+DROP POLICY IF EXISTS brp_firm_isolation ON public.firm;
+DROP POLICY IF EXISTS ledgerly_firm_read ON public.firm;
+CREATE POLICY ledgerly_firm_read
+ON public.firm
+FOR SELECT TO authenticated
+USING (
+  private.brp_user_has_role_in_scope(
+    id, NULL,
+    ARRAY['firm_admin','managing_partner','engagement_partner','manager','senior','staff','reviewer','eqcr']::text[]
+  )
+);
+
 -- Add parent-scope policies for immutable and child tables that do not carry engagement_id.
 -- These policies prevent RLS-enabled tables from being accidentally inaccessible to all users,
 -- while retaining parent engagement scope and append-only audit semantics.
