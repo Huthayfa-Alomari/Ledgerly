@@ -7,6 +7,12 @@ const migration = readFileSync(
   'utf8'
 );
 
+test('firm identity uses a single canonical scoped read policy', () => {
+  assert.match(migration, /DROP POLICY IF EXISTS brp_firm_member_read ON public\\.firm/);
+  assert.match(migration, /DROP POLICY IF EXISTS brp_firm_isolation ON public\\.firm/);
+  assert.match(migration, /CREATE POLICY ledgerly_firm_read/);
+});
+
 test('immutable event chain can be read only within the assigned scope and remains server-write-only', () => {
   assert.match(migration, /ledgerly_event_chain_read/);
   assert.match(migration, /private\.brp_user_has_role_in_scope\([\s\S]*?firm_id, engagement_id/);
