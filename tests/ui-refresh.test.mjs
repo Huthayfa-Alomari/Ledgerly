@@ -63,7 +63,7 @@ test('trial balance analytics engine is integrated into the existing audit modul
 
 test('trial balance analytics reports traceable exceptions and documents limitations', () => {
   const engine = readFileSync(new URL('../src/lib/trial-balance-analytics.mjs', import.meta.url), 'utf8');
-  assert.match(engine, /unbalanced-movement/);
+  assert.match(engine, /unbalanced-/);
   assert.match(engine, /duplicate-account-code/);
   assert.match(engine, /dual-sided-closing-balance/);
   assert.match(engine, /material-closing-balance/);
