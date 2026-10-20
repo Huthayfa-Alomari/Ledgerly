@@ -181,7 +181,8 @@ export function analyzeTrialBalance(rows, options = {}) {
     accountCount: safeRows.length,
     totals: Object.fromEntries(Object.entries(totals).map(([key, value]) => [key, roundMoney(value)])),
     differences,
-    balanced: Object.values(differences).every(value => Math.abs(value) <= tolerance),
+    balanced: Object.values(differences).every(value => Math.abs(value) <= tolerance)
+      && !issues.some(issue => issue.category === 'invalid-data'),
     tolerance,
     materiality,
     issues,
