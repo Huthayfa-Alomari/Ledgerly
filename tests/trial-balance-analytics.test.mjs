@@ -55,7 +55,7 @@ test('materiality creates traceable prioritization indicators, not audit conclus
 });
 
 test('tolerance boundary and invalid materiality are handled predictably', () => {
-  const result = analyzeTrialBalance([row({ debit: 100.005, credit: 100 })], { tolerance: 0.01, materiality: -1 });
+  const result = analyzeTrialBalance([row({ openingDebit: 0, openingCredit: 0, debit: 100.005, credit: 100, closingDebit: 0, closingCredit: 0 })], { tolerance: 0.01, materiality: -1 });
   assert.equal(result.materiality, 0);
   assert.equal(result.balanced, true);
 });
