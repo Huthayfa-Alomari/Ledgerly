@@ -128,7 +128,7 @@ BEGIN
 
   CREATE POLICY ledgerly_role_assignment_read ON public.role_assignment
     FOR SELECT TO authenticated
-    USING (private.brp_user_has_role_in_scope(firm_id, NULL, firm_read_roles));
+    USING (private.brp_user_has_role_in_scope(firm_id, NULL, ARRAY['firm_admin','managing_partner','engagement_partner','manager','senior','staff','reviewer','eqcr']::text[]));
   REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.role_assignment FROM anon, authenticated;
 
   -- Invitation provisioning is server-only; the feature flag remains off.
@@ -249,7 +249,7 @@ BEGIN
   -- Append-only logs: no UPDATE or DELETE via the browser.
   CREATE POLICY ledgerly_change_log_read ON public.change_log
     FOR SELECT TO authenticated
-    USING (private.brp_user_has_role_in_scope(firm_id, NULL, firm_read_roles));
+    USING (private.brp_user_has_role_in_scope(firm_id, NULL, ARRAY['firm_admin','managing_partner','engagement_partner','manager','senior','staff','reviewer','eqcr']::text[]));
   CREATE POLICY ledgerly_change_log_insert ON public.change_log
     FOR INSERT TO authenticated
     WITH CHECK (private.brp_user_has_role_in_scope(firm_id, NULL, ARRAY['firm_admin','managing_partner','engagement_partner','manager','senior','staff','reviewer','eqcr']::text[]));
