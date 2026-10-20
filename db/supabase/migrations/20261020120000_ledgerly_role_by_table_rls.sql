@@ -123,7 +123,7 @@ BEGIN
 
   CREATE POLICY ledgerly_app_user_read ON public.app_user
     FOR SELECT TO authenticated
-    USING (private.brp_user_has_role_in_scope(firm_id, NULL, firm_read_roles));
+    USING (private.brp_user_has_role_in_scope(firm_id, NULL, ARRAY['firm_admin','managing_partner','engagement_partner','manager','senior','staff','reviewer','eqcr']::text[]));
   REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.app_user FROM anon, authenticated;
 
   CREATE POLICY ledgerly_role_assignment_read ON public.role_assignment
@@ -198,7 +198,7 @@ BEGIN
 
   CREATE POLICY ledgerly_engagement_read ON public.engagement
     FOR SELECT TO authenticated
-    USING (private.brp_user_has_role_in_scope(firm_id, id, firm_read_roles));
+    USING (private.brp_user_has_role_in_scope(firm_id, id, ARRAY['firm_admin','managing_partner','engagement_partner','manager','senior','staff','reviewer','eqcr']::text[]));
   CREATE POLICY ledgerly_engagement_insert ON public.engagement
     FOR INSERT TO authenticated
     WITH CHECK (private.brp_user_has_role_in_scope(firm_id, NULL, ARRAY['managing_partner','engagement_partner']::text[]));
@@ -252,7 +252,7 @@ BEGIN
     USING (private.brp_user_has_role_in_scope(firm_id, NULL, firm_read_roles));
   CREATE POLICY ledgerly_change_log_insert ON public.change_log
     FOR INSERT TO authenticated
-    WITH CHECK (private.brp_user_has_role_in_scope(firm_id, NULL, firm_read_roles));
+    WITH CHECK (private.brp_user_has_role_in_scope(firm_id, NULL, ARRAY['firm_admin','managing_partner','engagement_partner','manager','senior','staff','reviewer','eqcr']::text[]));
   REVOKE UPDATE, DELETE, TRUNCATE ON public.change_log FROM anon, authenticated;
 
   -- Audit trail chain is server-generated only; browser cannot forge a tamper-evident chain.
