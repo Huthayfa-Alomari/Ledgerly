@@ -229,3 +229,24 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .traceability-card .table-sub{display:block;margin-top:4px;color:#7b887f;font-size:10px}
 .traceability-card .audit-pill.risk-pill{white-space:nowrap}
 @media(max-width:720px){.traceability-card .audit-table td:first-child{min-width:160px}.traceability-card .audit-table td:nth-child(4){min-width:150px}}
+
+
+/* Privacy-first AI audit copilot */
+.ai-copilot-page{display:grid;gap:16px}
+.ai-copilot-hero{display:flex;align-items:flex-start;gap:16px;padding:22px}
+.ai-copilot-hero h3{margin:10px 0 6px}
+.ai-copilot-mark{display:grid;place-items:center;flex:0 0 48px;width:48px;height:48px;border-radius:14px;background:#edf3ee;color:#315c43;font-size:26px}
+.ai-context-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:18px 0}
+.ai-context-grid>div{display:grid;gap:6px;padding:12px;border:1px solid #e5ebe6;border-radius:10px;background:#fafbf9}
+.ai-context-grid span{color:#748078;font-size:11px}
+.ai-context-grid strong{color:#253c30;font-size:19px;font-variant-numeric:tabular-nums}
+.ai-prompt-field{display:grid;gap:7px;margin:16px 0}
+.ai-prompt-field textarea{width:100%;resize:vertical;min-height:90px;line-height:1.8}
+.ai-consent{display:flex;align-items:flex-start;gap:10px;padding:13px;border:1px solid #d9e5db;border-radius:10px;background:#f7faf7;color:#314b3a;font-size:12px;line-height:1.8;cursor:pointer}
+.ai-consent input{margin-top:4px;flex:0 0 auto}
+.ai-error{margin:12px 0;color:#a32c25;font-size:12px;line-height:1.8}
+.ai-result-summary{white-space:pre-wrap;line-height:1.95;color:#34473a}
+.ai-result-text{white-space:pre-wrap;overflow-wrap:anywhere;font-family:inherit;font-size:13px;line-height:2;color:#26382d;background:#fafbf9;border:1px solid #e4eae5;border-radius:10px;padding:16px;direction:rtl;text-align:right}
+.ai-safety-list{line-height:2.1;color:#4e5e53}
+.ai-copilot-page button:disabled{opacity:.55;cursor:not-allowed}
+@media(max-width:720px){.ai-context-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.ai-copilot-hero{padding:16px;gap:12px}.ai-context-grid strong{font-size:17px}}
