@@ -88,7 +88,7 @@ DECLARE
     'firm_admin','managing_partner','engagement_partner','manager','senior','staff','reviewer','eqcr'
   ];
   preparation_roles text[] := ARRAY[
-    'engagement_partner','manager','senior','staff'
+    'manager','senior','staff'
   ];
   review_roles text[] := ARRAY[
     'managing_partner','engagement_partner','manager','reviewer','eqcr'
@@ -111,14 +111,7 @@ BEGIN
   -- Firm identity and membership administration are read-only through the browser.
   CREATE POLICY ledgerly_firm_read ON public.firm
     FOR SELECT TO authenticated
-    USING (
-      EXISTS (
-        SELECT 1 FROM public.app_user u
-        WHERE u.id = (SELECT auth.uid())::text
-          AND u.firm_id = public.firm.id
-          AND u.status = 'active' AND u.deleted_at IS NULL
-      )
-    );
+    USING (private.brp_user_has_role_in_scope(id, NULL, ARRAY['firm_admin','managing_partner','engagement_partner','manager','senior','staff','reviewer','eqcr']::text[]));
   REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.firm FROM anon, authenticated;
 
   CREATE POLICY ledgerly_app_user_read ON public.app_user
@@ -153,10 +146,16 @@ BEGIN
         'CREATE POLICY ledgerly_read_scope ON public.%I FOR SELECT TO authenticated USING (private.brp_user_has_role_in_scope(firm_id, engagement_id, %L::text[]))',
         t, firm_read_roles
       );
-      IF t IN ('working_paper','evidence','audit_procedure','risk','audit_plan_procedure',
-               'analytical_procedure','audit_sample','pbc_request','time_entry','analytics_run',
-               'engagement_terms','engagement_team_member','going_concern_indicator','governance_communication',
-               'professional_judgment','management_letter_point','ai_advisory_record') THEN
+      IF t IN ('audit_procedure','risk','audit_plan_procedure','audit_sample','going_concern_indicator') THEN
+        EXECUTE format(
+          'CREATE POLICY ledgerly_insert_scope ON public.%I FOR INSERT TO authenticated WITH CHECK (private.brp_user_has_role_in_scope(firm_id, engagement_id, %L::text[]))',
+          t, ARRAY['engagement_partner','manager','senior']::text[]
+        );
+        EXECUTE format(
+          'CREATE POLICY ledgerly_update_scope ON public.%I FOR UPDATE TO authenticated USING (private.brp_user_has_role_in_scope(firm_id, engagement_id, %L::text[])) WITH CHECK (private.brp_user_has_role_in_scope(firm_id, engagement_id, %L::text[]))',
+          t, ARRAY['engagement_partner','manager','senior']::text[], ARRAY['engagement_partner','manager','senior']::text[]
+        );
+      ELSIF t IN ('working_paper','evidence','analytical_procedure','pbc_request','time_entry','analytics_run','engagement_terms','engagement_team_member','governance_communication','professional_judgment','management_letter_point','ai_advisory_record') THEN
         EXECUTE format(
           'CREATE POLICY ledgerly_insert_scope ON public.%I FOR INSERT TO authenticated WITH CHECK (private.brp_user_has_role_in_scope(firm_id, engagement_id, %L::text[]))',
           t, preparation_roles
