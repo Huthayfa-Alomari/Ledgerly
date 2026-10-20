@@ -162,7 +162,7 @@ export default function CloudAuthPanel({ config }: Props) {
     {!config.configured ? <p className="cloud-auth-note">اضبط VITE_SUPABASE_URL وVITE_SUPABASE_ANON_KEY بمفتاح publishable/anon فقط لتفعيل المصادقة.</p> : <>
       {session ? <div className="summary-lines"><div><strong>الحساب</strong><span>{session.user?.email || email || 'حساب موثّق'}</span></div><div><strong>حالة البيانات</strong><span>محلية؛ لم تُفعّل المزامنة</span></div></div> : null}
       <div className="cloud-auth-mode"><button type="button" className={mode === 'login' ? 'audit-primary' : 'audit-secondary'} onClick={() => { setMode('login'); setError(''); }}>تسجيل الدخول</button><button type="button" className={mode === 'signup' ? 'audit-primary' : 'audit-secondary'} onClick={() => { setMode('signup'); setError(''); }}>إنشاء حساب</button></div>
-      {mode === 'signup' || !session ? <div className="cloud-auth-fields">
+      <div className="cloud-auth-fields">
         <label className="audit-field"><span>اسم المستخدم</span><input value={displayName} onChange={e => setDisplayName(e.target.value)} autoComplete="name" placeholder="الاسم الكامل" /></label>
         <label className="audit-field"><span>اسم مكتب التدقيق</span><input value={firmName} onChange={e => setFirmName(e.target.value)} placeholder="اسم المكتب" /></label>
         <label className="audit-field"><span>البريد الإلكتروني</span><input type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" placeholder="name@example.com" /></label>
