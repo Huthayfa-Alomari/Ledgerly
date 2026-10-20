@@ -46,7 +46,7 @@ function App() {
  const [tbError,setTbError] = useState('');
  const [tbBusy,setTbBusy] = useState(false);
  const [restoreError,setRestoreError] = useState('');
- const supabaseConfig = readSupabaseBrowserConfig(import.meta.env);
+ const supabaseConfig = readSupabaseBrowserConfig({ VITE_SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY: import.meta.env.VITE_SUPABASE_ANON_KEY });
  useEffect(()=>{ localStorage.setItem(KEY,JSON.stringify(db)); },[db]);
  useEffect(()=>{ if(notice){const t=window.setTimeout(()=>setNotice(''),3500);return()=>window.clearTimeout(t);} },[notice]);
  const activeEngagement = db.engagements.find(e=>e.id===selectedEngagement) ?? db.engagements[0];
