@@ -112,3 +112,11 @@ test('AI edge function is gated, authenticated, server-key only, and does not st
   assert.match(edge, /Never approve workpapers/);
   assert.doesNotMatch(edge, /console\.log\(.*context/i);
 });
+
+test('AI edge function allowlists context categories and fixed labels server-side', () => {
+  const edge = readFileSync(new URL('../supabase/functions/ledgerly-ai-assistant/index.ts', import.meta.url), 'utf8');
+  assert.match(edge, /allowedIssueTitles/);
+  assert.match(edge, /Object\.hasOwn\(allowedIssueTitles, candidate\)/);
+  assert.match(edge, /title: allowedIssueTitles\[category\]/);
+  assert.match(edge, /includes\(String\(x\.engagementType\)\)/);
+});
