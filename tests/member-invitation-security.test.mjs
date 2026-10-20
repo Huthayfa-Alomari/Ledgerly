@@ -28,6 +28,8 @@ test('invite endpoint validates the caller and limits invite roles', () => {
   assert.match(edge, /ledgerly_add_firm_invited_member/);
   assert.match(edge, /deleteUser\(invitation\.user\.id\)/);
   assert.match(edge, /LEDGERLY_INVITE_REDIRECT_URL/);
+  assert.match(edge, /LEDGERLY_INVITATIONS_ENABLED/);
+  assert.match(edge, /role-specific RLS policies are validated/);
   assert.match(edge, /redirectTo/);
   assert.doesNotMatch(edge, /sb_secret_|SUPABASE_SERVICE_ROLE_KEY\s*=\s*["']/);
   const panel = readFileSync(new URL('../src/CloudAuthPanel.tsx', import.meta.url), 'utf8');
