@@ -41,3 +41,11 @@ The React app continues to keep audit records in local browser/Electron storage.
 ### First-firm bootstrap allowlist
 
 Before using the first-firm onboarding button, configure the Edge Function secret `LEDGERLY_BOOTSTRAP_EMAIL` in Supabase Dashboard → Edge Functions → Secrets with the exact owner email address. The Edge Function fails closed when the secret is missing, rejects other addresses, and requires the account email to be verified. Do not place this value in Vite variables or commit it to Git. The bootstrap function is intentionally not available to ordinary browser roles; only the service-role client used by the JWT-verified Edge Function can execute the database RPC.
+
+
+## Member invitations — backend deployed, delivery requires configuration
+
+- The `ledgerly-invite-member` Edge Function validates the caller's JWT and requires the inviter to have the firm-level `firm_admin` or `managing_partner` role. It excludes privilege-elevating roles from the invite form and provisions the user, role assignment, and invitation record through a service-role-only database function.
+- The `firm_invitation` table has RLS enabled, an explicit deny policy for `anon` and `authenticated`, and no browser grants. The latest Supabase Security Advisor check returned no findings after the deny policy was added.
+- Before sending invitations, configure the Edge Function secret `LEDGERLY_INVITE_REDIRECT_URL` to an HTTPS callback hosted for the application and add that URL to Supabase Auth's allowed redirect URLs. Configure production SMTP for invitation email delivery. These settings cannot safely be inferred from the repository.
+- Invitations are not considered end-to-end validated until a real invite email is received, accepted, and the invited user can sign in with the intended firm role. Audit-data synchronization and evidence upload remain disabled.
