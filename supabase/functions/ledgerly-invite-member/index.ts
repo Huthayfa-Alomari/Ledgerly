@@ -18,7 +18,15 @@ Deno.serve(async (req: Request) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const redirectTo = Deno.env.get("LEDGERLY_INVITE_REDIRECT_URL")?.trim();
   if (!supabaseUrl || !anonKey || !serviceRoleKey) return json(500, { error: "Server authentication is not configured." });
+  if (!redirectTo) return json(503, { error: "Member invitations are disabled until LEDGERLY_INVITE_REDIRECT_URL is configured." });
+  try {
+    const redirectUrl = new URL(redirectTo);
+    if (redirectUrl.protocol !== "https:") return json(503, { error: "The invitation redirect must use HTTPS." });
+  } catch {
+    return json(503, { error: "The invitation redirect URL is invalid." });
+  }
 
   const token = (req.headers.get("Authorization") ?? "").match(/^Bearer\s+(.+)$/i)?.[1];
   if (!token) return json(401, { error: "Authentication required." });
@@ -56,6 +64,7 @@ Deno.serve(async (req: Request) => {
 
   const { data: invitation, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
     data: { full_name: displayName },
+    redirectTo,
   });
   if (inviteError || !invitation.user) {
     return json(409, { error: inviteError?.message || "The invitation could not be sent. The email may already have an account." });
