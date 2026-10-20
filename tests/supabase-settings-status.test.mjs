@@ -1,0 +1,12 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
+const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+
+test('settings clearly distinguishes Supabase configuration from active cloud sync', () => {
+  assert.match(app, /حالة الاتصال السحابي/);
+  assert.match(app, /تسجيل الدخول والمزامنة السحابية غير مفعّلين/);
+  assert.match(app, /لم تُربط بعد — البيانات ما زالت محلية/);
+  assert.match(app, /readSupabaseBrowserConfig\(import\.meta\.env\)/);
+});
