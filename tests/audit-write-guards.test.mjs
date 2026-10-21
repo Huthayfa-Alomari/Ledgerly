@@ -18,7 +18,7 @@ test('working-paper review fields are protected from preparer-role sign-off', ()
   assert.match(migration, /Final working-paper sign-off requires a partner or independent reviewer/);
   assert.match(migration, /BEFORE INSERT OR UPDATE ON public\.working_paper/);
   assert.match(migration, /The preparer cannot independently sign off their own working paper/);
-  assert.match(migration, /'معتمد'/);
+  assert.equal((migration.match(/'معتمد'/g) || []).length, 3, 'Arabic approval must be guarded on insert, update, and old-status locking');
   assert.match(migration, /Signed-off working papers must be reopened/);
   assert.match(migration, /Review-only users cannot alter working-paper preparation content/);
   assert.match(migration, /CREATE POLICY ledgerly_working_paper_review_update/);
