@@ -1,0 +1,33 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  MAX_IMPORT_FILE_BYTES, MAX_WORKSHEET_ROWS, MAX_WORKSHEET_COLUMNS, MAX_WORKSHEET_CELLS,
+  MAX_PDF_PAGES, MAX_OCR_PAGES, MAX_OCR_TOTAL_PIXELS,
+  fileSizeIssue, worksheetDimensionIssue, matrixDimensionIssue, pdfPageIssue, ocrPageIssue, ocrPixelIssue,
+} from '../src/lib/import-safety.mjs';
+
+test('enforces uploaded file size and accepts the exact boundary', () => {
+  assert.equal(fileSizeIssue(MAX_IMPORT_FILE_BYTES), null);
+  assert.equal(fileSizeIssue(MAX_IMPORT_FILE_BYTES + 1), 'file-too-large');
+  assert.equal(fileSizeIssue(-1), 'invalid-file-size');
+});
+
+test('bounds worksheet row, column and total-cell dimensions before JSON expansion', () => {
+  assert.equal(worksheetDimensionIssue(MAX_WORKSHEET_ROWS + 1, 8), null); // one header + max data rows
+  assert.equal(worksheetDimensionIssue(MAX_WORKSHEET_ROWS + 2, 8), 'too-many-rows');
+  assert.equal(worksheetDimensionIssue(10, MAX_WORKSHEET_COLUMNS + 1), 'too-many-columns');
+  assert.equal(worksheetDimensionIssue(100_000, 21), 'too-many-cells');
+  assert.equal(worksheetDimensionIssue(100_000, 20), null);
+  assert.equal(matrixDimensionIssue([['a', 'b'], [1, 2]]), null);
+  assert.equal(matrixDimensionIssue([Array(MAX_WORKSHEET_COLUMNS + 1).fill('x')]), 'too-many-columns');
+});
+
+test('limits PDF pages and total OCR pixels before allocating a canvas', () => {
+  assert.equal(pdfPageIssue(MAX_PDF_PAGES), null);
+  assert.equal(pdfPageIssue(MAX_PDF_PAGES + 1), 'too-many-pdf-pages');
+  assert.equal(ocrPageIssue(MAX_OCR_PAGES), null);
+  assert.equal(ocrPageIssue(MAX_OCR_PAGES + 1), 'too-many-ocr-pages');
+  assert.equal(ocrPixelIssue(4000, 4000), null);
+  assert.equal(ocrPixelIssue(5000, 4000), 'ocr-page-too-large');
+  assert.equal(ocrPixelIssue(10_000_000, 1, MAX_OCR_TOTAL_PIXELS - 1), 'ocr-work-too-large');
+});
