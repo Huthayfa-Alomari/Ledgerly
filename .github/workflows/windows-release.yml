@@ -25,11 +25,18 @@ jobs:
       - name: Install and verify web application
         run: |
           npm ci
+          npm audit --audit-level=high
           npm test
           npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
       - name: Install desktop packaging tools
         working-directory: desktop
-        run: npm install --no-audit --no-fund
+        run: npm install --no-fund
+      - name: Audit desktop packaging dependencies
+        working-directory: desktop
+        run: npm audit --audit-level=high
       - name: Build Windows installer
         working-directory: desktop
         run: npm run dist
