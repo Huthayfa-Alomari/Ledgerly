@@ -4,7 +4,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { createWorker } from 'tesseract.js';
 import { detectColumns, normalizeRows, validateRows, matchTransactions } from './core.mjs';
-import { MAX_IMPORT_FILE_BYTES, MAX_WORKSHEET_ROWS, MAX_WORKSHEET_COLUMNS, MAX_WORKSHEET_CELLS, MAX_OCR_TOTAL_PIXELS, fileSizeIssue, worksheetDimensionIssue, matrixDimensionIssue, pdfPageIssue, ocrPageIssue, ocrPixelIssue } from './lib/import-safety.mjs';
+import { MAX_IMPORT_FILE_BYTES, MAX_WORKSHEET_ROWS, MAX_WORKSHEET_COLUMNS, MAX_WORKSHEET_CELLS, fileSizeIssue, worksheetDimensionIssue, matrixDimensionIssue, pdfPageIssue, ocrPageIssue, ocrPixelIssue } from './lib/import-safety.mjs';
 
 type Field = 'date' | 'description' | 'debit' | 'credit' | 'amount' | 'balance';
 type Row = unknown[] | Record<string, unknown>;
@@ -110,8 +110,9 @@ export default function App() {
             if (current.trim()) cells.push(current.trim());
             if (cells.length) {
               if (cells.length > MAX_WORKSHEET_COLUMNS) throw new Error(limitMessage('too-many-columns'));
+              if (pageLines.length >= MAX_WORKSHEET_ROWS + 1) throw new Error(limitMessage('too-many-rows'));
               extractedCells += cells.length;
-              if (pageLines.length >= MAX_WORKSHEET_ROWS + 1 || extractedCells > MAX_WORKSHEET_CELLS) throw new Error(limitMessage('too-many-cells'));
+              if (extractedCells > MAX_WORKSHEET_CELLS) throw new Error(limitMessage('too-many-cells'));
               pageLines.push(cells);
             }
           }
