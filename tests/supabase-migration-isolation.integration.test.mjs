@@ -161,6 +161,21 @@ test('replay the complete Supabase migration chain and verify two-office RLS iso
       assert.deepEqual(result.rows, [], 'Public business tables without RLS: ' + result.rows.map(row => row.tablename).join(', '));
     });
 
+    await t.test('working-paper UPDATE policies are consolidated without broadening authorization in the trigger', async () => {
+      const result = await client.query(`
+        SELECT policyname, pg_catalog.array_to_string(roles, ',') AS roles
+        FROM pg_catalog.pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'working_paper'
+          AND cmd = 'UPDATE'
+          AND 'authenticated' = ANY(roles)
+        ORDER BY policyname
+      `);
+      assert.deepEqual(result.rows, [
+        { policyname: 'ledgerly_update_scope', roles: 'authenticated' },
+      ]);
+    });
+
     await client.query(`
       INSERT INTO auth.users(id,email,email_confirmed_at) VALUES
         ('${userA}','manager-a@example.test',pg_catalog.now()),
