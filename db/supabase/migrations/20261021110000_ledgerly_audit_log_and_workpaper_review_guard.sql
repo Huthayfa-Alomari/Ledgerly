@@ -1,5 +1,11 @@
 -- Harden user-attributed audit events and protect working-paper review/sign-off fields.
--- This is an additive correction to the existing role matrix, not a replacement of firm RLS.
+-- The guard targets the canonical columns in the initial audit schema. Review metadata is
+-- added explicitly because the original working_paper table had no reviewer columns.
+
+ALTER TABLE public.working_paper
+  ADD COLUMN IF NOT EXISTS reviewed_by text REFERENCES public.app_user(id);
+ALTER TABLE public.working_paper
+  ADD COLUMN IF NOT EXISTS reviewed_at text;
 
 CREATE OR REPLACE FUNCTION private.ledgerly_stamp_change_log_actor()
 RETURNS trigger
@@ -29,10 +35,10 @@ BEGIN
   END IF;
 
   IF NOT private.brp_user_has_role_in_scope(
-    NEW.firm_id, NULL,
+    NEW.firm_id, NEW.engagement_id,
     ARRAY['firm_admin','managing_partner','engagement_partner','manager','senior','staff','reviewer','eqcr']::text[]
   ) THEN
-    RAISE EXCEPTION 'User is not an active member of this firm'
+    RAISE EXCEPTION 'User is not an active member of this firm and engagement scope'
       USING ERRCODE = '42501';
   END IF;
 
@@ -62,49 +68,61 @@ SET search_path = ''
 AS $function$
 DECLARE
   jwt_role text := current_setting('request.jwt.claim.role', true);
-  is_preparer boolean;
+  can_prepare boolean;
   can_review boolean;
   privileged_signoff boolean;
-  final_status boolean;
+  preparation_content_changed boolean;
+  now_iso text;
 BEGIN
   IF jwt_role = 'service_role' OR current_user IN ('postgres', 'supabase_admin') THEN
     RETURN NEW;
   END IF;
 
-  IF TG_OP = 'INSERT' THEN
-    is_preparer := private.brp_user_has_role_in_scope(
-      NEW.firm_id, NEW.engagement_id, ARRAY['manager','senior','staff']::text[]
-    );
-    can_review := private.brp_user_has_role_in_scope(
-      NEW.firm_id, NEW.engagement_id,
-      ARRAY['firm_admin','managing_partner','engagement_partner','manager','reviewer','eqcr']::text[]
-    );
-    privileged_signoff := private.brp_user_has_role_in_scope(
-      NEW.firm_id, NEW.engagement_id,
-      ARRAY['firm_admin','managing_partner','engagement_partner','reviewer','eqcr']::text[]
-    );
-    final_status := pg_catalog.lower(NEW.status) IN ('approved','signed_off','final','locked','issued','closed','معتمد','معتمدة','مقفل','مقفلة','مغلق','مغلقة','صادر','صادرة');
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Authenticated user required for working-paper changes'
+      USING ERRCODE = '42501';
+  END IF;
 
-    IF NEW.reviewed_by IS NOT NULL
-       AND (NOT can_review OR NEW.reviewed_by IS DISTINCT FROM auth.uid()::text) THEN
-      RAISE EXCEPTION 'reviewed_by must be the authenticated authorized reviewer'
+  can_prepare := private.brp_user_has_role_in_scope(
+    NEW.firm_id, NEW.engagement_id, ARRAY['manager','senior','staff']::text[]
+  );
+  can_review := private.brp_user_has_role_in_scope(
+    NEW.firm_id, NEW.engagement_id,
+    ARRAY['firm_admin','managing_partner','engagement_partner','manager','reviewer','eqcr']::text[]
+  );
+  privileged_signoff := private.brp_user_has_role_in_scope(
+    NEW.firm_id, NEW.engagement_id,
+    ARRAY['firm_admin','managing_partner','engagement_partner','reviewer','eqcr']::text[]
+  );
+  now_iso := pg_catalog.to_char(
+    pg_catalog.clock_timestamp() AT TIME ZONE 'UTC',
+    'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
+  );
+
+  IF TG_OP = 'INSERT' THEN
+    IF NOT can_prepare OR NEW.preparer_id IS DISTINCT FROM auth.uid()::text THEN
+      RAISE EXCEPTION 'Working-paper preparer must be an authenticated member with preparation rights'
         USING ERRCODE = '42501';
     END IF;
-    IF final_status THEN
-      IF auth.uid() IS NULL OR NOT privileged_signoff
-         OR NEW.reviewed_by IS DISTINCT FROM auth.uid()::text THEN
-        RAISE EXCEPTION 'Final working-paper sign-off requires a partner or independent reviewer acting as themselves'
+
+    IF NEW.status = 'reviewed' THEN
+      IF NOT privileged_signoff
+         OR NEW.reviewed_by IS DISTINCT FROM auth.uid()::text
+         OR NEW.preparer_id = NEW.reviewed_by THEN
+        RAISE EXCEPTION 'Final working-paper sign-off requires a different authorized reviewer acting as themselves'
           USING ERRCODE = '42501';
       END IF;
-      IF NEW.prepared_by IS NOT NULL AND NEW.prepared_by = NEW.reviewed_by THEN
-        RAISE EXCEPTION 'The preparer cannot independently sign off their own working paper'
+      NEW.reviewed_at := now_iso;
+    ELSE
+      IF NEW.reviewed_by IS NOT NULL OR NEW.reviewed_at IS NOT NULL THEN
+        RAISE EXCEPTION 'Review metadata can only be set during authorized sign-off'
           USING ERRCODE = '42501';
       END IF;
+      NEW.reviewed_by := NULL;
+      NEW.reviewed_at := NULL;
     END IF;
-    NEW.updated_at := pg_catalog.to_char(
-      pg_catalog.clock_timestamp() AT TIME ZONE 'UTC',
-      'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
-    );
+
+    NEW.updated_at := now_iso;
     RETURN NEW;
   END IF;
 
@@ -115,72 +133,56 @@ BEGIN
       USING ERRCODE = '42501';
   END IF;
 
-  is_preparer := private.brp_user_has_role_in_scope(
-    OLD.firm_id, OLD.engagement_id, ARRAY['manager','senior','staff']::text[]
-  );
-  can_review := private.brp_user_has_role_in_scope(
-    OLD.firm_id, OLD.engagement_id,
-    ARRAY['firm_admin','managing_partner','engagement_partner','manager','reviewer','eqcr']::text[]
-  );
-  privileged_signoff := private.brp_user_has_role_in_scope(
-    OLD.firm_id, OLD.engagement_id,
-    ARRAY['firm_admin','managing_partner','engagement_partner','reviewer','eqcr']::text[]
-  );
-  final_status := pg_catalog.lower(NEW.status) IN ('approved','signed_off','final','locked','issued','closed','معتمد','معتمدة','مقفل','مقفلة','مغلق','مغلقة','صادر','صادرة');
+  preparation_content_changed :=
+       NEW.reference IS DISTINCT FROM OLD.reference
+    OR NEW.cycle IS DISTINCT FROM OLD.cycle
+    OR NEW.title IS DISTINCT FROM OLD.title
+    OR NEW.paper_type IS DISTINCT FROM OLD.paper_type
+    OR NEW.preparer_id IS DISTINCT FROM OLD.preparer_id
+    OR NEW.prepared_at IS DISTINCT FROM OLD.prepared_at
+    OR NEW.conclusion IS DISTINCT FROM OLD.conclusion
+    OR NEW.conclusion_status IS DISTINCT FROM OLD.conclusion_status
+    OR NEW.source_refs_json IS DISTINCT FROM OLD.source_refs_json
+    OR NEW.supersedes_id IS DISTINCT FROM OLD.supersedes_id;
 
   IF (NEW.status IS DISTINCT FROM OLD.status)
-     OR (NEW.reviewed_by IS DISTINCT FROM OLD.reviewed_by) THEN
-    IF auth.uid() IS NULL OR NOT can_review THEN
+     OR (NEW.reviewed_by IS DISTINCT FROM OLD.reviewed_by)
+     OR (NEW.reviewed_at IS DISTINCT FROM OLD.reviewed_at) THEN
+    IF NOT can_review THEN
       RAISE EXCEPTION 'Only an authorized reviewer may change working-paper review fields'
         USING ERRCODE = '42501';
     END IF;
-
-    IF NEW.reviewed_by IS DISTINCT FROM OLD.reviewed_by
-       AND NEW.reviewed_by IS NOT NULL
-       AND NEW.reviewed_by IS DISTINCT FROM auth.uid()::text THEN
-      RAISE EXCEPTION 'reviewed_by must identify the authenticated reviewer'
-        USING ERRCODE = '42501';
-    END IF;
-
-    IF final_status THEN
-      IF NOT privileged_signoff
-         OR NEW.reviewed_by IS DISTINCT FROM auth.uid()::text THEN
-        RAISE EXCEPTION 'Final working-paper sign-off requires a partner or independent reviewer acting as themselves'
-          USING ERRCODE = '42501';
-      END IF;
-      IF NEW.prepared_by IS NOT NULL AND NEW.prepared_by = NEW.reviewed_by THEN
-        RAISE EXCEPTION 'The preparer cannot independently sign off their own working paper'
-          USING ERRCODE = '42501';
-      END IF;
-    END IF;
   END IF;
 
-  -- A signed-off paper is locked until a reviewer first reopens it.
-  IF pg_catalog.lower(OLD.status) IN ('approved','signed_off','final','locked','issued','closed','معتمد','معتمدة','مقفل','مقفلة','مغلق','مغلقة','صادر','صادرة')
-     AND NEW.status IS NOT DISTINCT FROM OLD.status
-     AND (NEW.title IS DISTINCT FROM OLD.title
-       OR NEW.procedure_ref IS DISTINCT FROM OLD.procedure_ref
-       OR NEW.objective IS DISTINCT FROM OLD.objective
-       OR NEW.work_done IS DISTINCT FROM OLD.work_done
-       OR NEW.conclusion IS DISTINCT FROM OLD.conclusion
-       OR NEW.prepared_by IS DISTINCT FROM OLD.prepared_by) THEN
-    RAISE EXCEPTION 'Signed-off working papers must be reopened before preparation content changes'
+  IF NEW.status = 'reviewed' THEN
+    IF NOT privileged_signoff
+       OR NEW.reviewed_by IS DISTINCT FROM auth.uid()::text
+       OR NEW.preparer_id = NEW.reviewed_by THEN
+      RAISE EXCEPTION 'Final working-paper sign-off requires a different authorized reviewer acting as themselves'
+        USING ERRCODE = '42501';
+    END IF;
+    IF OLD.status IS DISTINCT FROM 'reviewed' THEN
+      NEW.reviewed_at := now_iso;
+    ELSE
+      NEW.reviewed_at := OLD.reviewed_at;
+    END IF;
+  ELSE
+    -- Reopening must be a separate reviewer action. The trigger, not the browser, clears sign-off metadata.
+    NEW.reviewed_by := NULL;
+    NEW.reviewed_at := NULL;
+  END IF;
+
+  IF OLD.status = 'reviewed' AND preparation_content_changed THEN
+    RAISE EXCEPTION 'Signed-off working papers must be reopened in a separate update before content changes'
       USING ERRCODE = '42501';
   END IF;
 
-  -- Review-only users may change review fields, not preparer content.
-  IF NOT is_preparer
-     AND (pg_catalog.to_jsonb(NEW) - ARRAY['status','reviewed_by','updated_at']::text[])
-         IS DISTINCT FROM
-         (pg_catalog.to_jsonb(OLD) - ARRAY['status','reviewed_by','updated_at']::text[]) THEN
+  IF preparation_content_changed AND NOT can_prepare THEN
     RAISE EXCEPTION 'Review-only users cannot alter working-paper preparation content'
       USING ERRCODE = '42501';
   END IF;
 
-  NEW.updated_at := pg_catalog.to_char(
-    pg_catalog.clock_timestamp() AT TIME ZONE 'UTC',
-    'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
-  );
+  NEW.updated_at := now_iso;
   RETURN NEW;
 END;
 $function$;
@@ -190,8 +192,8 @@ CREATE TRIGGER ledgerly_working_paper_review_guard
 BEFORE INSERT OR UPDATE ON public.working_paper
 FOR EACH ROW EXECUTE FUNCTION private.ledgerly_guard_working_paper_review_fields();
 
--- Permit reviewers to reach the update trigger; the trigger restricts review-only roles to
--- status/reviewed_by and keeps final sign-off behind a stricter partner/EQCR role gate.
+-- Permit reviewers to reach the update trigger; the trigger restricts review-only users
+-- to review fields and prevents final sign-off by the preparer.
 DROP POLICY IF EXISTS ledgerly_working_paper_review_update ON public.working_paper;
 CREATE POLICY ledgerly_working_paper_review_update
 ON public.working_paper
