@@ -129,6 +129,9 @@ export async function downloadEvidence(config: SupabaseBrowserConfig, session: C
   });
   if (!response.ok) throw new Error(`تعذر تنزيل الدليل (${response.status}). تحقق من صلاحيات المكتب والمهمة.`);
   const blob = await response.blob();
+  const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer());
+  const actualHash = [...new Uint8Array(digest)].map(v => v.toString(16).padStart(2,'0')).join('');
+  if (actualHash !== row.file_sha256) throw new Error('فشل التحقق من بصمة SHA-256؛ لم يتم فتح الملف لأن محتواه لا يطابق سجل الدليل.');
   const url = URL.createObjectURL(blob);
   try {
     const a = document.createElement('a'); a.href = url; a.download = row.file_name; a.click();
