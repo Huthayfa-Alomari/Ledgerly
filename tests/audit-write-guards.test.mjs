@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const migration = readFileSync(new URL('../db/supabase/migrations/20261021110000_ledgerly_audit_log_and_workpaper_review_guard.sql', import.meta.url), 'utf8');
+const migration = readFileSync(new URL('../db/supabase/migrations/20261021154000_ledgerly_audit_log_and_workpaper_review_guard.sql', import.meta.url), 'utf8');
 
 test('change log actor identity and timestamp are enforced at insert time without assuming engagement_id exists', () => {
   assert.match(migration, /NEW\.actor_id IS DISTINCT FROM auth\.uid\(\)::text/);
