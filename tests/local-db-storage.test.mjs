@@ -23,3 +23,19 @@ test('local persistence catches storage-provider errors and serialization failur
   const cyclic = {}; cyclic.self = cyclic;
   assert.match(persistLocalData(() => ({ setItem() {} }), 'ledgerly', cyclic), /circular|cyclic|serialize/i);
 });
+
+import { loadLocalData } from '../src/lib/local-db-storage.mjs';
+
+test('local loading distinguishes empty storage from malformed JSON', () => {
+  const fallback = { clients: [] };
+  assert.deepEqual(loadLocalData(() => ({ getItem: () => null }), 'ledgerly', fallback), { value: fallback, error: null });
+  const result = loadLocalData(() => ({ getItem: () => '{"clients":[' }), 'ledgerly', fallback);
+  assert.deepEqual(result, { value: fallback, error: 'invalid-json' });
+});
+
+test('local loading surfaces storage access denial instead of pretending data is empty', () => {
+  const fallback = { clients: [] };
+  assert.deepEqual(loadLocalData(() => { throw new Error('Storage disabled'); }, 'ledgerly', fallback), {
+    value: fallback, error: 'storage-unavailable',
+  });
+});
