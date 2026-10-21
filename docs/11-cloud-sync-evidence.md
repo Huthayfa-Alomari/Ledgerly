@@ -2,7 +2,7 @@
 
 ## Status
 
-The existing local-first workflow remains the default. Cloud workspace sync and evidence upload are explicit user actions; signing in alone never uploads professional data. This feature is gated on applying migration `20261021100000_ledgerly_cloud_sync_private_evidence.sql` and verifying it in a dedicated staging project.
+The existing local-first workflow remains the default. Cloud workspace sync and evidence upload are explicit user actions; signing in alone never uploads professional data. Migration `20261021040529_ledgerly_cloud_sync_private_evidence.sql` has been applied to the connected Supabase project. Live checks confirmed RLS is enabled on both new tables and the `ledgerly-evidence` bucket is private. The project has no real firm/user assignments, so runtime cross-firm isolation is not yet verified; do not upload real client data until the credential-gated tests pass in a dedicated staging environment.
 
 ## Workspace snapshot sync
 
@@ -36,11 +36,11 @@ The tests exercise cross-firm snapshot reads/writes and evidence metadata/object
 
 ## Rollout gates
 
-1. Review the SQL migration and apply it to a dedicated staging project first.
+1. For any other environment, review the SQL migration and apply it to a dedicated staging project first. The currently connected project already has the migration applied.
 2. Create two test firms and at least two users per firm; verify firm-level and engagement-only assignments.
 3. Run the credential-gated integration tests and manually test browser upload/download.
 4. Verify the bucket is private, cross-firm access returns no data/denial, and a stale snapshot write is rejected.
 5. Test backup/restore, file integrity mismatch, unsupported file types, size limit, expired sessions, and simultaneous writes.
 6. Only after those checks, apply the reviewed migration to production and enable invitations separately.
 
-The production Supabase project previously had no firm rows, no Storage bucket, and no real member assignments, so cross-firm runtime isolation cannot be claimed as verified until those staging tests run.
+The connected Supabase project has no real firm rows or member assignments. The private bucket and RLS policies are present, but cross-firm runtime isolation cannot be claimed as verified until the staging integration tests run.
