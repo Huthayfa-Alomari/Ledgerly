@@ -29,7 +29,7 @@ test('bootstrap and temporary write-gate filenames align to one canonical versio
   assert.ok(migrations.includes('20261021154000_ledgerly_audit_log_and_workpaper_review_guard.sql'));
   assert.ok(migrations.includes('20261021154043_ledgerly_foreign_key_indexes.sql'));
   assert.ok(migrations.includes('20261021154056_ledgerly_evidence_engagement_scope_guard.sql'));
-  assert.ok(migrations.includes('20261021154100_ledgerly_consolidate_workpaper_update_policy.sql'));
+  assert.ok(migrations.includes('20261021155218_ledgerly_consolidate_workpaper_update_policy.sql'));
   assert.ok(migrations.includes('20261019130942_brp_initial_audit_core.sql'));
   assert.ok(migrations.includes('20261019131031_brp_extended_audit_suite.sql'));
   assert.ok(migrations.includes('20261019132425_enable_rls_schema_version.sql'));
@@ -44,12 +44,12 @@ test('bootstrap and temporary write-gate filenames align to one canonical versio
   assert.ok(migrations.includes('20261020104019_ledgerly_invitation_explicit_deny_policy.sql'));
   assert.ok(migrations.includes('20261020104150_ledgerly_expire_stale_invitations.sql'));
   assert.ok(!migrations.some(name => /^202610201(20000|43000|50000)_/.test(name)));
-  const staleAliases = ['202610190001_', '202610190003_', '202610200001_', '202610200002_', '202610200003_', '202610200004_', '20261020100000_', '20261020104000_', '20261020104500_', '20261020105000_', '20261021110000_', '20261021125000_', '20261021130000_'];
+  const staleAliases = ['20261021154100_', '202610190001_', '202610190003_', '202610200001_', '202610200002_', '202610200003_', '202610200004_', '20261020100000_', '20261020104000_', '20261020104500_', '20261020105000_', '20261021110000_', '20261021125000_', '20261021130000_'];
   for (const alias of staleAliases) assert.ok(!migrations.some(name => name.startsWith(alias)), `Stale migration filename remains: ${alias}`);
 });
 
-test('all 22 deployed versions recorded in the live Supabase history have canonical local migration files', () => {
-  const liveVersions = ['20261019130942','20261019131031','20261019132425','20261019133936','20261020012402','20261020081921','20261020082131','20261020085003','20261020102654','20261020102903','20261020103837','20261020103921','20261020104019','20261020104150','20261020104503','20261020140459','20261020140900','20261020141128','20261021040529','20261021154000','20261021154043','20261021154056'];
+test('all 23 deployed versions recorded in the live Supabase history have canonical local migration files', () => {
+  const liveVersions = ['20261019130942','20261019131031','20261019132425','20261019133936','20261020012402','20261020081921','20261020082131','20261020085003','20261020102654','20261020102903','20261020103837','20261020103921','20261020104019','20261020104150','20261020104503','20261020140459','20261020140900','20261020141128','20261021040529','20261021154000','20261021154043','20261021154056','20261021155218'];
   for (const version of liveVersions) assert.ok(migrations.some(name => name.startsWith(version + '_')), `Missing local migration for live version ${version}`);
 });
 

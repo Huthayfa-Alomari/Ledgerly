@@ -4,7 +4,7 @@ Checked against live project `delvbdvjdmcblqiqaxsd` on 2026-10-21.
 
 ## Canonical migration map
 
-The live migration history contains 22 deployed versions. The repository now carries a version-prefixed SQL file for each of those entries:
+The live migration history contains 23 deployed versions. The repository now carries a version-prefixed SQL file for each of those entries:
 
 | Live version | Migration name | Local file |
 |---|---|---|
@@ -30,6 +30,7 @@ The live migration history contains 22 deployed versions. The repository now car
 | 20261021154000 | ledgerly_audit_log_and_workpaper_review_guard | 20261021154000_ledgerly_audit_log_and_workpaper_review_guard.sql |
 | 20261021154043 | ledgerly_foreign_key_indexes | 20261021154043_ledgerly_foreign_key_indexes.sql |
 | 20261021154056 | ledgerly_evidence_engagement_scope_guard | 20261021154056_ledgerly_evidence_engagement_scope_guard.sql |
+| 20261021155218 | ledgerly_consolidate_workpaper_update_policy | 20261021155218_ledgerly_consolidate_workpaper_update_policy.sql |
 
 ## Historical-source limitation
 
@@ -47,15 +48,16 @@ Because two original SQL sources were reconstructed, this file alignment is **no
 - `20261021154000_ledgerly_audit_log_and_workpaper_review_guard.sql` was applied. Catalog verification confirms both audit and working-paper triggers; direct browser writes to `change_log` remain revoked.
 - `20261021154043_ledgerly_foreign_key_indexes.sql` was applied. A follow-up catalog query reports zero uncovered public foreign-key constraints.
 - `20261021154056_ledgerly_evidence_engagement_scope_guard.sql` was applied. Evidence metadata and private object policies now verify that the engagement exists and belongs to the same firm.
+- `20261021155218_ledgerly_consolidate_workpaper_update_policy.sql` was applied. Performance Advisor no longer reports overlapping permissive UPDATE policies for `working_paper`.
 
-## Pending in the repository
+## Remaining validation
 
-- `20261021154100_ledgerly_consolidate_workpaper_update_policy.sql` removes the duplicate permissive UPDATE policy on `working_paper`. It must be merged and tested before applying live; the filename must then be reconciled to the actual version assigned by Supabase.
+- The three existing migrations added on 2026-10-21 and the policy consolidation migration are now aligned with their actual versions assigned by Supabase. Do not rename their prefixes without also reconciling the remote migration ledger.
 - The historical overlay `docs/archive/202610190002_security_hardening.sql` is not a migration and must never be applied manually. It was removed from `db/supabase/security` to prevent accidental execution.
 
 ## Verified checks
 
 - There are no duplicate migration version prefixes.
-- All 22 deployed live migration versions have same-version local file names.
+- All 23 deployed live migration versions have same-version local file names.
 - The archive directory is separated from the executable migration folder.
 - CI enforces these checks. A successful static test does not itself prove the reconstructed history replays to a schema identical to production.
