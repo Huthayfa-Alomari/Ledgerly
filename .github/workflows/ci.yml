@@ -30,7 +30,7 @@ jobs:
       - name: Build production bundle
         run: npm run build
 
-  sql-write-guards:
+  supabase-migration-isolation:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     services:
@@ -59,7 +59,7 @@ jobs:
         run: npm ci
       - name: Install PostgreSQL test driver
         run: npm install --no-save --package-lock=false pg
-      - name: Run SQL write-guard integration tests
-        run: node --test tests/sql-write-guards.integration.test.mjs
+      - name: Replay every migration and test firm isolation
+        run: node --test tests/supabase-migration-isolation.integration.test.mjs
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ledgerly_test
