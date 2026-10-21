@@ -8,7 +8,7 @@ import CloudWorkspacePanel from './CloudWorkspacePanel';
 import type { CloudDB } from './lib/cloud-workspace';
 import './styles.css';
 import { readSupabaseBrowserConfig } from './lib/supabase-config';
-import { loadLocalData, persistLocalData } from './lib/local-db-storage.mjs';
+import { loadLocalData, localDataShapeIssue, persistLocalData } from './lib/local-db-storage.mjs';
 import { fromFils, toFils, roundJod } from './lib/jod-money.mjs';
 import { MAX_IMPORT_FILE_BYTES, MAX_WORKSHEET_ROWS, worksheetDimensionIssue, matrixDimensionIssue } from './lib/import-safety.mjs';
 
@@ -46,10 +46,11 @@ function readDB(): DBLoadResult {
  if(loaded.error==='storage-unavailable')
   return {db:emptyDB,error:'تعذر الوصول إلى التخزين المحلي. لن يتم تفعيل الحفظ حتى تستعيد نسخة احتياطية أو يتاح التخزين.'};
  const parsed=loaded.value as Partial<DB>;
- if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))
-  return {db:emptyDB,error:'بنية البيانات المحلية غير صالحة. لم تتم الكتابة فوق المحتوى المحفوظ.'};
  const arrayKeys:(keyof DB)[]=['clients','engagements','risks','workpapers','findings','evidence','trialBalance'];
- if(arrayKeys.some(key=>parsed[key]!==undefined&&!Array.isArray(parsed[key])))
+ const shapeIssue=localDataShapeIssue(parsed,arrayKeys);
+ if(shapeIssue==='invalid-root')
+  return {db:emptyDB,error:'بنية البيانات المحلية غير صالحة. لم تتم الكتابة فوق المحتوى المحفوظ.'};
+ if(shapeIssue==='invalid-collections')
   return {db:emptyDB,error:'إحدى مجموعات البيانات المحلية ليست قائمة صالحة. لم تتم الكتابة فوق المحتوى المحفوظ.'};
  return {db:{...emptyDB,...parsed,
   clients:Array.isArray(parsed.clients)?parsed.clients:[],
