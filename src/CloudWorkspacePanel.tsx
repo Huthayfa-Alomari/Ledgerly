@@ -31,7 +31,7 @@ export default function CloudWorkspacePanel({ config, session, db, onRestore }: 
     if (!session || !firmId) return;
     setBusy(true); setError(''); setNotice('');
     try {
-      const result = await pullWorkspace(config, session, firmId);
+      const result = await pullWorkspace(config, session, firmId, false);
       setRemoteVersion(result.row?.version || 0);
       if (!result.row) { localStorage.setItem(`ledgerly.cloud.baseline.v1.${firmId}`, '0'); setNotice('لا توجد نسخة سحابية لهذا المكتب بعد. يمكنك رفع بياناته المحلية بعد أخذ نسخة احتياطية.'); return; }
       const payload = result.row.payload as Partial<CloudDB> | null;
@@ -40,6 +40,7 @@ export default function CloudWorkspacePanel({ config, session, db, onRestore }: 
         throw new Error('النسخة السحابية لا تطابق مخطط بيانات Ledgerly الحالي؛ لم يتم استبدال البيانات المحلية.');
       }
       if (!window.confirm('سيتم استبدال بيانات هذا الجهاز بالنسخة السحابية. صدّر نسخة احتياطية محلية أولًا. هل تريد المتابعة؟')) return;
+      localStorage.setItem(`ledgerly.cloud.baseline.v1.${firmId}`, String(result.row.version));
       onRestore(result.row.payload as CloudDB);
       setNotice(`تم استرجاع النسخة السحابية رقم ${result.row.version}. راجع البيانات قبل متابعة العمل.`);
       const evidence = await listCloudEvidence(config, session, firmId);
