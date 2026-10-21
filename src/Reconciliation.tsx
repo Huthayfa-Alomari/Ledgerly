@@ -4,6 +4,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { createWorker } from 'tesseract.js';
 import { detectColumns, normalizeRows, validateRows, matchTransactions } from './core.mjs';
+import { MAX_IMPORT_FILE_BYTES, MAX_WORKSHEET_ROWS, MAX_WORKSHEET_COLUMNS, MAX_WORKSHEET_CELLS, fileSizeIssue, worksheetDimensionIssue, matrixDimensionIssue, pdfPageIssue, pdfTextItemIssue, ocrPageIssue, ocrPixelIssue } from './lib/import-safety.mjs';
 
 type Field = 'date' | 'description' | 'debit' | 'credit' | 'amount' | 'balance';
 type Row = unknown[] | Record<string, unknown>;
@@ -32,23 +33,48 @@ export default function App() {
 
   async function handleFile(selected?: File) {
     if (!selected) return;
-    if (selected.size > 50 * 1024 * 1024) { setError(t('حجم الملف يتجاوز الحد الآمن (50 ميغابايت).', 'File exceeds the safety limit (50 MiB).')); return; }
+    if (fileSizeIssue(selected.size, MAX_IMPORT_FILE_BYTES)) { setError(t('حجم الملف يتجاوز الحد الآمن (50 ميغابايت).', 'File exceeds the safety limit (50 MiB).')); return; }
     setError(''); setFile(null); setConfirmed(false); setMatchResult(null); setBusy(true); setOcr(false);
     let releasePdf: (() => Promise<void>) | null = null;
     try {
       const ext = selected.name.split('.').pop()?.toLowerCase();
       let rows: Row[] = []; let headers: string[] = []; let kind = ext ?? 'unknown'; let note = '';
+      const limitMessage = (issue: string) => {
+        if (issue === 'too-many-rows') return t('الملف يتجاوز 250,000 صف بيانات؛ قسّمه إلى أجزاء أصغر.', 'The file exceeds 250,000 data rows; split it into smaller files.');
+        if (issue === 'too-many-columns') return t('ورقة العمل تحتوي على أكثر من 256 عمودًا؛ احذف الأعمدة غير المستخدمة.', 'The worksheet exceeds 256 columns; remove unused columns.');
+        if (issue === 'too-many-cells') return t('الملف يتجاوز الحد الآمن البالغ 2,000,000 خلية؛ قسّمه إلى أجزاء أصغر.', 'The file exceeds the 2,000,000-cell safety limit; split it into smaller files.');
+        if (issue === 'too-many-pdf-pages') return t('ملف PDF يتجاوز حد 500 صفحة.', 'PDF exceeds the 500-page safety limit.');
+        if (issue === 'too-many-pdf-text-items' || issue === 'too-many-pdf-text-items-total') return t('يحتوي PDF على حجم نصي غير اعتيادي. قسّم الملف أو صدّره مجددًا من مصدر موثوق.', 'PDF contains an unusually large amount of text data. Split it or re-export it from a trusted source.');
+        if (issue === 'too-many-ocr-pages') return t('استخراج OCR محدود إلى 100 صفحة في الملف الواحد لتجنب استهلاك موارد الجهاز.', 'OCR is limited to 100 pages per file to avoid exhausting device resources.');
+        if (issue === 'ocr-page-too-large') return t('إحدى صفحات PDF تتجاوز حد البكسلات الآمن لـ OCR.', 'A PDF page exceeds the safe OCR pixel limit.');
+        if (issue === 'ocr-work-too-large') return t('إجمالي حجم صفحات OCR يتجاوز الحد الآمن؛ قسّم PDF إلى ملفات أصغر.', 'The total OCR pixel budget is exceeded; split the PDF into smaller files.');
+        return t('تعذر التحقق من أبعاد الملف أو ورقة العمل.', 'Could not validate file or worksheet dimensions.');
+      };
+      const matrixFromSheet = (sheet: any): unknown[][] => {
+        if (!sheet) throw new Error(t('لم يتم العثور على ورقة بيانات داخل الملف.', 'No worksheet was found in the file.'));
+        const sourceRef = (sheet as { '!ref'?: string; '!fullref'?: string })['!fullref'] || sheet['!ref'];
+        if (sourceRef) {
+          const range = XLSX.utils.decode_range(sourceRef);
+          const issue = worksheetDimensionIssue(range.e.r - range.s.r + 1, range.e.c - range.s.c + 1);
+          if (issue) throw new Error(limitMessage(issue));
+        }
+        const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '', blankrows: false });
+        const issue = matrixDimensionIssue(matrix);
+        if (issue) throw new Error(limitMessage(issue));
+        return matrix;
+      };
+      const parseOptions = { cellDates: true, sheetRows: MAX_WORKSHEET_ROWS + 2, cellHTML: false, cellStyles: false, bookVBA: false, cellFormula: false };
       if (ext === 'csv' || ext === 'txt') {
         const text = await selected.text();
-        const workbook = XLSX.read(text, { type: 'string', cellDates: true });
+        const workbook = XLSX.read(text, { ...parseOptions, type: 'string' });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '' });
+        const matrix = matrixFromSheet(sheet);
         headers = (matrix[0] ?? []).map(String);
         rows = matrix.slice(1).filter(r => r.some(v => String(v).trim() !== ''));
       } else if (ext === 'xlsx' || ext === 'xls') {
-        const workbook = XLSX.read(await selected.arrayBuffer(), { type: 'array', cellDates: true });
+        const workbook = XLSX.read(await selected.arrayBuffer(), { ...parseOptions, type: 'array' });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '' });
+        const matrix = matrixFromSheet(sheet);
         headers = (matrix[0] ?? []).map(String);
         rows = matrix.slice(1).filter(r => r.some(v => String(v).trim() !== ''));
       } else if (ext === 'pdf') {
@@ -56,13 +82,19 @@ export default function App() {
         pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
         const doc = await pdfjs.getDocument({ data: await selected.arrayBuffer(), enableScripting: false, isEvalSupported: false, enableXfa: false, stopAtErrors: true }).promise;
         releasePdf = () => doc.destroy();
-        if (doc.numPages > 500) throw new Error(t('ملف PDF يتجاوز حد 500 صفحة.', 'PDF exceeds the 500-page safety limit.'));
+        const pdfIssue = pdfPageIssue(doc.numPages); if (pdfIssue) throw new Error(limitMessage(pdfIssue));
         const pageLines: string[][] = [];
+        let extractedCells = 0;
+        let totalPdfTextItems = 0;
         for (let pageNo = 1; pageNo <= doc.numPages; pageNo++) {
           const page = await doc.getPage(pageNo);
           const content = await page.getTextContent();
+          const items = content.items as any[];
+          const itemIssue = pdfTextItemIssue(items.length, totalPdfTextItems);
+          if (itemIssue) throw new Error(limitMessage(itemIssue));
+          totalPdfTextItems += items.length;
           const grouped = new Map<number, Array<{ x: number; text: string }>>();
-          for (const item of content.items as any[]) {
+          for (const item of items) {
             if (!item.str?.trim() || !item.transform) continue;
             const y = Math.round(item.transform[5] / 3) * 3;
             const group = grouped.get(y) ?? [];
@@ -82,7 +114,13 @@ export default function App() {
               previousX = item.x;
             }
             if (current.trim()) cells.push(current.trim());
-            if (cells.length) pageLines.push(cells);
+            if (cells.length) {
+              if (cells.length > MAX_WORKSHEET_COLUMNS) throw new Error(limitMessage('too-many-columns'));
+              if (pageLines.length >= MAX_WORKSHEET_ROWS + 1) throw new Error(limitMessage('too-many-rows'));
+              extractedCells += cells.length;
+              if (extractedCells > MAX_WORKSHEET_CELLS) throw new Error(limitMessage('too-many-cells'));
+              pageLines.push(cells);
+            }
           }
         }
         const hasPdfText = pageLines.flat().join(' ').trim().length > 25;
@@ -105,20 +143,30 @@ export default function App() {
         } else {
           const useOcr = window.confirm(t('يبدو أن PDF ممسوح ضوئياً. هل تريد تشغيل OCR محلياً على جميع الصفحات؟ قد تُنزّل بيانات اللغة عند أول استخدام.', 'This PDF appears scanned. Run OCR locally on all pages? Language data may download on first use.'));
           if (!useOcr) throw new Error(t('أُلغي OCR. لم يتم رفع الملف إلى أي خادم بواسطة التطبيق.', 'OCR cancelled. The app did not upload the file.'));
+          const pageIssue = ocrPageIssue(doc.numPages); if (pageIssue) throw new Error(limitMessage(pageIssue));
           setOcr(true);
           const worker = await createWorker('ara+eng');
           try {
             const ocrLines: string[] = [];
+            let totalOcrPixels = 0;
             for (let pageNo = 1; pageNo <= doc.numPages; pageNo++) {
               const page = await doc.getPage(pageNo);
               const viewport = page.getViewport({ scale: 2 });
+              const pixelIssue = ocrPixelIssue(viewport.width, viewport.height, totalOcrPixels);
+              if (pixelIssue) throw new Error(limitMessage(pixelIssue));
+              totalOcrPixels += Math.ceil(viewport.width) * Math.ceil(viewport.height);
               const canvas = document.createElement('canvas');
-              canvas.width = viewport.width; canvas.height = viewport.height;
-              const ctx = canvas.getContext('2d');
-              if (!ctx) throw new Error('Canvas unavailable');
-              await page.render({ canvasContext: ctx, viewport }).promise;
-              const result = await worker.recognize(canvas);
-              ocrLines.push(...result.data.text.split(/\r?\n/).map((line: string) => line.trim()).filter(Boolean));
+              try {
+                canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
+                const ctx = canvas.getContext('2d');
+                if (!ctx) throw new Error(t('تعذر إنشاء مساحة الرسم لـ OCR.', 'Could not allocate the OCR canvas.'));
+                await page.render({ canvasContext: ctx, viewport }).promise;
+                const result = await worker.recognize(canvas);
+                ocrLines.push(...result.data.text.split(/\r?\n/).map((line: string) => line.trim()).filter(Boolean));
+              } finally {
+                canvas.width = 0; canvas.height = 0;
+                page.cleanup();
+              }
             }
             headers = ['OCR text'];
             rows = ocrLines.map((v, i) => ({ 'OCR text': v, 'Line': i + 1 }));

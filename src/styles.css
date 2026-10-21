@@ -250,3 +250,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .ai-safety-list{line-height:2.1;color:#4e5e53}
 .ai-copilot-page button:disabled{opacity:.55;cursor:not-allowed}
 @media(max-width:720px){.ai-context-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.ai-copilot-hero{padding:16px;gap:12px}.ai-context-grid strong{font-size:17px}}
+
+
+/* Blocks editing if the local database cannot be parsed, preventing accidental overwrite. */
+.ledgerly-recovery-overlay{position:fixed;inset:0;z-index:10000;display:grid;place-items:center;padding:20px;background:rgba(16,24,18,.74);backdrop-filter:blur(5px)}
+.ledgerly-recovery-card{width:min(100%,760px);max-height:92vh;overflow:auto;margin:0;padding:clamp(20px,4vw,34px);box-shadow:0 24px 90px rgba(0,0,0,.35)}
+.ledgerly-recovery-card h2{margin:0 0 12px;color:#8d2d20;font-size:clamp(20px,3vw,28px)}
+.ledgerly-recovery-card p{line-height:1.9}
+.ledgerly-recovery-actions{display:flex;flex-wrap:wrap;gap:10px;margin:20px 0}
+.ledgerly-recovery-actions>*{flex:1 1 190px;text-align:center}
+.ledgerly-recovery-actions button:disabled{opacity:.5;cursor:not-allowed}

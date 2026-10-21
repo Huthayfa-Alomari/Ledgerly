@@ -214,3 +214,27 @@ test('detects all sample columns and reconciles the three actual transactions on
   assert.equal(result.summary.ledgerCount, 3);
   assert.equal(result.summary.matchedCount, 3);
 });
+
+test('bounds ambiguous candidate detail while preserving conservative unmatched results', () => {
+  const bank = [{ date: '2026-10-14', description: 'Same transfer', debit: null, credit: 75 }];
+  const ledger = Array.from({ length: 250 }, (_, i) => ({
+    date: '2026-10-14', description: 'Same transfer', debit: null, credit: 75,
+  }));
+  const result = matchTransactions(bank, ledger);
+  assert.equal(result.summary.matchedCount, 0);
+  assert.equal(result.summary.ambiguousCount, 1);
+  assert.equal(result.ambiguous[0].ledgerIndices.length, 100);
+  assert.equal(result.ambiguous[0].ledgerIndicesTruncated, true);
+  assert.equal(result.unmatchedLedger.length, 250);
+});
+
+test('indexed matching handles a large set of unique same-date transactions', () => {
+  const bank = Array.from({ length: 5000 }, (_, i) => ({
+    date: '2026-10-14', description: 'Transaction ' + i, debit: null, credit: i + 1,
+  }));
+  const ledger = bank.map(row => ({ ...row, description: row.description.toUpperCase() }));
+  const result = matchTransactions(bank, ledger);
+  assert.equal(result.summary.matchedCount, 5000);
+  assert.equal(result.summary.ambiguousCount, 0);
+  assert.equal(result.unmatchedBank.length, 0);
+});
