@@ -9,7 +9,7 @@ import type { CloudDB } from './lib/cloud-workspace';
 import './styles.css';
 import { readSupabaseBrowserConfig } from './lib/supabase-config';
 import { loadLocalData, localDataShapeIssue, persistLocalData } from './lib/local-db-storage.mjs';
-import { fromFils, toFils, roundJod } from './lib/jod-money.mjs';
+import { fromFils, toFils, roundJod, parseJodAmount } from './lib/jod-money.mjs';
 import { MAX_IMPORT_FILE_BYTES, MAX_WORKSHEET_ROWS, worksheetDimensionIssue, matrixDimensionIssue } from './lib/import-safety.mjs';
 
 const Reconciliation = lazy(() => import('./Reconciliation'));
@@ -64,7 +64,7 @@ function readDB(): DBLoadResult {
   completionChecks:parsed.completionChecks&&typeof parsed.completionChecks==='object'&&!Array.isArray(parsed.completionChecks)?parsed.completionChecks:{}
  },error:''};
 }
-function amountValue(v: unknown): number { if (typeof v === 'number') return Number.isFinite(v)?roundJod(v):0; let s=String(v??'').replace(/[٠-٩]/g,d=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,]/g,'').replace(/[\s\u00a0]/g,'').replace(/[ر.دJOD$€£]/gi,'').trim(); if(!s)return 0; const parens=/^\(.*\)$/.test(s); s=s.replace(/[()]/g,''); const n=Number(s); return Number.isFinite(n)?roundJod(parens?-Math.abs(n):n):0; }
+function amountValue(v: unknown): number { return parseJodAmount(v) ?? Number.NaN; }
 function headerKey(v: unknown): string { return String(v??'').toLowerCase().replace(/[\s_\-./\u0640]/g,'').replace(/[أإآ]/g,'ا').replace(/ة/g,'ه'); }
 function download(name: string, content: string, type='application/json') { const blob = new Blob([content], {type}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url); }
 function downloadRecoverySnapshot(db: DB) {
