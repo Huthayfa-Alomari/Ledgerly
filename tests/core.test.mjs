@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeDigits, normalizeHeader, detectColumns, parseAmount, parseDate, normalizeRows, validateRows } from '../src/core.mjs';
+import { normalizeDigits, normalizeHeader, detectColumns, parseAmount, parseDate, normalizeRows, validateRows, signedAmount } from '../src/core.mjs';
 
 test('normalizes Arabic and Persian digits', () => {
   assert.equal(normalizeDigits('١٢٣٫٤٥'), '123٫45');
@@ -99,6 +99,11 @@ test('matches exact amount, date and description one-to-one', () => {
   assert.deepEqual(result.matches.map(m => m.confidence), ['exact', 'exact']);
   assert.deepEqual(result.unmatchedBank, []);
   assert.deepEqual(result.unmatchedLedger, []);
+});
+
+test('rounds negative and positive sub-fils symmetrically in signed amount calculations', () => {
+  assert.equal(signedAmount({ debit: 0.0005, credit: null }), -0.001);
+  assert.equal(signedAmount({ debit: null, credit: 0.0005 }), 0.001);
 });
 
 test('parses three-decimal Jordanian fils without treating a 0.004 difference as a match', () => {
