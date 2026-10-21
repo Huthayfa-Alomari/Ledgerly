@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const panel = readFileSync(new URL('../src/CloudAuthPanel.tsx', import.meta.url), 'utf8');
-const migration = readFileSync(new URL('../db/supabase/migrations/20261020110000_ledgerly_bootstrap_service_role_only.sql', import.meta.url), 'utf8');
+const migration = readFileSync(new URL('../db/supabase/migrations/20261020102903_ledgerly_bootstrap_service_role_only.sql', import.meta.url), 'utf8');
 const edgeFunction = readFileSync(new URL('../supabase/functions/ledgerly-bootstrap-first-firm/index.ts', import.meta.url), 'utf8');
 
 test('cloud auth uses only the browser-safe key and never embeds a privileged credential', () => {

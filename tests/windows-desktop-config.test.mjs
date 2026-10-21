@@ -20,6 +20,7 @@ test('Windows package creates a named NSIS installer without deleting local data
   assert.equal(pkg.build.productName, 'Ledgerly');
   assert.equal(pkg.build.appId, 'com.ledgerly.audit');
   assert.equal(pkg.build.nsis.deleteAppDataOnUninstall, false);
+  assert.equal(pkg.devDependencies.electron, '44.9.2');
   assert.equal(pkg.build.nsis.createDesktopShortcut, true);
   assert.equal(pkg.build.win.target[0].target, 'nsis');
 });
@@ -40,4 +41,11 @@ test('version tags publish the built installer as a permanent GitHub Release ass
   assert.match(workflow, /if: startsWith\(github\.ref, 'refs\/tags\/ledgerly-v'\)/);
   assert.match(workflow, /uses: softprops\/action-gh-release@v2/);
   assert.match(workflow, /files: desktop\/release\/\*\.exe/);
+});
+
+test('Windows release uses explicit public cloud variables and fails on high-severity dependency issues', () => {
+  const workflow = read('../.github/workflows/windows-release.yml');
+  assert.match(workflow, /VITE_SUPABASE_URL: \$\{\{ vars\.VITE_SUPABASE_URL \}\}/);
+  assert.match(workflow, /VITE_SUPABASE_ANON_KEY: \$\{\{ vars\.VITE_SUPABASE_ANON_KEY \}\}/);
+  assert.match(workflow, /npm audit --audit-level=high/);
 });

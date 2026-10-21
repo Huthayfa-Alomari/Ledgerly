@@ -101,6 +101,22 @@ test('matches exact amount, date and description one-to-one', () => {
   assert.deepEqual(result.unmatchedLedger, []);
 });
 
+test('rounds negative and positive sub-fils symmetrically in signed amount calculations', () => {
+  assert.equal(signedAmount({ debit: 0.0005, credit: null }), -0.001);
+  assert.equal(signedAmount({ debit: null, credit: 0.0005 }), 0.001);
+});
+
+test('parses three-decimal Jordanian fils without treating a 0.004 difference as a match', () => {
+  assert.equal(parseAmount('0,004'), 0.004);
+  const result = matchTransactions(
+    [{ date: '2026-10-14', description: 'Bank receipt', debit: null, credit: 10.004 }],
+    [{ date: '2026-10-14', description: 'Ledger receipt', debit: null, credit: 10.000 }]
+  );
+  assert.equal(result.matches.length, 0);
+  assert.deepEqual(result.unmatchedBank, [0]);
+  assert.deepEqual(result.unmatchedLedger, [0]);
+});
+
 test('allows unique amount/date match inside configured date window', () => {
   const result = matchTransactions(
     [{ date: '2026-10-14', description: 'Bank wording', debit: null, credit: 80 }],

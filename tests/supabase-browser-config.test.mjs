@@ -11,8 +11,10 @@ test('browser config accepts only browser-safe Supabase key variable', () => {
   assert.match(source, /payload\.role !== 'anon'/);
   assert.match(source, /sb_secret_/);
   assert.match(source, /service_role/);
-  assert.match(source, /DEFAULT_SUPABASE_URL/);
-  assert.match(source, /DEFAULT_SUPABASE_PUBLISHABLE_KEY/);
+  assert.match(source, /No live-project defaults/);
+  assert.match(source, /env\.VITE_SUPABASE_URL\?\.trim\(\) \|\| ''/);
+  assert.match(source, /env\.VITE_SUPABASE_ANON_KEY\?\.trim\(\) \|\| ''/);
+  assert.doesNotMatch(source, /DEFAULT_SUPABASE_URL|DEFAULT_SUPABASE_PUBLISHABLE_KEY/);
   assert.doesNotMatch(source, /sb_secret_[A-Za-z0-9_]{20,}/);
 });
 

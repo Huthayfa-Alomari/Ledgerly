@@ -32,7 +32,9 @@ export default function App() {
 
   async function handleFile(selected?: File) {
     if (!selected) return;
+    if (selected.size > 50 * 1024 * 1024) { setError(t('حجم الملف يتجاوز الحد الآمن (50 ميغابايت).', 'File exceeds the safety limit (50 MiB).')); return; }
     setError(''); setFile(null); setConfirmed(false); setMatchResult(null); setBusy(true); setOcr(false);
+    let releasePdf: (() => Promise<void>) | null = null;
     try {
       const ext = selected.name.split('.').pop()?.toLowerCase();
       let rows: Row[] = []; let headers: string[] = []; let kind = ext ?? 'unknown'; let note = '';
@@ -52,7 +54,9 @@ export default function App() {
       } else if (ext === 'pdf') {
         const pdfjs = pdfjsLib as unknown as { GlobalWorkerOptions: { workerSrc: string }; getDocument: (x: unknown) => { promise: Promise<any> } };
         pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
-        const doc = await pdfjs.getDocument({ data: await selected.arrayBuffer() }).promise;
+        const doc = await pdfjs.getDocument({ data: await selected.arrayBuffer(), enableScripting: false, isEvalSupported: false, enableXfa: false, stopAtErrors: true }).promise;
+        releasePdf = () => doc.destroy();
+        if (doc.numPages > 500) throw new Error(t('ملف PDF يتجاوز حد 500 صفحة.', 'PDF exceeds the 500-page safety limit.'));
         const pageLines: string[][] = [];
         for (let pageNo = 1; pageNo <= doc.numPages; pageNo++) {
           const page = await doc.getPage(pageNo);
@@ -128,7 +132,7 @@ export default function App() {
       setFile({ name: selected.name, rows, headers, mapping, kind, note });
     } catch (e) {
       setError(e instanceof Error ? e.message : t('تعذرت قراءة الملف.', 'Could not read file.'));
-    } finally { setBusy(false); }
+    } finally { if (releasePdf) { try { await releasePdf(); } catch { /* parser cleanup is best effort */ } } setBusy(false); }
   }
 
   function setMapping(field: Field, value: string) {

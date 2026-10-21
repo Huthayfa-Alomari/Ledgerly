@@ -3,9 +3,6 @@ export type SupabaseBrowserConfig = {
   anonKey: string;
 };
 
-const DEFAULT_SUPABASE_URL = 'https://delvbdvjdmcblqiqaxsd.supabase.co';
-const DEFAULT_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_OZaLrOKDbD3xD2nw5zMmqA_onvVjlw2';
-
 type ViteEnv = {
   VITE_SUPABASE_URL?: string;
   VITE_SUPABASE_ANON_KEY?: string;
@@ -20,9 +17,9 @@ export type SupabaseConfigResult =
  * Never place service_role or sb_secret credentials in VITE_* variables.
  */
 export function readSupabaseBrowserConfig(env: ViteEnv): SupabaseConfigResult {
-  // These are public browser credentials by design. Environment variables override them for forks/staging.
-  const rawUrl = env.VITE_SUPABASE_URL?.trim() || DEFAULT_SUPABASE_URL;
-  const anonKey = env.VITE_SUPABASE_ANON_KEY?.trim() || DEFAULT_SUPABASE_PUBLISHABLE_KEY;
+  // No live-project defaults: forks and unconfigured builds must remain disconnected until explicitly configured.
+  const rawUrl = env.VITE_SUPABASE_URL?.trim() || '';
+  const anonKey = env.VITE_SUPABASE_ANON_KEY?.trim() || '';
 
   if (!rawUrl || !anonKey) {
     return { configured: false, reason: 'missing-config' };
