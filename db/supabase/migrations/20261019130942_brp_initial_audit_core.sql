@@ -597,7 +597,7 @@ BEGIN
     FOR ALL TO authenticated
     USING (public.brp_user_has_firm_access(id))
     WITH CHECK (public.brp_user_has_firm_access(id));
-END $;
+END $$;
 
 -- change_log is intended to be append-only from application roles.
 REVOKE UPDATE, DELETE, TRUNCATE ON public.change_log FROM anon, authenticated;
