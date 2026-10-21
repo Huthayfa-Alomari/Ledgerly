@@ -39,3 +39,13 @@ test('local loading surfaces storage access denial instead of pretending data is
     value: fallback, error: 'storage-unavailable',
   });
 });
+
+test('local database shape validation allows older partial schemas but rejects malformed roots and collections', async () => {
+  const { localDataShapeIssue } = await import('../src/lib/local-db-storage.mjs');
+  const requiredLists = ['clients', 'engagements', 'trialBalance'];
+  assert.equal(localDataShapeIssue({ clients: [] }, requiredLists), null);
+  assert.equal(localDataShapeIssue(null, requiredLists), 'invalid-root');
+  assert.equal(localDataShapeIssue([], requiredLists), 'invalid-root');
+  assert.equal(localDataShapeIssue({ clients: {} }, requiredLists), 'invalid-collections');
+  assert.equal(localDataShapeIssue({ clients: [], trialBalance: null }, requiredLists), 'invalid-collections');
+});
