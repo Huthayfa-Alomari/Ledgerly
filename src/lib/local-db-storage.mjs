@@ -1,3 +1,17 @@
+export function loadLocalData(getStorage, key, fallback) {
+  try {
+    const raw = getStorage().getItem(key);
+    if (raw === null) return { value: fallback, error: null };
+    try {
+      return { value: JSON.parse(raw), error: null };
+    } catch {
+      return { value: fallback, error: 'invalid-json' };
+    }
+  } catch {
+    return { value: fallback, error: 'storage-unavailable' };
+  }
+}
+
 export function persistLocalData(getStorage, key, value) {
   try {
     const serialized = JSON.stringify(value);
