@@ -226,10 +226,11 @@ test('PostgreSQL enforces change-log actor identity and working-paper review/sig
     await client.query(`
       GRANT INSERT ON public.change_log TO authenticated;
       GRANT USAGE, SELECT ON SEQUENCE public.change_log_id_seq TO authenticated;
+      -- Test-only permissive policy: production table INSERT is revoked above.
+      -- Keep RLS from masking the trigger behavior this section is specifically exercising.
       CREATE POLICY fixture_change_log_insert
       ON public.change_log FOR INSERT TO authenticated
-      WITH CHECK (private.brp_user_has_role_in_scope(firm_id, NULL,
-        ARRAY['firm_admin','managing_partner','engagement_partner','manager','senior','staff','reviewer','eqcr']::text[]));
+      WITH CHECK (true);
     `);
 
     await assert.rejects(
