@@ -3,3 +3,5 @@ export function toFils(value: unknown): number;
 export function fromFils(fils: number): number;
 export function roundJod(value: unknown): number;
 export function formatJod(value: unknown): string;
+
+export function parseJodAmount(value: unknown): number | null;
