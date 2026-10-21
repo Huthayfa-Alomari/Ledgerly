@@ -360,7 +360,7 @@ test('replay the complete Supabase migration chain and verify two-office RLS iso
       `);
 
       const migration = readFileSync(
-        new URL('../db/supabase/migrations/20261021110000_ledgerly_audit_log_and_workpaper_review_guard.sql', import.meta.url),
+        new URL('../db/supabase/migrations/20261021154000_ledgerly_audit_log_and_workpaper_review_guard.sql', import.meta.url),
         'utf8'
       );
       await client.query(migration);
