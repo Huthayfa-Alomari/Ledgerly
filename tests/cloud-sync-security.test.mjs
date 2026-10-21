@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const migration = readFileSync(new URL('../db/supabase/migrations/20261021100000_ledgerly_cloud_sync_private_evidence.sql', import.meta.url), 'utf8');
+const migration = readFileSync(new URL('../db/supabase/migrations/20261021040529_ledgerly_cloud_sync_private_evidence.sql', import.meta.url), 'utf8');
 const sync = readFileSync(new URL('../src/lib/cloud-workspace.ts', import.meta.url), 'utf8');
 const panel = readFileSync(new URL('../src/CloudWorkspacePanel.tsx', import.meta.url), 'utf8');
 
