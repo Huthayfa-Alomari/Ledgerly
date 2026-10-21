@@ -52,7 +52,9 @@ export function parseAmount(input) {
     else s = s.replace(/\./g, '').replace(',', '.');
   } else if (s.includes(',')) {
     const parts = s.split(',');
-    s = parts.length === 2 && parts[1].length <= 2 ? `${parts[0]}.${parts[1]}` : parts.join('');
+    // JOD is commonly shown to three decimals. Accept 0,004 as fils while keeping 1,234 as a thousands separator.
+    const zeroLeadingFils = parts.length === 2 && Number(parts[0]) === 0 && parts[1].length === 3;
+    s = parts.length === 2 && (parts[1].length <= 2 || zeroLeadingFils) ? `${parts[0]}.${parts[1]}` : parts.join('');
   }
   const n = Number(s);
   if (!Number.isFinite(n)) return null;
@@ -132,7 +134,7 @@ export function signedAmount(row) {
 }
 
 function roundMoney(value) {
-  return Math.round((value + Number.EPSILON) * 100) / 100;
+  return Math.round((value + Number.EPSILON) * 1000) / 1000;
 }
 
 function normalizedDescription(value) {
@@ -152,7 +154,7 @@ function dayDistance(a, b) {
  * Both sources must use the same debit/credit sign convention before matching.
  */
 export function matchTransactions(bankRows, ledgerRows, options = {}) {
-  const tolerance = Math.max(0, Number(options.amountTolerance ?? 0.01));
+  const tolerance = Math.max(0, Number(options.amountTolerance ?? 0.001));
   const dateWindowDays = Math.max(0, Math.floor(Number(options.dateWindowDays ?? 0)));
   const usedBank = new Set();
   const usedLedger = new Set();
@@ -162,7 +164,8 @@ export function matchTransactions(bankRows, ledgerRows, options = {}) {
 
   const bank = bankRows.map((row, index) => ({ row, index, amount: signedAmount(row), description: normalizedDescription(row.description) })).filter(item => !item.row.isOpeningBalance);
   const ledger = ledgerRows.map((row, index) => ({ row, index, amount: signedAmount(row), description: normalizedDescription(row.description) })).filter(item => !item.row.isOpeningBalance);
-  const amountEqual = (a, b) => a !== null && b !== null && Math.abs(a - b) <= tolerance;
+  const toleranceInFils = Math.round(tolerance * 1000);
+  const amountEqual = (a, b) => a !== null && b !== null && Math.abs(Math.round(a * 1000) - Math.round(b * 1000)) <= toleranceInFils;
   const candidatesFor = (b, requireDescription) => ledger.filter(l => !usedLedger.has(l.index)
     && amountEqual(b.amount, l.amount)
     && dayDistance(b.row.date, l.row.date) !== null
