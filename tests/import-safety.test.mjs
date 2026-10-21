@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   MAX_IMPORT_FILE_BYTES, MAX_WORKSHEET_ROWS, MAX_WORKSHEET_COLUMNS,
-  MAX_PDF_PAGES, MAX_OCR_PAGES,
-  fileSizeIssue, worksheetDimensionIssue, matrixDimensionIssue, pdfPageIssue, ocrPageIssue, ocrPixelIssue,
+  MAX_PDF_PAGES, MAX_PDF_TEXT_ITEMS_PER_PAGE, MAX_PDF_TEXT_ITEMS_TOTAL, MAX_OCR_PAGES,
+  fileSizeIssue, worksheetDimensionIssue, matrixDimensionIssue, pdfPageIssue, pdfTextItemIssue, ocrPageIssue, ocrPixelIssue,
 } from '../src/lib/import-safety.mjs';
 
 test('enforces uploaded file size and accepts the exact boundary', () => {
@@ -30,4 +30,11 @@ test('limits PDF pages and total OCR pixels before allocating a canvas', () => {
   assert.equal(ocrPixelIssue(4000, 4000), null);
   assert.equal(ocrPixelIssue(5000, 4000), 'ocr-page-too-large');
   assert.equal(ocrPixelIssue(10_000_000, 1, MAX_OCR_TOTAL_PIXELS - 1), 'ocr-work-too-large');
+});
+
+test('limits pathological PDF text-item counts per page and across the document', () => {
+  assert.equal(pdfTextItemIssue(MAX_PDF_TEXT_ITEMS_PER_PAGE), null);
+  assert.equal(pdfTextItemIssue(MAX_PDF_TEXT_ITEMS_PER_PAGE + 1), 'too-many-pdf-text-items');
+  assert.equal(pdfTextItemIssue(1, MAX_PDF_TEXT_ITEMS_TOTAL), 'too-many-pdf-text-items-total');
+  assert.equal(pdfTextItemIssue(-1), 'invalid-pdf-text-count');
 });
