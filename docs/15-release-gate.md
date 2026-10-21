@@ -19,6 +19,8 @@ Status checked against `main` on 2026-10-21. This is a release-candidate checkli
 - Cloud workspace snapshot sync is manual/explicit and version-checked; it is not real-time record-level collaboration.
 - Cloud evidence uses a private bucket and firm/engagement scope controls. Malware scanning, retention automation and a disaster-recovery drill are not claimed complete.
 - Amounts are normalized and calculated at integer-fils boundaries, but the persisted JSON model is not yet a fully versioned integer-fils schema. Do not claim all persisted amounts have been migrated to minor-unit integers.
+
+- Trial-balance import uses a strict JOD parser: it preserves the decimal point and Arabic decimal separator, supports three-decimal fils and parenthesized negatives, and flags malformed nonblank amounts rather than silently converting them to zero.
 - Invitations remain gated until real-account isolation checks are completed.
 
 ## Required before real client data or general commercial launch
