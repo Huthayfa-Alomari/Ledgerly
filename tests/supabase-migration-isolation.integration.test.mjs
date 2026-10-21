@@ -347,6 +347,65 @@ test('replay the complete Supabase migration chain and verify two-office RLS iso
       assert.notEqual(timestamp.rows[0].occurred_at, '1900-01-01T00:00:00.000Z');
       assert.match(timestamp.rows[0].occurred_at, /^20\d\d-/);
     });
+
+    await t.test('review and audit guards remain compatible with the existing live column layout', async () => {
+      // The live project uses prepared_by and has no change_log.engagement_id column.
+      // Re-shape the disposable database to emulate that layout after validating clean replay.
+      await client.query(`
+        ALTER TABLE public.working_paper RENAME COLUMN preparer_id TO prepared_by;
+        ALTER TABLE public.working_paper ADD COLUMN IF NOT EXISTS procedure_ref text;
+        ALTER TABLE public.working_paper ADD COLUMN IF NOT EXISTS objective text;
+        ALTER TABLE public.working_paper ADD COLUMN IF NOT EXISTS work_done text;
+        ALTER TABLE public.change_log DROP COLUMN IF EXISTS engagement_id;
+      `);
+
+      const migration = readFileSync(
+        new URL('../db/supabase/migrations/20261021110000_ledgerly_audit_log_and_workpaper_review_guard.sql', import.meta.url),
+        'utf8'
+      );
+      await client.query(migration);
+
+      await asUser(reviewerA, () => client.query(
+        "UPDATE public.working_paper SET status='reviewed', reviewed_by=$1 WHERE id='wp-a1'",
+        [reviewerA]
+      ));
+      await assert.rejects(asUser(reviewerA, () => client.query(
+        "UPDATE public.working_paper SET title='Cannot edit a reviewed live-layout paper' WHERE id='wp-a1'"
+      )), /Signed-off working papers must be reopened in a separate update/);
+
+      await asUser(reviewerA, () => client.query(
+        "UPDATE public.working_paper SET status='in_review' WHERE id='wp-a1'"
+      ));
+      await asUser(userA, () => client.query(
+        "UPDATE public.working_paper SET objective='Edited through live-layout column' WHERE id='wp-a1'"
+      ));
+      const liveLayoutPaper = await client.query(
+        "SELECT status,reviewed_by,reviewed_at,objective,prepared_by FROM public.working_paper WHERE id='wp-a1'"
+      );
+      assert.equal(liveLayoutPaper.rows[0].status, 'in_review');
+      assert.equal(liveLayoutPaper.rows[0].reviewed_by, null);
+      assert.equal(liveLayoutPaper.rows[0].reviewed_at, null);
+      assert.equal(liveLayoutPaper.rows[0].objective, 'Edited through live-layout column');
+      assert.equal(liveLayoutPaper.rows[0].prepared_by, userA);
+
+      // Reapply the revoked INSERT grant only inside this disposable test after proving the
+      // default permissions were closed. The trigger must handle absent engagement_id.
+      await client.query(`
+        GRANT INSERT ON public.change_log TO authenticated;
+        ALTER TABLE public.change_log DISABLE ROW LEVEL SECURITY;
+      `);
+      await assert.rejects(asUser(userA, () => client.query(
+        "INSERT INTO public.change_log(id,firm_id,actor_id,action,entity_type,entity_id,occurred_at) VALUES ('live-spoof','firm-a',$1,'update','client','client-a','1900-01-01T00:00:00.000Z')",
+        [userB]
+      )), /change_log actor_id must match the authenticated user/);
+      await asUser(userA, () => client.query(
+        "INSERT INTO public.change_log(id,firm_id,actor_id,action,entity_type,entity_id,occurred_at) VALUES ('live-valid','firm-a',$1,'update','client','client-a','1900-01-01T00:00:00.000Z')",
+        [userA]
+      ));
+      const liveEvent = await client.query("SELECT occurred_at FROM public.change_log WHERE id='live-valid'");
+      assert.notEqual(liveEvent.rows[0].occurred_at, '1900-01-01T00:00:00.000Z');
+      assert.match(liveEvent.rows[0].occurred_at, /^20\d\d-/);
+    });
   } finally {
     await client.end();
   }

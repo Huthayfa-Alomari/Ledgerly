@@ -1,6 +1,7 @@
 -- Harden user-attributed audit events and protect working-paper review/sign-off fields.
--- The guard targets the canonical columns in the initial audit schema. Review metadata is
--- added explicitly because the original working_paper table had no reviewer columns.
+-- This migration must work against both the canonical replay schema (preparer_id/reference)
+-- and the existing live schema observed on 2026-10-21 (prepared_by/procedure_ref/objective/work_done).
+-- Access variant-specific row fields through to_jsonb(record), never through a static NEW.field ref.
 
 ALTER TABLE public.working_paper
   ADD COLUMN IF NOT EXISTS reviewed_by text REFERENCES public.app_user(id);
@@ -14,8 +15,9 @@ SET search_path = ''
 AS $function$
 DECLARE
   jwt_role text := current_setting('request.jwt.claim.role', true);
+  engagement_scope text;
 BEGIN
-  -- Trusted database operations may write system events; browser users may not impersonate actors.
+  -- Trusted server operations may write system events; browser users may not impersonate actors.
   IF jwt_role = 'service_role' OR current_user IN ('postgres', 'supabase_admin') THEN
     NEW.occurred_at := pg_catalog.to_char(
       pg_catalog.clock_timestamp() AT TIME ZONE 'UTC',
@@ -34,8 +36,11 @@ BEGIN
       USING ERRCODE = '42501';
   END IF;
 
+  -- The live change_log table does not include engagement_id, while the reconstructed
+  -- clean-install schema does. JSON access returns NULL safely when the key is absent.
+  engagement_scope := NULLIF(pg_catalog.to_jsonb(NEW) ->> 'engagement_id', '');
   IF NOT private.brp_user_has_role_in_scope(
-    NEW.firm_id, NEW.engagement_id,
+    NEW.firm_id, engagement_scope,
     ARRAY['firm_admin','managing_partner','engagement_partner','manager','senior','staff','reviewer','eqcr']::text[]
   ) THEN
     RAISE EXCEPTION 'User is not an active member of this firm and engagement scope'
@@ -68,6 +73,9 @@ SET search_path = ''
 AS $function$
 DECLARE
   jwt_role text := current_setting('request.jwt.claim.role', true);
+  new_row jsonb;
+  old_row jsonb;
+  preparer_id_value text;
   can_prepare boolean;
   can_review boolean;
   privileged_signoff boolean;
@@ -82,6 +90,9 @@ BEGIN
     RAISE EXCEPTION 'Authenticated user required for working-paper changes'
       USING ERRCODE = '42501';
   END IF;
+
+  new_row := pg_catalog.to_jsonb(NEW);
+  preparer_id_value := COALESCE(new_row ->> 'preparer_id', new_row ->> 'prepared_by');
 
   can_prepare := private.brp_user_has_role_in_scope(
     NEW.firm_id, NEW.engagement_id, ARRAY['manager','senior','staff']::text[]
@@ -100,7 +111,7 @@ BEGIN
   );
 
   IF TG_OP = 'INSERT' THEN
-    IF NOT can_prepare OR NEW.preparer_id IS DISTINCT FROM auth.uid()::text THEN
+    IF NOT can_prepare OR preparer_id_value IS DISTINCT FROM auth.uid()::text THEN
       RAISE EXCEPTION 'Working-paper preparer must be an authenticated member with preparation rights'
         USING ERRCODE = '42501';
     END IF;
@@ -108,7 +119,7 @@ BEGIN
     IF NEW.status = 'reviewed' THEN
       IF NOT privileged_signoff
          OR NEW.reviewed_by IS DISTINCT FROM auth.uid()::text
-         OR NEW.preparer_id = NEW.reviewed_by THEN
+         OR preparer_id_value = NEW.reviewed_by THEN
         RAISE EXCEPTION 'Final working-paper sign-off requires a different authorized reviewer acting as themselves'
           USING ERRCODE = '42501';
       END IF;
@@ -133,17 +144,17 @@ BEGIN
       USING ERRCODE = '42501';
   END IF;
 
+  old_row := pg_catalog.to_jsonb(OLD);
+  new_row := pg_catalog.to_jsonb(NEW);
+  preparer_id_value := COALESCE(new_row ->> 'preparer_id', new_row ->> 'prepared_by');
+
+  -- Ignore only review metadata and the server-maintained update timestamp. Every other
+  -- column is preparation content, covering both schema variants without naming fields
+  -- that might not exist on the current record type.
   preparation_content_changed :=
-       NEW.reference IS DISTINCT FROM OLD.reference
-    OR NEW.cycle IS DISTINCT FROM OLD.cycle
-    OR NEW.title IS DISTINCT FROM OLD.title
-    OR NEW.paper_type IS DISTINCT FROM OLD.paper_type
-    OR NEW.preparer_id IS DISTINCT FROM OLD.preparer_id
-    OR NEW.prepared_at IS DISTINCT FROM OLD.prepared_at
-    OR NEW.conclusion IS DISTINCT FROM OLD.conclusion
-    OR NEW.conclusion_status IS DISTINCT FROM OLD.conclusion_status
-    OR NEW.source_refs_json IS DISTINCT FROM OLD.source_refs_json
-    OR NEW.supersedes_id IS DISTINCT FROM OLD.supersedes_id;
+    (new_row - ARRAY['status','reviewed_by','reviewed_at','updated_at']::text[])
+    IS DISTINCT FROM
+    (old_row - ARRAY['status','reviewed_by','reviewed_at','updated_at']::text[]);
 
   IF (NEW.status IS DISTINCT FROM OLD.status)
      OR (NEW.reviewed_by IS DISTINCT FROM OLD.reviewed_by)
@@ -157,7 +168,7 @@ BEGIN
   IF NEW.status = 'reviewed' THEN
     IF NOT privileged_signoff
        OR NEW.reviewed_by IS DISTINCT FROM auth.uid()::text
-       OR NEW.preparer_id = NEW.reviewed_by THEN
+       OR preparer_id_value = NEW.reviewed_by THEN
       RAISE EXCEPTION 'Final working-paper sign-off requires a different authorized reviewer acting as themselves'
         USING ERRCODE = '42501';
     END IF;
@@ -167,7 +178,7 @@ BEGIN
       NEW.reviewed_at := OLD.reviewed_at;
     END IF;
   ELSE
-    -- Reopening must be a separate reviewer action. The trigger, not the browser, clears sign-off metadata.
+    -- Reopening must be a separate reviewer action. The trigger clears sign-off metadata.
     NEW.reviewed_by := NULL;
     NEW.reviewed_at := NULL;
   END IF;
@@ -192,8 +203,8 @@ CREATE TRIGGER ledgerly_working_paper_review_guard
 BEFORE INSERT OR UPDATE ON public.working_paper
 FOR EACH ROW EXECUTE FUNCTION private.ledgerly_guard_working_paper_review_fields();
 
--- Permit reviewers to reach the update trigger; the trigger restricts review-only users
--- to review fields and prevents final sign-off by the preparer.
+-- Reviewers need an UPDATE policy to reach the trigger. The trigger limits review-only roles
+-- to sign-off metadata while keeping preparation content available to authorized preparers.
 DROP POLICY IF EXISTS ledgerly_working_paper_review_update ON public.working_paper;
 CREATE POLICY ledgerly_working_paper_review_update
 ON public.working_paper
