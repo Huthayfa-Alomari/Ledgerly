@@ -24,7 +24,7 @@ function roundMoney(value) {
 export function analyzeTrialBalance(rows, options = {}) {
   const safeRows = Array.isArray(rows) ? rows : [];
   const tolerance = finiteAmount(options.tolerance) && options.tolerance >= 0
-    ? options.tolerance
+    ? roundJod(options.tolerance)
     : DEFAULT_TOLERANCE;
   const toleranceFils = toFils(tolerance);
   const materiality = finiteAmount(options.materiality) && options.materiality > 0
