@@ -346,6 +346,8 @@ test('replay the complete Supabase migration chain and verify two-office RLS iso
       assert.equal(timestamp.rowCount, 1);
       assert.notEqual(timestamp.rows[0].occurred_at, '1900-01-01T00:00:00.000Z');
       assert.match(timestamp.rows[0].occurred_at, /^20\d\d-/);
+    });
+
     await t.test('review and audit guards remain compatible with the existing live column layout', async () => {
       // The live project uses prepared_by and has no change_log.engagement_id column.
       // Re-shape the disposable database to emulate that layout after validating clean replay.
