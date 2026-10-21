@@ -23,6 +23,8 @@ jobs:
           cache: npm
       - name: Install locked dependencies
         run: npm ci
+      - name: Security audit (high severity and above)
+        run: npm audit --audit-level=high
       - name: Run tests
         run: npm test
       - name: Build production bundle
