@@ -66,3 +66,22 @@ test('missing account identifiers and empty input are reported safely', () => {
   assert.ok(result.issues.some(issue => issue.category === 'missing-name'));
   assert.equal(analyzeTrialBalance([]).balanced, true);
 });
+
+
+test('default JOD tolerance is one fils and a four-fils difference is not hidden', () => {
+  const result = analyzeTrialBalance([
+    row({ openingDebit: 0, openingCredit: 0, debit: 10.004, credit: 10, closingDebit: 0, closingCredit: 0 }),
+  ]);
+  assert.equal(result.tolerance, 0.001);
+  assert.equal(result.differences.movement, 0.004);
+  assert.equal(result.balanced, false);
+  assert.match(result.issues.find(issue => issue.category === 'unbalanced-movement').detail, /0\.004/);
+});
+
+test('a one-fils difference is within the default one-fils tolerance', () => {
+  const result = analyzeTrialBalance([
+    row({ openingDebit: 0, openingCredit: 0, debit: 10.001, credit: 10, closingDebit: 0, closingCredit: 0 }),
+  ]);
+  assert.equal(result.differences.movement, 0.001);
+  assert.equal(result.balanced, true);
+});
