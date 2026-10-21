@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  MAX_IMPORT_FILE_BYTES, MAX_WORKSHEET_ROWS, MAX_WORKSHEET_COLUMNS, MAX_WORKSHEET_CELLS,
-  MAX_PDF_PAGES, MAX_OCR_PAGES, MAX_OCR_TOTAL_PIXELS,
+  MAX_IMPORT_FILE_BYTES, MAX_WORKSHEET_ROWS, MAX_WORKSHEET_COLUMNS,
+  MAX_PDF_PAGES, MAX_OCR_PAGES,
   fileSizeIssue, worksheetDimensionIssue, matrixDimensionIssue, pdfPageIssue, ocrPageIssue, ocrPixelIssue,
 } from '../src/lib/import-safety.mjs';
 
@@ -13,8 +13,8 @@ test('enforces uploaded file size and accepts the exact boundary', () => {
 });
 
 test('bounds worksheet row, column and total-cell dimensions before JSON expansion', () => {
-  assert.equal(worksheetDimensionIssue(MAX_WORKSHEET_ROWS + 1, 8), null); // one header + max data rows
-  assert.equal(worksheetDimensionIssue(MAX_WORKSHEET_ROWS + 2, 8), 'too-many-rows');
+  assert.equal(worksheetDimensionIssue(MAX_WORKSHEET_ROWS + 1, 7), null); // one header + max data rows
+  assert.equal(worksheetDimensionIssue(MAX_WORKSHEET_ROWS + 2, 7), 'too-many-rows');
   assert.equal(worksheetDimensionIssue(10, MAX_WORKSHEET_COLUMNS + 1), 'too-many-columns');
   assert.equal(worksheetDimensionIssue(100_000, 21), 'too-many-cells');
   assert.equal(worksheetDimensionIssue(100_000, 20), null);
