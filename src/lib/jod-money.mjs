@@ -5,13 +5,17 @@ export function toFils(value) {
   const amount = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(amount)) return 0;
   const scaled = amount * FILS_PER_JOD;
-  if (!Number.isFinite(scaled)) return 0;
-  return Math.sign(scaled) * Math.round(Math.abs(scaled) + Number.EPSILON);
+  if (!Number.isFinite(scaled)) throw new RangeError('JOD amount exceeds the supported fils range');
+  const fils = Math.round(Math.abs(scaled) + Number.EPSILON);
+  if (!Number.isSafeInteger(fils)) throw new RangeError('JOD amount exceeds the supported fils range');
+  return Math.sign(scaled) * fils;
 }
 
 /** Convert an integer fils value back to JOD. */
 export function fromFils(fils) {
-  return Number.isFinite(fils) ? fils / FILS_PER_JOD : 0;
+  if (!Number.isFinite(fils)) return 0;
+  if (!Number.isSafeInteger(fils)) throw new RangeError('Fils value must be a safe integer');
+  return fils / FILS_PER_JOD;
 }
 
 /** Normalize a JOD amount to three decimal places at the application boundary. */
