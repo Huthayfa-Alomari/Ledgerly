@@ -4,7 +4,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 const root = process.cwd();
-const migrationPath = join(root, 'db/supabase/migrations/202610190003_extended_audit_suite.sql');
+const migrationPath = join(root, 'db/supabase/migrations/20261019131031_brp_extended_audit_suite.sql');
 const roadmapPath = join(root, 'docs/08-product-scope-and-delivery-roadmap.md');
 const migration = readFileSync(migrationPath, 'utf8');
 const roadmap = readFileSync(roadmapPath, 'utf8');
