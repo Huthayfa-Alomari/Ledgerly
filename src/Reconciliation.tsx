@@ -4,7 +4,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { createWorker } from 'tesseract.js';
 import { detectColumns, normalizeRows, validateRows, matchTransactions } from './core.mjs';
-import { MAX_IMPORT_FILE_BYTES, MAX_WORKSHEET_ROWS, MAX_WORKSHEET_COLUMNS, MAX_WORKSHEET_CELLS, fileSizeIssue, worksheetDimensionIssue, matrixDimensionIssue, pdfPageIssue, ocrPageIssue, ocrPixelIssue } from './lib/import-safety.mjs';
+import { MAX_IMPORT_FILE_BYTES, MAX_WORKSHEET_ROWS, MAX_WORKSHEET_COLUMNS, MAX_WORKSHEET_CELLS, fileSizeIssue, worksheetDimensionIssue, matrixDimensionIssue, pdfPageIssue, pdfTextItemIssue, ocrPageIssue, ocrPixelIssue } from './lib/import-safety.mjs';
 
 type Field = 'date' | 'description' | 'debit' | 'credit' | 'amount' | 'balance';
 type Row = unknown[] | Record<string, unknown>;
@@ -44,6 +44,7 @@ export default function App() {
         if (issue === 'too-many-columns') return t('ورقة العمل تحتوي على أكثر من 256 عمودًا؛ احذف الأعمدة غير المستخدمة.', 'The worksheet exceeds 256 columns; remove unused columns.');
         if (issue === 'too-many-cells') return t('الملف يتجاوز الحد الآمن البالغ 2,000,000 خلية؛ قسّمه إلى أجزاء أصغر.', 'The file exceeds the 2,000,000-cell safety limit; split it into smaller files.');
         if (issue === 'too-many-pdf-pages') return t('ملف PDF يتجاوز حد 500 صفحة.', 'PDF exceeds the 500-page safety limit.');
+        if (issue === 'too-many-pdf-text-items' || issue === 'too-many-pdf-text-items-total') return t('يحتوي PDF على حجم نصي غير اعتيادي. قسّم الملف أو صدّره مجددًا من مصدر موثوق.', 'PDF contains an unusually large amount of text data. Split it or re-export it from a trusted source.');
         if (issue === 'too-many-ocr-pages') return t('استخراج OCR محدود إلى 100 صفحة في الملف الواحد لتجنب استهلاك موارد الجهاز.', 'OCR is limited to 100 pages per file to avoid exhausting device resources.');
         if (issue === 'ocr-page-too-large') return t('إحدى صفحات PDF تتجاوز حد البكسلات الآمن لـ OCR.', 'A PDF page exceeds the safe OCR pixel limit.');
         if (issue === 'ocr-work-too-large') return t('إجمالي حجم صفحات OCR يتجاوز الحد الآمن؛ قسّم PDF إلى ملفات أصغر.', 'The total OCR pixel budget is exceeded; split the PDF into smaller files.');
@@ -84,11 +85,16 @@ export default function App() {
         const pdfIssue = pdfPageIssue(doc.numPages); if (pdfIssue) throw new Error(limitMessage(pdfIssue));
         const pageLines: string[][] = [];
         let extractedCells = 0;
+        let totalPdfTextItems = 0;
         for (let pageNo = 1; pageNo <= doc.numPages; pageNo++) {
           const page = await doc.getPage(pageNo);
           const content = await page.getTextContent();
+          const items = content.items as any[];
+          const itemIssue = pdfTextItemIssue(items.length, totalPdfTextItems);
+          if (itemIssue) throw new Error(limitMessage(itemIssue));
+          totalPdfTextItems += items.length;
           const grouped = new Map<number, Array<{ x: number; text: string }>>();
-          for (const item of content.items as any[]) {
+          for (const item of items) {
             if (!item.str?.trim() || !item.transform) continue;
             const y = Math.round(item.transform[5] / 3) * 3;
             const group = grouped.get(y) ?? [];
