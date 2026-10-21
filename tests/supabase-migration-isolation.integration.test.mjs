@@ -273,6 +273,10 @@ test('replay the complete Supabase migration chain and verify two-office RLS iso
     });
 
     await t.test('working-paper sign-off is independent and signed content must be reopened before editing', async () => {
+      await assert.rejects(asUser(reviewerA, () => client.query(
+        "UPDATE public.working_paper SET title='Reviewer changed preparation content' WHERE id='wp-a1'"
+      )), /Review-only users cannot alter working-paper preparation content/);
+
       await asUser(reviewerA, () => client.query(
         "UPDATE public.working_paper SET status='reviewed', reviewed_by=$1 WHERE id='wp-a1'",
         [reviewerA]
@@ -290,10 +294,6 @@ test('replay the complete Supabase migration chain and verify two-office RLS iso
         "UPDATE public.working_paper SET status='reviewed', reviewed_by=$1 WHERE id='wp-self'",
         [selfReviewer]
       )), /different authorized reviewer/i);
-
-      await assert.rejects(asUser(reviewerA, () => client.query(
-        "UPDATE public.working_paper SET title='Reviewer changed preparation content' WHERE id='wp-a2'"
-      )), /row-level security policy/i);
 
       await asUser(reviewerA, () => client.query(
         "UPDATE public.working_paper SET status='in_review' WHERE id='wp-a1'"
