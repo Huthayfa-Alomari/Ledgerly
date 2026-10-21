@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 
-const migrationUrl = new URL('../db/supabase/migrations/20261021130000_ledgerly_evidence_engagement_scope_guard.sql', import.meta.url);
+const migrationUrl = new URL('../db/supabase/migrations/20261021154056_ledgerly_evidence_engagement_scope_guard.sql', import.meta.url);
 
 test('evidence metadata and private storage keys must resolve to an engagement in the same firm', {
   skip: !existsSync(migrationUrl) ? 'Evidence scope migration is pending review and has not merged yet.' : false,

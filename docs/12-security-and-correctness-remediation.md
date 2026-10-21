@@ -27,17 +27,24 @@ Date checked: 2026-10-21. This note describes code and migration changes in the 
 - Browser INSERT/UPDATE/DELETE to `public.change_log` is revoked. A server-side service-role writer must be used for authoritative change events; do not restore browser INSERT to the table to fix a UI permission error.
 - A trigger rejects a change-log actor that does not correspond to the authenticated user, and stamps the event time for non-service database sessions. Service-role writes are trusted server-side operations and remain the appropriate path for authoritative log creation.
 - A `working_paper` trigger protects review fields on both INSERT and UPDATE. It blocks final status on inserts without an authorized reviewer, prevents a preparer from signing off their own paper, locks signed-off content until it is reopened, and limits reviewer-only users to review fields.
-- These SQL controls are included in `20261021110000_ledgerly_audit_log_and_workpaper_review_guard.sql` but have **not yet been applied to the live Supabase project**. They require peer review, staging application, and authenticated-role tests before production deployment.
+- The SQL controls were applied to live Supabase as version `20261021154000` (`ledgerly_audit_log_and_workpaper_review_guard`). Catalog verification confirmed the change-log and working-paper triggers exist, and browser roles no longer have direct change-log INSERT/UPDATE/DELETE/TRUNCATE privileges. Full role behavior is covered in the disposable PostgreSQL integration job; live end-to-end user testing remains pending because the live project has no firms or app users.
 
 ## Migration integrity and remaining drift
 
-- The duplicate `20261020110000` timestamp was removed, and all 19 version prefixes now have local files matching the live migration ledger. The stale aliases for the initial schema, extended suite, schema-version controls, membership helper, bootstrap, invitation policies and tenant RLS migrations were renamed.
+- The duplicate `20261020110000` timestamp was removed, and all 22 deployed version prefixes now have local files matching the live migration ledger. The stale aliases for the initial schema, extended suite, schema-version controls, membership helper, bootstrap, invitation policies and tenant RLS migrations were renamed.
 - Two historical SQL sources were not recoverable byte-for-byte. `20261019133936_split_role_write_policies.sql` and `20261020104150_ledgerly_expire_stale_invitations.sql` are transparently marked reconstructed equivalents; they require a clean-database replay and schema diff before claiming full reproducibility.
-- The three role/tenant migrations use live versions `20261020140459`, `20261020140900`, and `20261020141128`. CI checks unique numeric prefixes and coverage of all 19 live migration versions.
+- The three role/tenant migrations use live versions `20261020140459`, `20261020140900`, and `20261020141128`. CI checks unique numeric prefixes and coverage of all 22 live migration versions.
 - Do not run `supabase db push` against production until the reconstructed migration chain has been replayed and compared with live schema. Do not apply `docs/archive/202610190002_security_hardening.sql`: it is an archived intermediate overlay, outside the migration chain, and must not be executed.
+
+## Live migration rollout and remaining validation
+
+- The catalog-driven FK migration was applied as live version `20261021154043`. A direct PostgreSQL catalog query now finds **0 unindexed foreign-key constraints**.
+- The evidence engagement-scope trigger/policies were applied as live version `20261021154056`. They enforce same-firm engagement binding for evidence metadata and private Storage object paths.
+- Supabase Performance Advisor still shows one `multiple_permissive_policies` warning for `working_paper` UPDATE and an INFO-level `unused_index` count of 131. The latter is expected while the project has no business rows/workload. PR work is consolidating the former into one policy without changing the role union.
+- Security Advisor still reports only the plan-gated leaked-password protection warning. No upgrade was purchased.
 
 ## Authorization scope and test limits
 
 - The role helper intentionally grants office-wide access to users whose `role_assignment.scope_type = 'firm'`; a firm-scoped staff member can therefore read all engagements in that firm. Use engagement-scoped assignments when limiting staff to selected files. Changing this rule globally is a product authorization decision and still needs real test users.
-- CI tests passed for the branch, but the staging integration tests requiring two separate firm/user identities remain skipped. The connected Supabase project currently has zero firm rows and zero app-user rows, so live cross-firm authorization has not been proven.
+- CI now replays the full migration chain and tests two offices, a scoped staff member, evidence paths, audit-log actor identity, and preparer/reviewer separation in a disposable PostgreSQL database. The connected Supabase project currently has zero firm rows and zero app-user rows, so live cross-firm authorization has not been exercised with real production accounts.
 - The plan-gated Supabase leaked-password screening warning remains accepted without a paid upgrade. The client-side 12-character minimum is not a leaked-password check and must not be described as equivalent.

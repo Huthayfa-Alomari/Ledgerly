@@ -4,7 +4,7 @@ Checked against live project `delvbdvjdmcblqiqaxsd` on 2026-10-21.
 
 ## Canonical migration map
 
-The live migration history contains 19 versions. The repository now carries a version-prefixed SQL file for each of those entries:
+The live migration history contains 22 deployed versions. The repository now carries a version-prefixed SQL file for each of those entries:
 
 | Live version | Migration name | Local file |
 |---|---|---|
@@ -27,6 +27,9 @@ The live migration history contains 19 versions. The repository now carries a ve
 | 20261020140900 | ledgerly_scoped_child_table_rls | 20261020140900_ledgerly_scoped_child_table_rls.sql |
 | 20261020141128 | ledgerly_firm_policy_cleanup | 20261020141128_ledgerly_firm_policy_cleanup.sql |
 | 20261021040529 | ledgerly_cloud_sync_private_evidence | 20261021040529_ledgerly_cloud_sync_private_evidence.sql |
+| 20261021154000 | ledgerly_audit_log_and_workpaper_review_guard | 20261021154000_ledgerly_audit_log_and_workpaper_review_guard.sql |
+| 20261021154043 | ledgerly_foreign_key_indexes | 20261021154043_ledgerly_foreign_key_indexes.sql |
+| 20261021154056 | ledgerly_evidence_engagement_scope_guard | 20261021154056_ledgerly_evidence_engagement_scope_guard.sql |
 
 ## Historical-source limitation
 
@@ -39,15 +42,20 @@ The schema-version RLS entry is represented by an explicit, idempotent `ALTER TA
 
 Because two original SQL sources were reconstructed, this file alignment is **not a substitute for a fresh-database replay and schema diff**. Before declaring a clean reproducible migration chain, run all migrations against a disposable Supabase project and compare its tables, constraints, triggers, policies, grants, indexes and functions with the live schema. Do not use `supabase db push` as a way to validate this against production.
 
-## Not yet applied to live Supabase
+## Deployed to live Supabase
 
-- `20261021110000_ledgerly_audit_log_and_workpaper_review_guard.sql` remains pending. Test it in a disposable/ staging project with authenticated users and the current RLS matrix first.
-- The foreign-key index migration is under review in PR #33. It has not been applied to the live project.
+- `20261021154000_ledgerly_audit_log_and_workpaper_review_guard.sql` was applied. Catalog verification confirms both audit and working-paper triggers; direct browser writes to `change_log` remain revoked.
+- `20261021154043_ledgerly_foreign_key_indexes.sql` was applied. A follow-up catalog query reports zero uncovered public foreign-key constraints.
+- `20261021154056_ledgerly_evidence_engagement_scope_guard.sql` was applied. Evidence metadata and private object policies now verify that the engagement exists and belongs to the same firm.
+
+## Pending in the repository
+
+- `20261021154100_ledgerly_consolidate_workpaper_update_policy.sql` removes the duplicate permissive UPDATE policy on `working_paper`. It must be merged and tested before applying live; the filename must then be reconciled to the actual version assigned by Supabase.
 - The historical overlay `docs/archive/202610190002_security_hardening.sql` is not a migration and must never be applied manually. It was removed from `db/supabase/security` to prevent accidental execution.
 
 ## Verified checks
 
 - There are no duplicate migration version prefixes.
-- All 19 live migration versions have same-version local file names.
+- All 22 deployed live migration versions have same-version local file names.
 - The archive directory is separated from the executable migration folder.
 - CI enforces these checks. A successful static test does not itself prove the reconstructed history replays to a schema identical to production.
