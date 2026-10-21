@@ -153,12 +153,12 @@ Digital workpaper creation now captures procedure steps, conclusion, and audit t
 
 **Limitations:** this is browser-local traceability, not a tamper-proof audit trail; reviewer identity is a local label, not authenticated identity; no evidence binaries are uploaded or permissioned; the workflow is not a substitute for the audit firm's approved methodology. Cloud persistence and server-enforced immutability remain pending a dedicated Supabase project and reviewed migrations.
 
-Verification: `node --test` passes 33 tests. A production build remains unverified because dependency installation was interrupted by an environment timeout; do not treat this as a release candidate until `npm ci` and `npm run build` succeed in the user's development environment.
+Historical note from the earlier prototype: its production build was not verified in that run. The current review branch has since passed CI dependency installation, `npm audit --audit-level=high`, automated tests, and a Vite production build; see PR #31 for the live result.
 
 
 ## Supabase project status
 
-The dedicated Supabase project has been created. See [docs/09-supabase-live-project.md](docs/09-supabase-live-project.md) for the project reference, applied live schema, security gate, and remaining integration work. Optional Supabase email/password authentication and first-firm onboarding are implemented. Audit-record synchronization and evidence upload are still disabled; do not replay the earlier draft SQL migrations against the live project without reconciling them first.
+The dedicated Supabase project has been created. See [docs/09-supabase-live-project.md](docs/09-supabase-live-project.md) for the project reference, applied live schema, security gate, and remaining integration work. Optional Supabase email/password authentication, versioned snapshot sync, and private evidence upload/download are implemented in the current app. Sync is explicit and whole-workspace, not record-level merge. The review branch adds unmerged SQL guards for the audit log and working-paper sign-off; do not treat those guards as deployed until staging and a reviewed migration are applied. Do not replay the earlier draft SQL migrations against the live project without reconciling them first.
 
 
 ## Build 1.0 — UI/UX refresh (2026-10-19)
