@@ -577,7 +577,7 @@ DO $$
 DECLARE tbl text;
 BEGIN
   FOREACH tbl IN ARRAY ARRAY[
-    'firm','app_user','role_assignment','client','client_acceptance','fiscal_year','engagement',
+    'app_user','role_assignment','client','client_acceptance','fiscal_year','engagement',
     'account','import_batch','transaction_line','reconciliation_run','working_paper','evidence',
     'exception','reconciliation_match','cross_link','risk','audit_procedure','sample','misstatement',
     'review','change_log','sync_outbox'
@@ -589,7 +589,15 @@ BEGIN
       tbl
     );
   END LOOP;
-END $$;
+
+  -- firm is the tenant root and uses id (not firm_id), so it needs its own predicate.
+  ALTER TABLE public.firm ENABLE ROW LEVEL SECURITY;
+  DROP POLICY IF EXISTS brp_firm_isolation ON public.firm;
+  CREATE POLICY brp_firm_isolation ON public.firm
+    FOR ALL TO authenticated
+    USING (public.brp_user_has_firm_access(id))
+    WITH CHECK (public.brp_user_has_firm_access(id));
+END $;
 
 -- change_log is intended to be append-only from application roles.
 REVOKE UPDATE, DELETE, TRUNCATE ON public.change_log FROM anon, authenticated;
