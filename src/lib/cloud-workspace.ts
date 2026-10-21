@@ -49,12 +49,12 @@ export async function getCurrentFirm(config: SupabaseBrowserConfig, session: Clo
   if (firms.length !== 1) throw new Error(firms.length ? 'الحساب مرتبط بأكثر من مكتب؛ يلزم اختيار المكتب قبل المزامنة.' : 'لم يُربط الحساب بمكتب فعّال بعد. أكمل تهيئة المكتب أو قبول الدعوة أولًا.');
   return firms[0];
 }
-export async function pullWorkspace(config: SupabaseBrowserConfig, session: CloudSession, firmId: string): Promise<{ row: CloudRow | null; baseline: number }> {
+export async function pullWorkspace(config: SupabaseBrowserConfig, session: CloudSession, firmId: string, recordBaseline = true): Promise<{ row: CloudRow | null; baseline: number }> {
   const rows = await request<CloudRow[]>(config, session,
     `/rest/v1/firm_workspace_snapshot?select=firm_id,payload,version,updated_by,updated_at&firm_id=eq.${encodeURIComponent(firmId)}&limit=1`);
   const row = rows[0] || null;
   const baseline = row?.version || 0;
-  localStorage.setItem(baselineKey(firmId), String(baseline));
+  if (recordBaseline) localStorage.setItem(baselineKey(firmId), String(baseline));
   return { row, baseline };
 }
 export async function pushWorkspace(config: SupabaseBrowserConfig, session: CloudSession, firmId: string, db: CloudDB): Promise<CloudRow> {
