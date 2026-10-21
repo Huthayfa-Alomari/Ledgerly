@@ -404,7 +404,7 @@ test('replay the complete Supabase migration chain and verify two-office RLS iso
       ));
       const liveEvent = await client.query("SELECT occurred_at FROM public.change_log WHERE id='live-valid'");
       assert.notEqual(liveEvent.rows[0].occurred_at, '1900-01-01T00:00:00.000Z');
-      assert.match(liveEvent.rows[0].occurred_at, /^20\\d\\d-/);
+      assert.match(liveEvent.rows[0].occurred_at, /^20\d\d-/);
     });
   } finally {
     await client.end();
