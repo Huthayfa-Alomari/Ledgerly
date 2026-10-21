@@ -24,3 +24,9 @@ test('non-finite values do not poison calculations', () => {
   assert.equal(toFils(Number.NaN), 0);
   assert.equal(roundJod(Number.POSITIVE_INFINITY), 0);
 });
+
+test('rejects finite values that cannot be represented safely as integer fils', () => {
+  assert.throws(() => toFils(Number.MAX_VALUE), RangeError);
+  assert.throws(() => roundJod(Number.MAX_VALUE), RangeError);
+  assert.throws(() => fromFils(Number.MAX_SAFE_INTEGER + 1), RangeError);
+});
