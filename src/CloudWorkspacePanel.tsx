@@ -14,7 +14,6 @@ export default function CloudWorkspacePanel({ config, session, db, onRestore }: 
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
-  const [confirmedRestore, setConfirmedRestore] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -52,6 +51,7 @@ export default function CloudWorkspacePanel({ config, session, db, onRestore }: 
     if (!session || !firmId) return;
     setBusy(true); setError(''); setNotice('');
     try {
+      if (remoteVersion && remoteVersion > 0 && !window.confirm('سيتم استبدال نسخة المكتب السحابية كاملة بالبيانات الموجودة على هذا الجهاز. لن تُدمج التعديلات بين الأجهزة. تأكد أنك سحبت أحدث نسخة وراجعت البيانات. هل تريد المتابعة؟')) return;
       const row = await pushWorkspace(config, session, firmId, db);
       setRemoteVersion(row.version);
       setNotice(`تمت مزامنة نسخة المكتب رقم ${row.version}. لا تزال المزامنة نسخة مكتب كاملة وليست دمجًا لكل سجل.`);
