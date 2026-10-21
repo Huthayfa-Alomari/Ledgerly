@@ -51,7 +51,7 @@ BEGIN
       INTO column_list
       FROM pg_catalog.unnest(fk.key_columns) WITH ORDINALITY AS key(attnum, ord)
       JOIN pg_catalog.pg_attribute a
-        ON a.attrelid = fk.constraint_oid::regclass::oid
+        ON a.attrelid = fk.table_oid
        AND a.attnum = key.attnum;
 
       index_name :=
