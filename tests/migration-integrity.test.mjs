@@ -40,6 +40,8 @@ test('bootstrap and temporary write-gate filenames align to one canonical versio
   assert.ok(migrations.includes('20261020104019_ledgerly_invitation_explicit_deny_policy.sql'));
   assert.ok(migrations.includes('20261020104150_ledgerly_expire_stale_invitations.sql'));
   assert.ok(!migrations.some(name => /^202610201(20000|43000|50000)_/.test(name)));
+  const staleAliases = ['202610190001_', '202610190003_', '202610200001_', '202610200002_', '202610200003_', '202610200004_', '20261020100000_', '20261020104000_', '20261020104500_', '20261020105000_'];
+  for (const alias of staleAliases) assert.ok(!migrations.some(name => name.startsWith(alias)), `Stale migration filename remains: ${alias}`);
 });
 
 test('all 19 versions recorded in the live Supabase history have canonical local migration files', () => {
