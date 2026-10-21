@@ -7,7 +7,7 @@ const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 test('invalid local JSON blocks persistence during initial load', () => {
   assert.match(app, /const loaded=loadLocalData\(\(\)=>localStorage,KEY,emptyDB\)/);
   assert.match(app, /if\(loaded\.error==='invalid-json'\)/);
-  assert.match(app, /setStoragePersistenceEnabled\(!initialData\.error\)/);
+  assert.match(app, /useState\(!initialData\.error\)/);
   assert.match(app, /useEffect\(\(\)=>\{ if\(!storagePersistenceEnabled\)return;/);
 });
 
