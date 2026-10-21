@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   MAX_IMPORT_FILE_BYTES, MAX_WORKSHEET_ROWS, MAX_WORKSHEET_COLUMNS,
-  MAX_PDF_PAGES, MAX_PDF_TEXT_ITEMS_PER_PAGE, MAX_PDF_TEXT_ITEMS_TOTAL, MAX_OCR_PAGES,
+  MAX_PDF_PAGES, MAX_PDF_TEXT_ITEMS_PER_PAGE, MAX_PDF_TEXT_ITEMS_TOTAL, MAX_OCR_PAGES, MAX_OCR_TOTAL_PIXELS,
   fileSizeIssue, worksheetDimensionIssue, matrixDimensionIssue, pdfPageIssue, pdfTextItemIssue, ocrPageIssue, ocrPixelIssue,
 } from '../src/lib/import-safety.mjs';
 
