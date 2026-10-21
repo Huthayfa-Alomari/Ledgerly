@@ -8,7 +8,7 @@ import CloudWorkspacePanel from './CloudWorkspacePanel';
 import type { CloudDB } from './lib/cloud-workspace';
 import './styles.css';
 import { readSupabaseBrowserConfig } from './lib/supabase-config';
-import { persistLocalData } from './lib/local-db-storage.mjs';
+import { loadLocalData, persistLocalData } from './lib/local-db-storage.mjs';
 import { fromFils, toFils, roundJod } from './lib/jod-money.mjs';
 import { MAX_IMPORT_FILE_BYTES, MAX_WORKSHEET_ROWS, worksheetDimensionIssue, matrixDimensionIssue } from './lib/import-safety.mjs';
 
@@ -40,31 +40,28 @@ const uid = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice
 const today = () => new Date().toISOString().slice(0,10);
 type DBLoadResult = { db: DB; error: string };
 function readDB(): DBLoadResult {
- try {
-  const raw=localStorage.getItem(KEY);
-  if(!raw)return {db:emptyDB,error:''};
-  let parsed:Partial<DB>;
-  try { parsed=JSON.parse(raw) as Partial<DB>; }
-  catch { return {db:emptyDB,error:'تعذرت قراءة JSON المحفوظ. منع Ledgerly الكتابة فوق البيانات القديمة حتى تنزّل نسخة إنقاذ أو تستعيد نسخة سليمة.'}; }
-  if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))
-   return {db:emptyDB,error:'بنية البيانات المحلية غير صالحة. لم تتم الكتابة فوق المحتوى المحفوظ.'};
-  const arrayKeys:(keyof DB)[]=['clients','engagements','risks','workpapers','findings','evidence','trialBalance'];
-  if(arrayKeys.some(key=>parsed[key]!==undefined&&!Array.isArray(parsed[key])))
-   return {db:emptyDB,error:'إحدى مجموعات البيانات المحلية ليست قائمة صالحة. لم تتم الكتابة فوق المحتوى المحفوظ.'};
-  return {db:{...emptyDB,...parsed,
-   clients:Array.isArray(parsed.clients)?parsed.clients:[],
-   engagements:Array.isArray(parsed.engagements)?parsed.engagements:[],
-   risks:Array.isArray(parsed.risks)?parsed.risks:[],
-   workpapers:Array.isArray(parsed.workpapers)?parsed.workpapers:[],
-   findings:Array.isArray(parsed.findings)?parsed.findings:[],
-   evidence:Array.isArray(parsed.evidence)?parsed.evidence:[],
-   trialBalance:Array.isArray(parsed.trialBalance)?parsed.trialBalance:[],
-   auditLog:Array.isArray(parsed.auditLog)?parsed.auditLog:[],
-   completionChecks:parsed.completionChecks&&typeof parsed.completionChecks==='object'&&!Array.isArray(parsed.completionChecks)?parsed.completionChecks:{}
-  },error:''};
- } catch {
+ const loaded=loadLocalData(()=>localStorage,KEY,emptyDB);
+ if(loaded.error==='invalid-json')
+  return {db:emptyDB,error:'تعذرت قراءة JSON المحفوظ. منع Ledgerly الكتابة فوق البيانات القديمة حتى تنزّل نسخة إنقاذ أو تستعيد نسخة سليمة.'};
+ if(loaded.error==='storage-unavailable')
   return {db:emptyDB,error:'تعذر الوصول إلى التخزين المحلي. لن يتم تفعيل الحفظ حتى تستعيد نسخة احتياطية أو يتاح التخزين.'};
- }
+ const parsed=loaded.value as Partial<DB>;
+ if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))
+  return {db:emptyDB,error:'بنية البيانات المحلية غير صالحة. لم تتم الكتابة فوق المحتوى المحفوظ.'};
+ const arrayKeys:(keyof DB)[]=['clients','engagements','risks','workpapers','findings','evidence','trialBalance'];
+ if(arrayKeys.some(key=>parsed[key]!==undefined&&!Array.isArray(parsed[key])))
+  return {db:emptyDB,error:'إحدى مجموعات البيانات المحلية ليست قائمة صالحة. لم تتم الكتابة فوق المحتوى المحفوظ.'};
+ return {db:{...emptyDB,...parsed,
+  clients:Array.isArray(parsed.clients)?parsed.clients:[],
+  engagements:Array.isArray(parsed.engagements)?parsed.engagements:[],
+  risks:Array.isArray(parsed.risks)?parsed.risks:[],
+  workpapers:Array.isArray(parsed.workpapers)?parsed.workpapers:[],
+  findings:Array.isArray(parsed.findings)?parsed.findings:[],
+  evidence:Array.isArray(parsed.evidence)?parsed.evidence:[],
+  trialBalance:Array.isArray(parsed.trialBalance)?parsed.trialBalance:[],
+  auditLog:Array.isArray(parsed.auditLog)?parsed.auditLog:[],
+  completionChecks:parsed.completionChecks&&typeof parsed.completionChecks==='object'&&!Array.isArray(parsed.completionChecks)?parsed.completionChecks:{}
+ },error:''};
 }
 function amountValue(v: unknown): number { if (typeof v === 'number') return Number.isFinite(v)?roundJod(v):0; let s=String(v??'').replace(/[٠-٩]/g,d=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,]/g,'').replace(/[\s\u00a0]/g,'').replace(/[ر.دJOD$€£]/gi,'').trim(); if(!s)return 0; const parens=/^\(.*\)$/.test(s); s=s.replace(/[()]/g,''); const n=Number(s); return Number.isFinite(n)?roundJod(parens?-Math.abs(n):n):0; }
 function headerKey(v: unknown): string { return String(v??'').toLowerCase().replace(/[\s_\-./\u0640]/g,'').replace(/[أإآ]/g,'ا').replace(/ة/g,'ه'); }
