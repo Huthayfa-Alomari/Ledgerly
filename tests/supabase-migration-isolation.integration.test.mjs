@@ -404,7 +404,6 @@ test('replay the complete Supabase migration chain and verify two-office RLS iso
       assert.notEqual(liveEvent.rows[0].occurred_at, '1900-01-01T00:00:00.000Z');
       assert.match(liveEvent.rows[0].occurred_at, /^20\\d\\d-/);
     });
-    });
   } finally {
     await client.end();
   }
