@@ -9,7 +9,7 @@ import type { CloudDB } from './lib/cloud-workspace';
 import './styles.css';
 import { readSupabaseBrowserConfig } from './lib/supabase-config';
 import { loadLocalData, localDataShapeIssue, persistLocalData } from './lib/local-db-storage.mjs';
-import { fromFils, toFils, roundJod, parseJodAmount } from './lib/jod-money.mjs';
+import { fromFils, toFils, parseJodAmount } from './lib/jod-money.mjs';
 import { MAX_IMPORT_FILE_BYTES, MAX_WORKSHEET_ROWS, worksheetDimensionIssue, matrixDimensionIssue } from './lib/import-safety.mjs';
 
 const Reconciliation = lazy(() => import('./Reconciliation'));
