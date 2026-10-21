@@ -11,6 +11,7 @@ test('cloud snapshot uses optimistic version checks and firm-scoped RLS', () => 
   assert.match(migration, /ENABLE ROW LEVEL SECURITY/);
   assert.match(migration, /brp_user_has_role_in_scope\(firm_id, NULL/);
   assert.match(migration, /updated_by = \(SELECT auth\.uid\(\)\)::text/);
+  assert.match(migration, /CREATE POLICY ledgerly_workspace_snapshot_insert[\s\S]*?ARRAY\['firm_admin','managing_partner','engagement_partner','manager'\]::text\[\]/);
   assert.match(migration, /REVOKE DELETE, TRUNCATE ON public\.firm_workspace_snapshot/);
   assert.match(sync, /current !== expected/);
   assert.match(sync, /CloudConflictError/);
@@ -27,6 +28,7 @@ test('evidence bucket is private and scoped to firm plus engagement folders', ()
   assert.match(sync, /SHA-256/);
   assert.match(sync, /25 \* 1024 \* 1024/);
   assert.match(sync, /storage\/v1\/object\/ledgerly-evidence/);
+  assert.match(sync, /actualHash !== row\.file_sha256/);
   assert.match(panel, /تنزيل/);
 });
 
