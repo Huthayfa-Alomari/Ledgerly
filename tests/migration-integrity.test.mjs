@@ -58,7 +58,7 @@ test('legacy security hardening SQL is outside the executable migration director
 
 test('security hardening overlay is not silently treated as an executable migration', () => {
   const note = readFileSync(resolve(root, 'db/supabase/security/README.md'), 'utf8');
-  assert.match(note, /has \*\*not\*\* been applied/);
+  assert.match(note, /must not be applied/i);
   assert.match(note, /dedicated test Supabase project/);
   assert.match(note, /docs\/archive\/202610190002_security_hardening\.sql/);
 });
