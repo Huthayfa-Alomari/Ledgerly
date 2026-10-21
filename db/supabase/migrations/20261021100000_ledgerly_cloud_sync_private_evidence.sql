@@ -19,7 +19,7 @@ CREATE POLICY ledgerly_workspace_snapshot_insert ON public.firm_workspace_snapsh
   WITH CHECK (
     updated_by = (SELECT auth.uid())::text
     AND private.brp_user_has_role_in_scope(firm_id, NULL,
-      ARRAY['firm_admin','managing_partner','engagement_partner','manager','senior','staff']::text[])
+      ARRAY['firm_admin','managing_partner','engagement_partner','manager']::text[])
   );
 DROP POLICY IF EXISTS ledgerly_workspace_snapshot_update ON public.firm_workspace_snapshot;
 CREATE POLICY ledgerly_workspace_snapshot_update ON public.firm_workspace_snapshot
