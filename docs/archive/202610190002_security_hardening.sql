@@ -1,3 +1,8 @@
+-- ARCHIVED — DO NOT APPLY.
+-- This was an intermediate security-hardening overlay written for the initial draft schema.
+-- It is not a migration and is not compatible as a drop-in update to the current live schema.
+-- Use the ordered files under db/supabase/migrations and review/test every schema change first.
+
 -- SECURITY HARDENING OVERLAY for the initial audit platform schema.
 -- Review and apply only to a dedicated test project after creating a formal migration
 -- through the Supabase CLI. This file is intentionally NOT auto-applied by the app.

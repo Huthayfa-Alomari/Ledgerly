@@ -31,10 +31,10 @@ Date checked: 2026-10-21. This note describes code and migration changes in the 
 
 ## Migration integrity and remaining drift
 
-- The duplicate `20261020110000` filename prefix was removed. The duplicate interim-gate file was deleted; the canonical `20261020104503_ledgerly_interim_firm_admin_write_gate.sql` remains. The bootstrap service-role migration filename was aligned to the live history version `20261020102903`.
-- The three role/tenant migrations have now been renamed to their live history versions: `20261020140459` (role-by-table), `20261020140900` (scoped child-table policies), and `20261020141128` (firm-policy cleanup).
-- CI checks unique numeric migration prefixes, checks these canonical filenames, and fails if the known duplicate/stale filenames return.
-- **This is not a complete synchronization of every filename with the live migration history.** The repo still contains older local filenames whose timestamps differ from the live project list, and three live migration entries (`enable_rls_schema_version`, `split_role_write_policies`, and `ledgerly_expire_stale_invitations`) do not currently have an obvious one-to-one SQL file in the repo. Do not run `supabase db push` against production until a migration-by-migration diff/reconciliation is completed. Do not apply `db/supabase/security/202610190002_security_hardening.sql` manually: it is an archived intermediate overlay outside the migration chain and has not been approved as a fresh-install migration.
+- The duplicate `20261020110000` timestamp was removed, and all 19 version prefixes now have local files matching the live migration ledger. The stale aliases for the initial schema, extended suite, schema-version controls, membership helper, bootstrap, invitation policies and tenant RLS migrations were renamed.
+- Two historical SQL sources were not recoverable byte-for-byte. `20261019133936_split_role_write_policies.sql` and `20261020104150_ledgerly_expire_stale_invitations.sql` are transparently marked reconstructed equivalents; they require a clean-database replay and schema diff before claiming full reproducibility.
+- The three role/tenant migrations use live versions `20261020140459`, `20261020140900`, and `20261020141128`. CI checks unique numeric prefixes and coverage of all 19 live migration versions.
+- Do not run `supabase db push` against production until the reconstructed migration chain has been replayed and compared with live schema. Do not apply `docs/archive/202610190002_security_hardening.sql`: it is an archived intermediate overlay, outside the migration chain, and must not be executed.
 
 ## Authorization scope and test limits
 

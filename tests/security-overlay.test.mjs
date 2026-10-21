@@ -2,10 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const sql = readFileSync(new URL('../db/supabase/security/202610190002_security_hardening.sql', import.meta.url), 'utf8');
+const sql = readFileSync(new URL('../docs/archive/202610190002_security_hardening.sql', import.meta.url), 'utf8');
 const readme = readFileSync(new URL('../db/supabase/security/README.md', import.meta.url), 'utf8');
 
-test('security helper uses a fixed empty search path and restricted execution grants', () => {
+test('legacy security overlay is clearly archived and must not be applied', () => {
+  assert.match(sql, /^-- ARCHIVED — DO NOT APPLY/);
+  assert.match(sql, /not compatible as a drop-in update to the current live schema/);
+});
+
+test('archived security helper keeps fixed search path and restricted execution grants for historical review', () => {
   assert.match(sql, /CREATE OR REPLACE FUNCTION private\.brp_user_has_firm_role/i);
   assert.match(sql, /SECURITY DEFINER\s+SET search_path = ''/i);
   assert.match(sql, /REVOKE ALL ON FUNCTION private\.brp_user_has_firm_role\(text\) FROM PUBLIC, anon/i);
@@ -31,5 +36,5 @@ test('change log remains append-only for authenticated clients', () => {
 test('deployment docs clearly state this overlay is not deployed and not production complete', () => {
   assert.match(readme, /partially deployed/i);
   assert.match(readme, /not a complete external-audit-office authorization model/i);
-  assert.match(readme, /has \*\*not\*\* been applied/i);
+  assert.match(readme, /must not be applied/i);
 });
