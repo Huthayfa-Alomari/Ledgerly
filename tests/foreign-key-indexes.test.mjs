@@ -4,10 +4,14 @@ import { readFileSync } from 'node:fs';
 
 const sql = readFileSync(new URL('../db/supabase/migrations/20261021125000_ledgerly_foreign_key_indexes.sql', import.meta.url), 'utf8');
 
-test('foreign-key performance migration contains the reviewed set of idempotent index statements', () => {
-  const statements = sql.split('\n').filter(line => /^CREATE INDEX IF NOT EXISTS /.test(line));
-  assert.equal(statements.length, 115);
-  assert.equal(new Set(statements.map(line => line.match(/^CREATE INDEX IF NOT EXISTS ([^ ]+)/)?.[1])).size, 115);
-  assert.ok(statements.every(line => / ON public\.[a-z_]+ \([a-z_, ]+\);$/.test(line)));
-  assert.doesNotMatch(sql, /DROP INDEX|DROP TABLE|DELETE FROM|ALTER TABLE/i);
+test('foreign-key index migration inspects the destination schema and adds idempotent B-tree indexes', () => {
+  assert.match(sql, /FOR fk IN[\s\S]*c\.contype = 'f'/);
+  assert.match(sql, /i\.indisvalid/);
+  assert.match(sql, /i\.indisready/);
+  assert.match(sql, /i\.indpred IS NULL/);
+  assert.match(sql, /am\.amname = 'btree'/);
+  assert.match(sql, /pg_catalog\.array_agg/);
+  assert.match(sql, /CREATE INDEX IF NOT EXISTS/);
+  assert.match(sql, /pg_catalog\.md5/);
+  assert.doesNotMatch(sql, /DROP INDEX|DROP TABLE|DELETE FROM|TRUNCATE TABLE/i);
 });

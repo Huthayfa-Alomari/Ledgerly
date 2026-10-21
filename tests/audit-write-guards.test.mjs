@@ -12,14 +12,14 @@ test('change log actor identity and timestamp are enforced at insert time', () =
   assert.match(migration, /Trusted server-side code \(service_role\)/);
 });
 
-test('working-paper review fields are protected from preparer-role sign-off', () => {
-  assert.match(migration, /ledgerly_guard_working_paper_review_fields/);
-  assert.match(migration, /Only an authorized reviewer may change working-paper review fields/);
-  assert.match(migration, /Final working-paper sign-off requires a partner or independent reviewer/);
-  assert.match(migration, /BEFORE INSERT OR UPDATE ON public\.working_paper/);
-  assert.match(migration, /The preparer cannot independently sign off their own working paper/);
-  assert.equal((migration.match(/'معتمد'/g) || []).length, 3, 'Arabic approval must be guarded on insert, update, and old-status locking');
-  assert.match(migration, /Signed-off working papers must be reopened/);
+test('review guard matches the actual canonical working_paper schema', () => {
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS reviewed_by text REFERENCES public\.app_user\(id\)/);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS reviewed_at text/);
+  assert.match(migration, /NEW\.preparer_id/);
+  assert.doesNotMatch(migration, /NEW\.prepared_by|NEW\.procedure_ref|NEW\.objective|NEW\.work_done/);
+  assert.match(migration, /status = 'reviewed'/);
+  assert.match(migration, /The preparer cannot independently sign off their own working paper|Final working-paper sign-off requires a different authorized reviewer/);
+  assert.match(migration, /Signed-off working papers must be reopened in a separate update/);
   assert.match(migration, /Review-only users cannot alter working-paper preparation content/);
   assert.match(migration, /CREATE POLICY ledgerly_working_paper_review_update/);
 });

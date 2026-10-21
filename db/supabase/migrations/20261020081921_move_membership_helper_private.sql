@@ -74,7 +74,7 @@ END $$;
 
 -- Fail closed if any public policy still points at the old helper.
 -- Because migrations run transactionally, this aborts before revoking the old function.
-DO $
+DO $$
 BEGIN
   IF EXISTS (
     SELECT 1
@@ -89,7 +89,7 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'Security migration aborted: at least one public RLS policy still references public.brp_user_has_firm_access';
   END IF;
-END $;
+END $$;
 
 -- Policies now use the non-exposed private helper; prevent direct RPC calls to the old function.
 REVOKE ALL ON FUNCTION public.brp_user_has_firm_access(text) FROM PUBLIC, anon, authenticated;
