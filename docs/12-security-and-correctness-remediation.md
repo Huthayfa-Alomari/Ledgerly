@@ -31,16 +31,16 @@ Date checked: 2026-10-21. This note describes code and migration changes in the 
 
 ## Migration integrity and remaining drift
 
-- The duplicate `20261020110000` timestamp was removed, and all 22 deployed version prefixes now have local files matching the live migration ledger. The stale aliases for the initial schema, extended suite, schema-version controls, membership helper, bootstrap, invitation policies and tenant RLS migrations were renamed.
+- The duplicate `20261020110000` timestamp was removed, and all 23 deployed version prefixes now have local files matching the live migration ledger. The stale aliases for the initial schema, extended suite, schema-version controls, membership helper, bootstrap, invitation policies and tenant RLS migrations were renamed.
 - Two historical SQL sources were not recoverable byte-for-byte. `20261019133936_split_role_write_policies.sql` and `20261020104150_ledgerly_expire_stale_invitations.sql` are transparently marked reconstructed equivalents; they require a clean-database replay and schema diff before claiming full reproducibility.
-- The three role/tenant migrations use live versions `20261020140459`, `20261020140900`, and `20261020141128`. CI checks unique numeric prefixes and coverage of all 22 live migration versions.
+- The three role/tenant migrations use live versions `20261020140459`, `20261020140900`, and `20261020141128`. CI checks unique numeric prefixes and coverage of all 23 live migration versions.
 - Do not run `supabase db push` against production until the reconstructed migration chain has been replayed and compared with live schema. Do not apply `docs/archive/202610190002_security_hardening.sql`: it is an archived intermediate overlay, outside the migration chain, and must not be executed.
 
 ## Live migration rollout and remaining validation
 
 - The catalog-driven FK migration was applied as live version `20261021154043`. A direct PostgreSQL catalog query now finds **0 unindexed foreign-key constraints**.
 - The evidence engagement-scope trigger/policies were applied as live version `20261021154056`. They enforce same-firm engagement binding for evidence metadata and private Storage object paths.
-- Supabase Performance Advisor still shows one `multiple_permissive_policies` warning for `working_paper` UPDATE and an INFO-level `unused_index` count of 131. The latter is expected while the project has no business rows/workload. PR work is consolidating the former into one policy without changing the role union.
+- Supabase Performance Advisor no longer reports `multiple_permissive_policies`: consolidation migration `20261021155218` leaves one authenticated UPDATE policy for `working_paper`, while the trigger continues to enforce the preparer/reviewer split. The remaining INFO-level `unused_index` count is 131; it is expected while the project has no business rows/workload and is not a reason to drop indexes blindly.
 - Security Advisor still reports only the plan-gated leaked-password protection warning. No upgrade was purchased.
 
 ## Authorization scope and test limits
