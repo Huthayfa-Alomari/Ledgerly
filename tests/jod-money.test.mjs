@@ -37,7 +37,7 @@ import { parseJodAmount } from '../src/lib/jod-money.mjs';
 test('parses decimal dots, three JOD decimals, Arabic digits, and currency labels correctly', () => {
   assert.equal(parseJodAmount('12.345'), 12.345);
   assert.equal(parseJodAmount('JOD 12.004'), 12.004);
-  assert.equal(parseJodAmount('١٢٫٣٤٥'), null); // Arabic decimal separator is not guessed.
+  assert.equal(parseJodAmount('١٢٫٣٤٥'), 12.345);
   assert.equal(parseJodAmount('١٢.٣٤٥'), 12.345);
   assert.equal(parseJodAmount('د.أ 12.345'), 12.345);
   assert.equal(parseJodAmount('1,234.567'), 1234.567);
