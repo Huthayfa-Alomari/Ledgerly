@@ -54,7 +54,7 @@ test('materiality creates traceable prioritization indicators, not audit conclus
   assert.match(result.issues.find(issue => issue.category === 'material-closing-balance').detail, /ليس حكمًا على التحريف/);
 });
 
-test('tolerance boundary and invalid materiality are handled predictably', () => {
+test('explicit one-cent tolerance and invalid materiality are handled predictably', () => {
   const result = analyzeTrialBalance([row({ openingDebit: 0, openingCredit: 0, debit: 100.005, credit: 100, closingDebit: 0, closingCredit: 0 })], { tolerance: 0.01, materiality: -1 });
   assert.equal(result.materiality, 0);
   assert.equal(result.balanced, true);
