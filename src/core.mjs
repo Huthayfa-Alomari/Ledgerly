@@ -156,63 +156,238 @@ function dayDistance(a, b) {
 
 /**
  * Conservative one-to-one matcher. It never force-matches ambiguous candidates.
+ * Candidate indexes keep matching near O(n log n) for normal statement files rather
+ * than scanning both complete files for every transaction.
  * Both sources must use the same debit/credit sign convention before matching.
  */
+const MAX_CANDIDATE_DETAILS = 100;
+
+function dateOrdinal(value) {
+  if (!value) return null;
+  const timestamp = Date.parse(`${value}T00:00:00Z`);
+  return Number.isFinite(timestamp) ? Math.floor(timestamp / 86400000) : null;
+}
+
+function lowerBound(values, target) {
+  let low = 0, high = values.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (values[middle] < target) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
+
+function upperBound(values, target) {
+  let low = 0, high = values.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (values[middle] <= target) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
+
+function addToDateIndex(map, day, item) {
+  let bucket = map.get(day);
+  if (!bucket) {
+    bucket = new Set();
+    map.set(day, bucket);
+  }
+  bucket.add(item);
+}
+
+function buildCandidateIndex(items) {
+  const byAmount = new Map();
+  const byAmountAndDescription = new Map();
+  const amountKeys = new Set();
+
+  for (const item of items) {
+    if (item.amountFils === null || item.dayOrdinal === null) continue;
+    amountKeys.add(item.amountFils);
+    let dateBuckets = byAmount.get(item.amountFils);
+    if (!dateBuckets) {
+      dateBuckets = new Map();
+      byAmount.set(item.amountFils, dateBuckets);
+    }
+    addToDateIndex(dateBuckets, item.dayOrdinal, item);
+
+    if (item.description) {
+      let byDescription = byAmountAndDescription.get(item.amountFils);
+      if (!byDescription) {
+        byDescription = new Map();
+        byAmountAndDescription.set(item.amountFils, byDescription);
+      }
+      let descriptionBuckets = byDescription.get(item.description);
+      if (!descriptionBuckets) {
+        descriptionBuckets = new Map();
+        byDescription.set(item.description, descriptionBuckets);
+      }
+      addToDateIndex(descriptionBuckets, item.dayOrdinal, item);
+    }
+  }
+
+  const sortDateKeys = index => {
+    for (const buckets of index.values()) {
+      for (const [day, set] of buckets) {
+        if (set.size === 0) buckets.delete(day);
+      }
+    }
+  };
+  sortDateKeys(byAmount);
+  sortDateKeys(byAmountAndDescription);
+
+  return {
+    byAmount,
+    byAmountAndDescription,
+    amountKeys: [...amountKeys].sort((a, b) => a - b),
+  };
+}
+
+function removeFromCandidateIndex(index, item) {
+  if (item.amountFils === null || item.dayOrdinal === null) return;
+  index.byAmount.get(item.amountFils)?.get(item.dayOrdinal)?.delete(item);
+  if (item.description) {
+    index.byAmountAndDescription.get(item.amountFils)?.get(item.description)?.get(item.dayOrdinal)?.delete(item);
+  }
+}
+
+/**
+ * Return up to 101 candidates, enough to decide uniqueness while avoiding enormous
+ * ambiguity-detail arrays. The public report lists at most 100 candidate row IDs.
+ */
+function queryCandidates(index, needle, toleranceInFils, dateWindowDays, requireDescription, excludeIndex = -1) {
+  if (needle.amountFils === null || needle.dayOrdinal === null) return { items: [], truncated: false };
+  if (requireDescription && !needle.description) return { items: [], truncated: false };
+
+  const amountStart = lowerBound(index.amountKeys, needle.amountFils - toleranceInFils);
+  const amountEnd = upperBound(index.amountKeys, needle.amountFils + toleranceInFils);
+  const result = [];
+
+  for (let amountPosition = amountStart; amountPosition < amountEnd; amountPosition++) {
+    const amountKey = index.amountKeys[amountPosition];
+    let dateBuckets;
+    if (requireDescription) {
+      dateBuckets = index.byAmountAndDescription.get(amountKey)?.get(needle.description);
+    } else {
+      dateBuckets = index.byAmount.get(amountKey);
+    }
+    if (!dateBuckets) continue;
+
+    const dayKeys = [...dateBuckets.keys()].sort((a, b) => a - b);
+    const dayStart = lowerBound(dayKeys, needle.dayOrdinal - dateWindowDays);
+    const dayEnd = upperBound(dayKeys, needle.dayOrdinal + dateWindowDays);
+    for (let dayPosition = dayStart; dayPosition < dayEnd; dayPosition++) {
+      const set = dateBuckets.get(dayKeys[dayPosition]);
+      if (!set) continue;
+      for (const item of set) {
+        if (item.index === excludeIndex) continue;
+        result.push(item);
+        if (result.length > MAX_CANDIDATE_DETAILS) {
+          result.sort((a, b) => a.index - b.index);
+          return { items: result.slice(0, MAX_CANDIDATE_DETAILS), truncated: true };
+        }
+      }
+    }
+  }
+
+  result.sort((a, b) => a.index - b.index);
+  return { items: result, truncated: false };
+}
+
+function asAmbiguousIndices(items, truncated = false) {
+  return {
+    ledgerIndices: items.slice(0, MAX_CANDIDATE_DETAILS).map(item => item.index),
+    ledgerIndicesTruncated: truncated || items.length > MAX_CANDIDATE_DETAILS,
+  };
+}
+
 export function matchTransactions(bankRows, ledgerRows, options = {}) {
-  const tolerance = Math.max(0, Number(options.amountTolerance ?? 0.001));
-  const dateWindowDays = Math.max(0, Math.floor(Number(options.dateWindowDays ?? 0)));
+  const rawTolerance = Number(options.amountTolerance ?? 0.001);
+  const tolerance = Number.isFinite(rawTolerance) ? Math.max(0, rawTolerance) : 0.001;
+  const toleranceInFils = Math.round(tolerance * 1000);
+  const rawDateWindow = Number(options.dateWindowDays ?? 0);
+  const dateWindowDays = Number.isFinite(rawDateWindow) ? Math.min(366, Math.max(0, Math.floor(rawDateWindow))) : 0;
   const usedBank = new Set();
   const usedLedger = new Set();
   const matches = [];
   const ambiguous = [];
   const ambiguousBank = new Set();
 
-  const bank = bankRows.map((row, index) => ({ row, index, amount: signedAmount(row), description: normalizedDescription(row.description) })).filter(item => !item.row.isOpeningBalance);
-  const ledger = ledgerRows.map((row, index) => ({ row, index, amount: signedAmount(row), description: normalizedDescription(row.description) })).filter(item => !item.row.isOpeningBalance);
-  const toleranceInFils = Math.round(tolerance * 1000);
-  const amountEqual = (a, b) => a !== null && b !== null && Math.abs(Math.round(a * 1000) - Math.round(b * 1000)) <= toleranceInFils;
-  const candidatesFor = (b, requireDescription) => ledger.filter(l => !usedLedger.has(l.index)
-    && amountEqual(b.amount, l.amount)
-    && dayDistance(b.row.date, l.row.date) !== null
-    && dayDistance(b.row.date, l.row.date) <= dateWindowDays
-    && (!requireDescription || (b.description && l.description && b.description === l.description)));
+  const bank = bankRows.map((row, index) => {
+    const amount = signedAmount(row);
+    return {
+      row, index, amount,
+      amountFils: amount === null ? null : Math.round(amount * 1000),
+      dayOrdinal: dateOrdinal(row.date),
+      description: normalizedDescription(row.description),
+    };
+  }).filter(item => !item.row.isOpeningBalance);
+  const ledger = ledgerRows.map((row, index) => {
+    const amount = signedAmount(row);
+    return {
+      row, index, amount,
+      amountFils: amount === null ? null : Math.round(amount * 1000),
+      dayOrdinal: dateOrdinal(row.date),
+      description: normalizedDescription(row.description),
+    };
+  }).filter(item => !item.row.isOpeningBalance);
 
-  // Pass 1: exact amount, date, and normalized description.
+  const bankIndex = buildCandidateIndex(bank);
+  const ledgerIndex = buildCandidateIndex(ledger);
+
+  // Pass 1: unique amount/date/description candidates.
   for (const b of bank) {
-    if (b.amount === null || !b.row.date) continue;
-    const candidates = candidatesFor(b, true);
-    if (candidates.length === 1) {
+    if (b.amount === null || b.dayOrdinal === null) continue;
+    const query = queryCandidates(ledgerIndex, b, toleranceInFils, dateWindowDays, true);
+    const candidates = query.items;
+    if (candidates.length === 1 && !query.truncated) {
       const l = candidates[0];
       usedBank.add(b.index); usedLedger.add(l.index);
+      removeFromCandidateIndex(bankIndex, b);
+      removeFromCandidateIndex(ledgerIndex, l);
       matches.push({ bankIndex: b.index, ledgerIndex: l.index, confidence: 'exact', amountDifference: roundMoney(b.amount - l.amount), dateDifferenceDays: dayDistance(b.row.date, l.row.date) });
-    } else if (candidates.length > 1) {
+    } else if (candidates.length > 1 || query.truncated) {
       ambiguousBank.add(b.index);
-      ambiguous.push({ bankIndex: b.index, ledgerIndices: candidates.map(c => c.index), reason: 'multiple_exact_candidates' });
+      ambiguous.push({
+        bankIndex: b.index,
+        ...asAmbiguousIndices(candidates, query.truncated),
+        reason: 'multiple_exact_candidates',
+      });
     }
   }
 
-  // Pass 2: unique amount/date candidate only. Ambiguity is surfaced, never guessed.
+  // Pass 2: unique amount/date only, including reverse uniqueness across bank rows.
   for (const b of bank) {
-    if (usedBank.has(b.index) || ambiguousBank.has(b.index) || b.amount === null || !b.row.date) continue;
-    const candidates = candidatesFor(b, false);
-    if (candidates.length === 1) {
+    if (usedBank.has(b.index) || ambiguousBank.has(b.index) || b.amount === null || b.dayOrdinal === null) continue;
+    const query = queryCandidates(ledgerIndex, b, toleranceInFils, dateWindowDays, false);
+    const candidates = query.items;
+    if (candidates.length === 1 && !query.truncated) {
       const l = candidates[0];
-      // Require uniqueness in both directions to avoid consuming a ledger row that
-      // could plausibly belong to another bank transaction.
-      const reverse = bank.filter(other => !usedBank.has(other.index) && other.index !== b.index
-        && amountEqual(other.amount, l.amount)
-        && dayDistance(other.row.date, l.row.date) !== null
-        && dayDistance(other.row.date, l.row.date) <= dateWindowDays);
-      if (reverse.length === 0) {
+      const reverseQuery = queryCandidates(bankIndex, l, toleranceInFils, dateWindowDays, false, b.index);
+      const reverse = reverseQuery.items;
+      if (reverse.length === 0 && !reverseQuery.truncated) {
         usedBank.add(b.index); usedLedger.add(l.index);
+        removeFromCandidateIndex(bankIndex, b);
+        removeFromCandidateIndex(ledgerIndex, l);
         matches.push({ bankIndex: b.index, ledgerIndex: l.index, confidence: 'amount_date', amountDifference: roundMoney(b.amount - l.amount), dateDifferenceDays: dayDistance(b.row.date, l.row.date) });
       } else {
         ambiguousBank.add(b.index);
-        ambiguous.push({ bankIndex: b.index, ledgerIndices: [...new Set([...candidates.map(c => c.index), ...reverse.map(r => r.index)])], reason: 'non_unique_amount_date' });
+        const combined = [...new Map([...candidates, ...reverse].map(item => [item.index, item])).values()]
+          .sort((a, b) => a.index - b.index);
+        ambiguous.push({
+          bankIndex: b.index,
+          ...asAmbiguousIndices(combined, query.truncated || reverseQuery.truncated || combined.length > MAX_CANDIDATE_DETAILS),
+          reason: 'non_unique_amount_date',
+        });
       }
-    } else if (candidates.length > 1) {
+    } else if (candidates.length > 1 || query.truncated) {
       ambiguousBank.add(b.index);
-      ambiguous.push({ bankIndex: b.index, ledgerIndices: candidates.map(c => c.index), reason: 'multiple_amount_date_candidates' });
+      ambiguous.push({
+        bankIndex: b.index,
+        ...asAmbiguousIndices(candidates, query.truncated),
+        reason: 'multiple_amount_date_candidates',
+      });
     }
   }
 
