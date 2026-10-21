@@ -42,3 +42,10 @@ test('version tags publish the built installer as a permanent GitHub Release ass
   assert.match(workflow, /uses: softprops\/action-gh-release@v2/);
   assert.match(workflow, /files: desktop\/release\/\*\.exe/);
 });
+
+test('Windows release uses explicit public cloud variables and fails on high-severity dependency issues', () => {
+  const workflow = read('../.github/workflows/windows-release.yml');
+  assert.match(workflow, /VITE_SUPABASE_URL: \$\{\{ vars\.VITE_SUPABASE_URL \}\}/);
+  assert.match(workflow, /VITE_SUPABASE_ANON_KEY: \$\{\{ vars\.VITE_SUPABASE_ANON_KEY \}\}/);
+  assert.match(workflow, /npm audit --audit-level=high/);
+});
