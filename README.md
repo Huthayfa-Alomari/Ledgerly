@@ -158,6 +158,8 @@ Historical note from the earlier prototype: its production build was not verifie
 
 ## Supabase project status
 
+Migration version reconciliation and rollout caveats are tracked in [docs/13-supabase-migration-history-reconciliation.md](docs/13-supabase-migration-history-reconciliation.md). Do not push migrations to production until the reconstructed history has been replayed and compared with the live schema.
+
 The dedicated Supabase project has been created. See [docs/09-supabase-live-project.md](docs/09-supabase-live-project.md) for the project reference, applied live schema, security gate, and remaining integration work. Optional Supabase email/password authentication, versioned snapshot sync, and private evidence upload/download are implemented in the current app. Sync is explicit and whole-workspace, not record-level merge. The review branch adds unmerged SQL guards for the audit log and working-paper sign-off; do not treat those guards as deployed until staging and a reviewed migration are applied. Do not replay the earlier draft SQL migrations against the live project without reconciling them first.
 
 
