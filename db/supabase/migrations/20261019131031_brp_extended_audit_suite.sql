@@ -1,8 +1,39 @@
 -- Extended Audit Suite: feature model for engagement acceptance, analytics, PBC,
 -- time/billing, quality, AI-assisted review, client portal, and firm operations.
--- Apply only AFTER 202610190001_initial_audit_platform.sql and 202610190002_security_hardening.sql
--- on a dedicated test project. IDs are TEXT to match the existing schema.
+-- This file is self-contained for clean replay; it bootstraps the transitional private helper
+-- that earlier drafts expected from an out-of-chain security overlay. Later RLS migrations
+-- replace its broad write-policy use with the final role-by-table matrix. IDs are TEXT.
 -- AI outputs are advisory only; no generated text is an audit conclusion or opinion.
+
+-- Clean-replay bootstrap for the transitional role-gated policies below.
+CREATE SCHEMA IF NOT EXISTS private;
+REVOKE ALL ON SCHEMA private FROM PUBLIC, anon;
+GRANT USAGE ON SCHEMA private TO authenticated;
+
+CREATE OR REPLACE FUNCTION private.brp_user_has_firm_role(target_firm_id text)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.app_user u
+    JOIN public.role_assignment ra
+      ON ra.user_id = u.id
+     AND ra.firm_id = u.firm_id
+    WHERE u.id = (SELECT auth.uid())::text
+      AND u.firm_id = target_firm_id
+      AND u.status = 'active'
+      AND u.deleted_at IS NULL
+      AND ra.scope_type = 'firm'
+      AND ra.deleted_at IS NULL
+      AND ra.role = ANY(ARRAY['firm_admin','managing_partner','engagement_partner','manager']::text[])
+  );
+$function$;
+REVOKE ALL ON FUNCTION private.brp_user_has_firm_role(text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION private.brp_user_has_firm_role(text) TO authenticated;
 
 CREATE TABLE IF NOT EXISTS engagement_terms (
   id TEXT PRIMARY KEY, firm_id TEXT NOT NULL REFERENCES firm(id), engagement_id TEXT NOT NULL REFERENCES engagement(id),
