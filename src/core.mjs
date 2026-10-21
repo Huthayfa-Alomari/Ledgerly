@@ -134,7 +134,8 @@ export function signedAmount(row) {
 }
 
 function toFils(value) {
-  return Math.round((value + Number.EPSILON) * 1000);
+  const scaled = value * 1000;
+  return Math.sign(scaled) * Math.round(Math.abs(scaled) + Number.EPSILON);
 }
 
 function roundMoney(value) {
