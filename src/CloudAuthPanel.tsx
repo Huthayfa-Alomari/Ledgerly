@@ -87,7 +87,7 @@ export default function CloudAuthPanel({ config }: Props) {
       if (!email.trim() || !password) throw new Error('أدخل البريد الإلكتروني وكلمة المرور.');
       if (mode === 'signup') {
         if (displayName.trim().length < 2 || firmName.trim().length < 2) throw new Error('أدخل اسمك واسم مكتب التدقيق (حرفان على الأقل).');
-        if (password.length < 8) throw new Error('كلمة المرور يجب أن تكون 8 أحرف على الأقل.');
+        if (password.length < 12) throw new Error('كلمة المرور يجب أن تكون 12 حرفًا على الأقل. استخدم عبارة مرور طويلة وفريدة.');
         const result = await authRequest(config.config, 'signup', {
           email: email.trim().toLowerCase(),
           password,

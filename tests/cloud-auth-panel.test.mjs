@@ -10,6 +10,8 @@ test('cloud auth uses only the browser-safe key and never embeds a privileged cr
   assert.match(panel, /apikey: config\.anonKey/);
   assert.match(panel, /sessionStorage\.setItem\(SESSION_KEY/);
   assert.match(panel, /token\?grant_type=refresh_token/);
+  assert.match(panel, /password\.length < 12/);
+  assert.match(panel, /12 حرفًا على الأقل/);
   assert.doesNotMatch(panel, /service_role|sb_secret_/i);
 });
 
