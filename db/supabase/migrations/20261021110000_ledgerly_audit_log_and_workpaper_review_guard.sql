@@ -83,7 +83,7 @@ BEGIN
       NEW.firm_id, NEW.engagement_id,
       ARRAY['firm_admin','managing_partner','engagement_partner','reviewer','eqcr']::text[]
     );
-    final_status := pg_catalog.lower(NEW.status) IN ('approved','signed_off','final','locked','issued','closed');
+    final_status := pg_catalog.lower(NEW.status) IN ('approved','signed_off','final','locked','issued','closed','معتمد','معتمدة','مقفل','مقفلة','مغلق','مغلقة','صادر','صادرة');
 
     IF NEW.reviewed_by IS NOT NULL
        AND (NOT can_review OR NEW.reviewed_by IS DISTINCT FROM auth.uid()::text) THEN
