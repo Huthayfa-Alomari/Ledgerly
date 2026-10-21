@@ -26,11 +26,37 @@ test('bootstrap and temporary write-gate filenames align to one canonical versio
   assert.ok(migrations.includes('20261020140459_ledgerly_role_by_table_rls.sql'));
   assert.ok(migrations.includes('20261020140900_ledgerly_scoped_child_table_rls.sql'));
   assert.ok(migrations.includes('20261020141128_ledgerly_firm_policy_cleanup.sql'));
+  assert.ok(migrations.includes('20261019130942_brp_initial_audit_core.sql'));
+  assert.ok(migrations.includes('20261019131031_brp_extended_audit_suite.sql'));
+  assert.ok(migrations.includes('20261019132425_enable_rls_schema_version.sql'));
+  assert.ok(migrations.includes('20261019133936_split_role_write_policies.sql'));
+  assert.ok(migrations.includes('20261020012402_restrict_schema_version_access.sql'));
+  assert.ok(migrations.includes('20261020081921_move_membership_helper_private.sql'));
+  assert.ok(migrations.includes('20261020082131_explicit_schema_version_deny_policy.sql'));
+  assert.ok(migrations.includes('20261020085003_core_tenant_query_indexes.sql'));
+  assert.ok(migrations.includes('20261020102654_ledgerly_secure_first_firm_bootstrap.sql'));
+  assert.ok(migrations.includes('20261020103837_ledgerly_secure_member_invitations.sql'));
+  assert.ok(migrations.includes('20261020103921_ledgerly_invitation_schema_alignment.sql'));
+  assert.ok(migrations.includes('20261020104019_ledgerly_invitation_explicit_deny_policy.sql'));
+  assert.ok(migrations.includes('20261020104150_ledgerly_expire_stale_invitations.sql'));
   assert.ok(!migrations.some(name => /^202610201(20000|43000|50000)_/.test(name)));
+});
+
+test('all 19 versions recorded in the live Supabase history have canonical local migration files', () => {
+  const liveVersions = ['20261019130942','20261019131031','20261019132425','20261019133936','20261020012402','20261020081921','20261020082131','20261020085003','20261020102654','20261020102903','20261020103837','20261020103921','20261020104019','20261020104150','20261020104503','20261020140459','20261020140900','20261020141128','20261021040529'];
+  for (const version of liveVersions) assert.ok(migrations.some(name => name.startsWith(version + '_')), `Missing local migration for live version ${version}`);
+});
+
+test('legacy security hardening SQL is outside the executable migration directory', () => {
+  const archived = readFileSync(resolve(root, 'docs/archive/202610190002_security_hardening.sql'), 'utf8');
+  const securityDir = resolve(root, 'db/supabase/security');
+  assert.match(archived, /^-- ARCHIVED — DO NOT APPLY/);
+  assert.ok(readdirSync(securityDir).every(name => !name.endsWith('.sql')));
 });
 
 test('security hardening overlay is not silently treated as an executable migration', () => {
   const note = readFileSync(resolve(root, 'db/supabase/security/README.md'), 'utf8');
   assert.match(note, /has \*\*not\*\* been applied/);
   assert.match(note, /dedicated test Supabase project/);
+  assert.match(note, /docs\/archive\/202610190002_security_hardening\.sql/);
 });
