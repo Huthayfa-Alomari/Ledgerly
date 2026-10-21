@@ -23,6 +23,10 @@ test('bootstrap and temporary write-gate filenames align to one canonical versio
   assert.ok(migrations.includes('20261020102903_ledgerly_bootstrap_service_role_only.sql'));
   assert.ok(migrations.includes('20261020104503_ledgerly_interim_firm_admin_write_gate.sql'));
   assert.ok(!migrations.some(name => name.startsWith('20261020110000_')));
+  assert.ok(migrations.includes('20261020140459_ledgerly_role_by_table_rls.sql'));
+  assert.ok(migrations.includes('20261020140900_ledgerly_scoped_child_table_rls.sql'));
+  assert.ok(migrations.includes('20261020141128_ledgerly_firm_policy_cleanup.sql'));
+  assert.ok(!migrations.some(name => /^202610201(20000|43000|50000)_/.test(name)));
 });
 
 test('security hardening overlay is not silently treated as an executable migration', () => {
