@@ -36,5 +36,5 @@ test('change log remains append-only for authenticated clients', () => {
 test('deployment docs clearly state this overlay is not deployed and not production complete', () => {
   assert.match(readme, /partially deployed/i);
   assert.match(readme, /not a complete external-audit-office authorization model/i);
-  assert.match(readme, /has \*\*not\*\* been applied/i);
+  assert.match(readme, /must not be applied/i);
 });
