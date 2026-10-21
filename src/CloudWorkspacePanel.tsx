@@ -20,7 +20,7 @@ export default function CloudWorkspacePanel({ config, session, db, onRestore }: 
     let alive = true;
     if (!session) { setFirmId(''); setRemoteVersion(null); setRows([]); return; }
     void getCurrentFirm(config, session).then(async id => {
-      const result = await pullWorkspace(config, session, id);
+      const result = await pullWorkspace(config, session, id, false);
       const evidence = await listCloudEvidence(config, session, id).catch(() => []);
       if (alive) { setFirmId(id); setRemoteVersion(result.row?.version || 0); setRows(evidence); }
     }).catch(e => { if (alive) setError(e instanceof Error ? e.message : 'تعذر تحميل حالة المكتب.'); });
@@ -33,7 +33,12 @@ export default function CloudWorkspacePanel({ config, session, db, onRestore }: 
     try {
       const result = await pullWorkspace(config, session, firmId);
       setRemoteVersion(result.row?.version || 0);
-      if (!result.row) { setNotice('لا توجد نسخة سحابية لهذا المكتب بعد. يمكنك رفع بياناته المحلية بعد أخذ نسخة احتياطية.'); return; }
+      if (!result.row) { localStorage.setItem(`ledgerly.cloud.baseline.v1.${firmId}`, '0'); setNotice('لا توجد نسخة سحابية لهذا المكتب بعد. يمكنك رفع بياناته المحلية بعد أخذ نسخة احتياطية.'); return; }
+      const payload = result.row.payload as Partial<CloudDB> | null;
+      const requiredArrays = ['clients','engagements','risks','workpapers','findings','evidence','trialBalance','auditLog'];
+      if (!payload || !requiredArrays.every(key => Array.isArray((payload as Record<string, unknown>)[key])) || !payload.completionChecks || typeof payload.completionChecks !== 'object') {
+        throw new Error('النسخة السحابية لا تطابق مخطط بيانات Ledgerly الحالي؛ لم يتم استبدال البيانات المحلية.');
+      }
       if (!window.confirm('سيتم استبدال بيانات هذا الجهاز بالنسخة السحابية. صدّر نسخة احتياطية محلية أولًا. هل تريد المتابعة؟')) return;
       onRestore(result.row.payload as CloudDB);
       setNotice(`تم استرجاع النسخة السحابية رقم ${result.row.version}. راجع البيانات قبل متابعة العمل.`);
