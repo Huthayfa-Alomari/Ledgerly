@@ -29,3 +29,37 @@ jobs:
         run: npm test
       - name: Build production bundle
         run: npm run build
+
+  sql-write-guards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: ledgerly_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ledgerly_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Install PostgreSQL test driver
+        run: npm install --no-save --package-lock=false pg
+      - name: Run SQL write-guard integration tests
+        run: node --test tests/sql-write-guards.integration.test.mjs
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ledgerly_test
