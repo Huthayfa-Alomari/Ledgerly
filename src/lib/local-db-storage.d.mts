@@ -9,3 +9,6 @@ export function persistLocalData(
   key: string,
   value: unknown,
 ): string | null;
+
+export type LocalDataShapeIssue = 'invalid-root' | 'invalid-collections';
+export function localDataShapeIssue(value: unknown, arrayKeys: string[]): LocalDataShapeIssue | null;
