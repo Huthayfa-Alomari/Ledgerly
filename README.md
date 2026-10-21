@@ -181,7 +181,8 @@ The dedicated Supabase project has been created. See [docs/09-supabase-live-proj
 
 ## Optional cloud sign-in and first-firm setup
 
-- The browser-safe Supabase project URL and publishable key are included as public client configuration so the packaged Windows app can show sign-up/sign-in without build-time secrets. They are not service-role credentials; RLS remains the data access boundary.
-- You can override the defaults for a staging project with `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`. Never use a `service_role` or `sb_secret_` key in the app.
+- Supabase connection is **disabled unless explicitly configured** with `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`. A fork or unconfigured Windows build will not silently connect to the live project. Only a publishable/anon key is allowed; never use `service_role` or `sb_secret_` in client variables.
+- The Windows release workflow should receive these public configuration values from repository Variables for the official build; they are not credentials and must be scoped intentionally to the target project.
 - First-firm initialization is restricted to a verified owner email. Configure the Supabase Edge Function secret `LEDGERLY_BOOTSTRAP_EMAIL` as documented in [the live project notes](docs/09-supabase-live-project.md) before using the button.
-- Authentication does **not** synchronize the app's local clients, engagements, working papers, trial balances, or evidence. Cloud sync must be implemented and tenant-isolation tested before multiple users rely on shared audit records.
+- Cloud snapshot sync and private evidence now exist as an opt-in implementation, using a private bucket and firm/engagement RLS. The whole-workspace snapshot is capped at 10 MiB and is not a record-level merge. Run staging isolation tests before using real client data.
+- LocalStorage remains unencrypted and can hit browser quota. If persistence fails, Ledgerly shows a warning; export a backup and do not treat local storage as a tamper-proof audit trail.
