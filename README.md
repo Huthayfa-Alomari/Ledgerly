@@ -59,7 +59,7 @@ npm run dev
 ```
 
 ## Windows desktop application
-The Windows desktop shell uses Electron with Node integration disabled, context isolation enabled, and sandboxing enabled. The app remains local-first. The bundled public Supabase project URL/publishable key enable the optional sign-in UI in the Windows build; audit-data cloud sync and evidence upload remain disabled.
+The Windows desktop shell uses Electron with Node integration disabled, context isolation enabled, and sandboxing enabled. The app remains local-first. The bundled public Supabase project URL/publishable key enable optional sign-in in the Windows build. The opt-in snapshot sync and private evidence workflow are implemented in the current feature branch but require the reviewed cloud/evidence migration and staging isolation tests before production use. See [Cloud sync and private evidence](docs/11-cloud-sync-evidence.md).
 
 To build a Windows installer on a Windows machine:
 ```powershell
@@ -127,8 +127,8 @@ This build continues the existing project and adds:
 - Full `tsc -b` / Vite production build: not verified in this environment because package installation did not complete. Run `npm ci`, `npm test`, and `npm run build` locally before accepting this build.
 
 ### Known non-production limitations
-- UI records remain in browser LocalStorage; there is no deployed authentication, server-enforced role model, or live cloud sync.
-- Evidence is metadata-only; binary upload, encryption-at-rest configuration, and controlled access are not implemented.
+- UI records remain in browser LocalStorage by default. Optional cloud snapshot sync requires migration deployment and staging validation; it is not record-level merge or real-time collaboration.
+- Cloud evidence upload/download is implemented behind a private Storage bucket and RLS migration, but end-to-end access isolation, deployment, retention, and recovery still require staging verification.
 - Local activity log can be modified or deleted by anyone with browser access and must not be treated as a compliant immutable audit trail.
 - Professional audit judgments and final audit opinions require qualified human review.
 
