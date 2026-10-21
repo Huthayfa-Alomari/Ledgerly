@@ -30,3 +30,31 @@ test('rejects finite values that cannot be represented safely as integer fils', 
   assert.throws(() => roundJod(Number.MAX_VALUE), RangeError);
   assert.throws(() => fromFils(Number.MAX_SAFE_INTEGER + 1), RangeError);
 });
+
+
+import { parseJodAmount } from '../src/lib/jod-money.mjs';
+
+test('parses decimal dots, three JOD decimals, Arabic digits, and currency labels correctly', () => {
+  assert.equal(parseJodAmount('12.345'), 12.345);
+  assert.equal(parseJodAmount('JOD 12.004'), 12.004);
+  assert.equal(parseJodAmount('١٢٫٣٤٥'), 12.345);
+  assert.equal(parseJodAmount('١٢.٣٤٥'), 12.345);
+  assert.equal(parseJodAmount('د.أ 12.345'), 12.345);
+  assert.equal(parseJodAmount('1,234.567'), 1234.567);
+});
+
+test('treats blank cells as zero and rejects malformed values rather than coercing them to zero', () => {
+  assert.equal(parseJodAmount(''), 0);
+  assert.equal(parseJodAmount('   '), 0);
+  assert.equal(parseJodAmount('not-a-number'), null);
+  assert.equal(parseJodAmount('12.3.4'), null);
+  assert.equal(parseJodAmount('1(2)3'), null);
+  assert.equal(parseJodAmount(Number.NaN), null);
+  assert.equal(parseJodAmount(Number.POSITIVE_INFINITY), null);
+  assert.equal(parseJodAmount('999999999999999999999999999999'), null);
+});
+
+test('supports parenthesized negative amounts', () => {
+  assert.equal(parseJodAmount('(12.345)'), -12.345);
+  assert.equal(parseJodAmount('($1,234.567)'), -1234.567);
+});

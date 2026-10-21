@@ -30,3 +30,45 @@ export function formatJod(value) {
     maximumFractionDigits: 3,
   });
 }
+
+
+/**
+ * Parse a user/import-supplied JOD amount without confusing decimal dots with
+ * currency punctuation. Blank cells mean zero; malformed/non-finite values return null.
+ */
+export function parseJodAmount(value) {
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return null;
+    try { return roundJod(value); } catch { return null; }
+  }
+
+  let text = String(value ?? '')
+    .replace(/[٠-٩]/g, digit => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
+    .replace(/[۰-۹]/g, digit => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))
+    .trim().replace(/٫/g, '.');
+
+  if (!text) return 0;
+
+  text = text
+    .replace(/(?:JOD|د\.ا|د\.أ|ر\.د)/gi, '')
+    .replace(/[$€£]/g, '')
+    .replace(/[٬,]/g, '')
+    .replace(/[\s\u00a0]/g, '')
+    .trim();
+
+  if (!text) return 0;
+
+  const parenthesized = /^\(.*\)$/.test(text);
+  if (/[()]/.test(text) && !parenthesized) return null;
+  if (parenthesized) text = text.slice(1, -1);
+
+  if (!/^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/.test(text)) return null;
+  const amount = Number(text);
+  if (!Number.isFinite(amount)) return null;
+
+  try {
+    return roundJod(parenthesized ? -Math.abs(amount) : amount);
+  } catch {
+    return null;
+  }
+}
