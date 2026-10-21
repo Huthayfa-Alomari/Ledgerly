@@ -130,11 +130,15 @@ export function signedAmount(row) {
   const debit = typeof row.debit === 'number' && Number.isFinite(row.debit) ? row.debit : 0;
   const credit = typeof row.credit === 'number' && Number.isFinite(row.credit) ? row.credit : 0;
   if (row.debit == null && row.credit == null) return null;
-  return roundMoney(credit - debit);
+  return (toFils(credit) - toFils(debit)) / 1000;
+}
+
+function toFils(value) {
+  return Math.round((value + Number.EPSILON) * 1000);
 }
 
 function roundMoney(value) {
-  return Math.round((value + Number.EPSILON) * 1000) / 1000;
+  return toFils(value) / 1000;
 }
 
 function normalizedDescription(value) {
