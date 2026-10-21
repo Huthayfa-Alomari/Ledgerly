@@ -126,7 +126,7 @@ BEGIN
     OLD.firm_id, OLD.engagement_id,
     ARRAY['firm_admin','managing_partner','engagement_partner','reviewer','eqcr']::text[]
   );
-  final_status := pg_catalog.lower(NEW.status) IN ('approved','signed_off','final','locked','issued','closed');
+  final_status := pg_catalog.lower(NEW.status) IN ('approved','signed_off','final','locked','issued','closed','معتمد','معتمدة','مقفل','مقفلة','مغلق','مغلقة','صادر','صادرة');
 
   IF (NEW.status IS DISTINCT FROM OLD.status)
      OR (NEW.reviewed_by IS DISTINCT FROM OLD.reviewed_by) THEN
@@ -156,7 +156,7 @@ BEGIN
   END IF;
 
   -- A signed-off paper is locked until a reviewer first reopens it.
-  IF pg_catalog.lower(OLD.status) IN ('approved','signed_off','final','locked','issued','closed')
+  IF pg_catalog.lower(OLD.status) IN ('approved','signed_off','final','locked','issued','closed','معتمد','معتمدة','مقفل','مقفلة','مغلق','مغلقة','صادر','صادرة')
      AND NEW.status IS NOT DISTINCT FROM OLD.status
      AND (NEW.title IS DISTINCT FROM OLD.title
        OR NEW.procedure_ref IS DISTINCT FROM OLD.procedure_ref
