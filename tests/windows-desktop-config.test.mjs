@@ -20,7 +20,7 @@ test('Windows package creates a named NSIS installer without deleting local data
   assert.equal(pkg.build.productName, 'Ledgerly');
   assert.equal(pkg.build.appId, 'com.ledgerly.audit');
   assert.equal(pkg.build.nsis.deleteAppDataOnUninstall, false);
-  assert.equal(pkg.devDependencies.electron, '45.0.0');
+  assert.equal(pkg.devDependencies.electron, '44.9.2');
   assert.equal(pkg.build.nsis.createDesktopShortcut, true);
   assert.equal(pkg.build.win.target[0].target, 'nsis');
 });
