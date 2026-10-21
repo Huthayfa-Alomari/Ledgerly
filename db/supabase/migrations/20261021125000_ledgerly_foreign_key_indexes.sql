@@ -11,7 +11,7 @@ DECLARE
 BEGIN
   FOR fk IN
     SELECT
-      c.oid AS constraint_oid,
+      c.conrelid AS table_oid,
       ns.nspname AS schema_name,
       tbl.relname AS table_name,
       c.conname AS constraint_name,
@@ -35,7 +35,7 @@ BEGIN
       FROM pg_catalog.pg_index i
       JOIN pg_catalog.pg_class ix ON ix.oid = i.indexrelid
       JOIN pg_catalog.pg_am am ON am.oid = ix.relam
-      WHERE i.indrelid = fk.constraint_oid::regclass::oid
+      WHERE i.indrelid = fk.table_oid
         AND i.indisvalid
         AND i.indisready
         AND i.indpred IS NULL
