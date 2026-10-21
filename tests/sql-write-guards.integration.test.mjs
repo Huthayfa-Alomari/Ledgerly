@@ -181,14 +181,14 @@ test('PostgreSQL enforces change-log actor identity and working-paper review/sig
 
     await assert.rejects(
       asUser(staffId, () => client.query(
-        "UPDATE public.working_paper SET status='approved', reviewed_by=$1 WHERE id='wp-1'",
+        "UPDATE public.working_paper SET status='معتمد', reviewed_by=$1 WHERE id='wp-1'",
         [reviewerId]
       )),
       /Only an authorized reviewer may change working-paper review fields/
     );
 
     await asUser(reviewerId, () => client.query(
-      "UPDATE public.working_paper SET status='approved', reviewed_by=$1 WHERE id='wp-1'",
+      "UPDATE public.working_paper SET status='معتمد', reviewed_by=$1 WHERE id='wp-1'",
       [reviewerId]
     ));
 
@@ -208,7 +208,7 @@ test('PostgreSQL enforces change-log actor identity and working-paper review/sig
 
     await assert.rejects(
       asUser(combinedId, () => client.query(
-        "UPDATE public.working_paper SET status='approved', reviewed_by=$1 WHERE id='wp-2'",
+        "UPDATE public.working_paper SET status='معتمد', reviewed_by=$1 WHERE id='wp-2'",
         [combinedId]
       )),
       /The preparer cannot independently sign off their own working paper/
