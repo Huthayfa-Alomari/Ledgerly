@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeDigits, normalizeHeader, detectColumns, parseAmount, parseDate, normalizeRows, validateRows, signedAmount } from '../src/core.mjs';
+import { normalizeDigits, normalizeHeader, detectColumns, parseAmount, parseDate, normalizeRows, validateRows } from '../src/core.mjs';
 
 test('normalizes Arabic and Persian digits', () => {
   assert.equal(normalizeDigits('١٢٣٫٤٥'), '123٫45');
