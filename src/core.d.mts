@@ -25,7 +25,7 @@ export function validateRows(rows: Array<{
 export function signedAmount(row: { debit: number | null; credit: number | null }): number | null;
 export function matchTransactions(bankRows: Array<{ date: string | null; description?: string; debit: number | null; credit: number | null; isOpeningBalance?: boolean }>, ledgerRows: Array<{ date: string | null; description?: string; debit: number | null; credit: number | null; isOpeningBalance?: boolean }>, options?: { amountTolerance?: number; dateWindowDays?: number }): {
   matches: Array<{ bankIndex: number; ledgerIndex: number; confidence: 'exact' | 'amount_date'; amountDifference: number; dateDifferenceDays: number | null }>;
-  ambiguous: Array<{ bankIndex: number; ledgerIndices: number[]; reason: string }>;
+  ambiguous: Array<{ bankIndex: number; ledgerIndices: number[]; ledgerIndicesTruncated?: boolean; reason: string }>;
   unmatchedBank: number[];
   unmatchedLedger: number[];
   summary: { bankCount: number; ledgerCount: number; matchedCount: number; ambiguousCount: number; unmatchedBankCount: number; unmatchedLedgerCount: number };
