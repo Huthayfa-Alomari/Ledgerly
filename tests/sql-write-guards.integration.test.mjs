@@ -225,6 +225,7 @@ test('PostgreSQL enforces change-log actor identity and working-paper review/sig
     // This reaches the trigger directly to verify actor impersonation protection.
     await client.query(`
       GRANT INSERT ON public.change_log TO authenticated;
+      GRANT USAGE, SELECT ON SEQUENCE public.change_log_id_seq TO authenticated;
       CREATE POLICY fixture_change_log_insert
       ON public.change_log FOR INSERT TO authenticated
       WITH CHECK (private.brp_user_has_role_in_scope(firm_id, NULL,
