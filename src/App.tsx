@@ -10,6 +10,7 @@ import type { CloudDB } from './lib/cloud-workspace';
 import * as XLSX from 'xlsx';
 import './styles.css';
 import { readSupabaseBrowserConfig } from './lib/supabase-config';
+import { persistLocalData } from './lib/local-db-storage.mjs';
 
 type Client = { id: string; name: string; industry: string; taxNumber: string; contact: string; acceptance: string; independenceChecked: boolean; status: 'نشط' | 'مؤرشف'; createdAt: string };
 type Engagement = { id: string; clientId: string; year: string; type: string; framework: string; partner: string; status: string; materiality: string; openedAt: string; scope?: string; plannedStart?: string; plannedEnd?: string; feeJod?: string; team?: string; independenceStatus?: string; conflictCheck?: string; declarationDate?: string };
@@ -54,9 +55,10 @@ function App() {
  const [tbBusy,setTbBusy] = useState(false);
  const [tbMateriality,setTbMateriality] = useState('0');
  const [restoreError,setRestoreError] = useState('');
+ const [storageError,setStorageError] = useState('');
  const [cloudSession,setCloudSession] = useState<CloudSession | null>(null);
  const supabaseConfig = readSupabaseBrowserConfig({ VITE_SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY: import.meta.env.VITE_SUPABASE_ANON_KEY });
- useEffect(()=>{ localStorage.setItem(KEY,JSON.stringify(db)); },[db]);
+ useEffect(()=>{ const error = persistLocalData(()=>localStorage, KEY, db); setStorageError(error || ''); },[db]);
  useEffect(()=>{ if(notice){const t=window.setTimeout(()=>setNotice(''),3500);return()=>window.clearTimeout(t);} },[notice]);
  const activeEngagement = db.engagements.find(e=>e.id===selectedEngagement) ?? db.engagements[0];
  const currentClient = db.clients.find(c=>c.id===activeEngagement?.clientId);
@@ -169,6 +171,7 @@ function App() {
  return <div className={`audit-shell ${collapsed?'nav-collapsed':''}`} dir="rtl">
   <aside className="audit-sidebar"><div className="audit-brand"><div className="audit-logo">L</div>{!collapsed&&<div><strong>Ledgerly</strong><small>Audit Practice Platform</small></div>}</div><button className="audit-collapse" onClick={()=>setCollapsed(v=>!v)}>{collapsed?'☰':'إخفاء القائمة ‹'}</button><nav>{modules.map(m=><button key={m.id} className={module===m.id?'active':''} onClick={()=>{setModule(m.id);setShowForm(false);setQuery('');}} title={m.label}><span className="nav-icon">{m.icon}</span>{!collapsed&&<span>{m.label}</span>}</button>)}</nav><div className="audit-sidebar-foot">{!collapsed&&<><span className="status-dot"/> وضع محلي تجريبي<small>البيانات محفوظة في هذا المتصفح فقط</small></>}</div></aside>
   <main className="audit-main"><header className="audit-topbar"><div><div className="audit-breadcrumb">مساحة العمل / {title}</div><h1>{title}</h1></div><div className="audit-top-actions"><label className="engagement-picker"><span>ملف التدقيق الحالي</span><select value={activeEngagement?.id||''} onChange={e=>setSelectedEngagement(e.target.value)}><option value="">اختر ملفًا</option>{db.engagements.map(e=><option key={e.id} value={e.id}>{db.clients.find(c=>c.id===e.clientId)?.name||'عميل'} · {e.year}</option>)}</select></label><button className="audit-icon-button" title="تصدير نسخة احتياطية" onClick={()=>download('ledgerly-backup.json',JSON.stringify(db,null,2))}>⇩</button></div></header>
+   {storageError&&<div className="audit-warning" role="alert">تعذّر حفظ البيانات محليًا؛ قد تبقى تعديلاتك الحالية في الذاكرة فقط. صدّر نسخة احتياطية فورًا ولا تغلق التطبيق حتى تعالج المشكلة. ({storageError})</div>}
    {notice&&<div className="audit-toast">✓ {notice}</div>}
    {module==='dashboard'&&<>
     <section className="audit-welcome"><div><span className="audit-kicker">نظام إدارة أعمال التدقيق</span><h2>من قبول العميل إلى إقفال ملف التدقيق.</h2><p>مساحة عمل موحدة لإدارة ملفات التدقيق، المخاطر، أوراق العمل، الأدلة والملاحظات. ابدأ بإنشاء عميل ثم افتح ملف تدقيق للسنة المالية.</p></div><div className="welcome-mark">L<span>LEDGERLY</span></div></section>
