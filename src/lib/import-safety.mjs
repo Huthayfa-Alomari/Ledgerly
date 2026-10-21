@@ -3,6 +3,8 @@ export const MAX_WORKSHEET_ROWS = 250_000;
 export const MAX_WORKSHEET_COLUMNS = 256;
 export const MAX_WORKSHEET_CELLS = 2_000_000;
 export const MAX_PDF_PAGES = 500;
+export const MAX_PDF_TEXT_ITEMS_PER_PAGE = 100_000;
+export const MAX_PDF_TEXT_ITEMS_TOTAL = 500_000;
 export const MAX_OCR_PAGES = 100;
 export const MAX_OCR_PIXELS_PER_PAGE = 16_000_000;
 export const MAX_OCR_TOTAL_PIXELS = 100_000_000;
@@ -50,5 +52,13 @@ export function ocrPixelIssue(width, height, previousTotal = 0) {
   const pixels = Math.ceil(width) * Math.ceil(height);
   if (!Number.isSafeInteger(pixels) || pixels > MAX_OCR_PIXELS_PER_PAGE) return 'ocr-page-too-large';
   if (previousTotal + pixels > MAX_OCR_TOTAL_PIXELS) return 'ocr-work-too-large';
+  return null;
+}
+
+export function pdfTextItemIssue(itemsOnPage, previousTotal = 0) {
+  if (![itemsOnPage, previousTotal].every(Number.isSafeInteger)
+    || itemsOnPage < 0 || previousTotal < 0) return 'invalid-pdf-text-count';
+  if (itemsOnPage > MAX_PDF_TEXT_ITEMS_PER_PAGE) return 'too-many-pdf-text-items';
+  if (previousTotal + itemsOnPage > MAX_PDF_TEXT_ITEMS_TOTAL) return 'too-many-pdf-text-items-total';
   return null;
 }
