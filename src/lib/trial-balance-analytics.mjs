@@ -1,4 +1,6 @@
-const DEFAULT_TOLERANCE = 0.01;
+import { toFils, fromFils, roundJod } from './jod-money.mjs';
+
+const DEFAULT_TOLERANCE = 0.001;
 
 function finiteAmount(value) {
   return typeof value === 'number' && Number.isFinite(value);
@@ -9,7 +11,7 @@ function amount(value) {
 }
 
 function roundMoney(value) {
-  return Math.round((value + Number.EPSILON) * 100) / 100;
+  return roundJod(value);
 }
 
 /**
@@ -24,13 +26,15 @@ export function analyzeTrialBalance(rows, options = {}) {
   const tolerance = finiteAmount(options.tolerance) && options.tolerance >= 0
     ? options.tolerance
     : DEFAULT_TOLERANCE;
+  const toleranceFils = toFils(tolerance);
   const materiality = finiteAmount(options.materiality) && options.materiality > 0
     ? options.materiality
     : 0;
+  const materialityFils = toFils(materiality);
 
   const issues = [];
   const codes = new Map();
-  const totals = {
+  const totalsFils = {
     openingDebit: 0,
     openingCredit: 0,
     movementDebit: 0,
@@ -62,11 +66,11 @@ export function analyzeTrialBalance(rows, options = {}) {
       });
     }
 
-    const negative = values.filter(([, value]) => finiteAmount(value) && value < -tolerance);
+    const negative = values.filter(([, value]) => finiteAmount(value) && toFils(value) < -toleranceFils);
     if (negative.length) {
       issues.push({
         id: `negative-${rowId}`, rowId, code, name, severity: 'warning',
-        category: 'negative-amount', amount: roundMoney(negative.reduce((sum, [, value]) => sum + Math.abs(value), 0)),
+        category: 'negative-amount', amount: fromFils(negative.reduce((sum, [, value]) => sum + Math.abs(toFils(value)), 0)),
         title: 'مبلغ سالب يحتاج تحققًا',
         detail: `راجع الإشارة في الحقول: ${negative.map(([key]) => key).join('، ')}`,
       });
@@ -102,24 +106,24 @@ export function analyzeTrialBalance(rows, options = {}) {
           closingDebit: 'closingDebit',
           closingCredit: 'closingCredit',
         })[key];
-        totals[totalKey] += value;
+        totalsFils[totalKey] += toFils(value);
       }
     }
 
     if (finiteAmount(row?.closingDebit) && finiteAmount(row?.closingCredit)
-      && row.closingDebit > tolerance && row.closingCredit > tolerance) {
+      && toFils(row.closingDebit) > toleranceFils && toFils(row.closingCredit) > toleranceFils) {
       issues.push({
         id: `dual-closing-${rowId}`, rowId, code, name, severity: 'warning',
         category: 'dual-sided-closing-balance',
-        amount: roundMoney(Math.min(row.closingDebit, row.closingCredit)),
+        amount: fromFils(Math.min(toFils(row.closingDebit), toFils(row.closingCredit))),
         title: 'رصيد ختامي على الجانبين',
         detail: 'يحتوي الحساب على مدين ختامي ودائن ختامي معًا؛ تحقق من التجميع والإشارات.',
       });
     }
 
-    const grossClosing = amount(row?.closingDebit) + amount(row?.closingCredit);
-    const grossMovement = amount(row?.debit) + amount(row?.credit);
-    if (materiality > 0 && grossClosing >= materiality) {
+    const grossClosing = fromFils(toFils(row?.closingDebit) + toFils(row?.closingCredit));
+    const grossMovement = fromFils(toFils(row?.debit) + toFils(row?.credit));
+    if (materialityFils > 0 && toFils(grossClosing) >= materialityFils) {
       issues.push({
         id: `material-closing-${rowId}`, rowId, code, name, severity: 'info',
         category: 'material-closing-balance', amount: roundMoney(grossClosing),
@@ -127,7 +131,7 @@ export function analyzeTrialBalance(rows, options = {}) {
         detail: `الرصيد الإجمالي للحساب يبلغ ${roundMoney(grossClosing)}، والأهمية النسبية المدخلة ${roundMoney(materiality)}. هذا مؤشر للأولوية وليس حكمًا على التحريف.`,
       });
     }
-    if (materiality > 0 && grossMovement >= materiality) {
+    if (materialityFils > 0 && toFils(grossMovement) >= materialityFils) {
       issues.push({
         id: `material-movement-${rowId}`, rowId, code, name, severity: 'info',
         category: 'material-movement', amount: roundMoney(grossMovement),
@@ -151,12 +155,12 @@ export function analyzeTrialBalance(rows, options = {}) {
   }
 
   const differences = {
-    opening: roundMoney(totals.openingDebit - totals.openingCredit),
-    movement: roundMoney(totals.movementDebit - totals.movementCredit),
-    closing: roundMoney(totals.closingDebit - totals.closingCredit),
+    opening: fromFils(totalsFils.openingDebit - totalsFils.openingCredit),
+    movement: fromFils(totalsFils.movementDebit - totalsFils.movementCredit),
+    closing: fromFils(totalsFils.closingDebit - totalsFils.closingCredit),
   };
   for (const [basis, difference] of Object.entries(differences)) {
-    if (Math.abs(difference) > tolerance) {
+    if (Math.abs(toFils(difference)) > toleranceFils) {
       const labels = {
         opening: ['الافتتاحي', 'مدين افتتاحي', 'دائن افتتاحي'],
         movement: ['الحركة', 'مدين الحركة', 'دائن الحركة'],
@@ -166,7 +170,7 @@ export function analyzeTrialBalance(rows, options = {}) {
         id: `imbalance-${basis}`, rowId: null, code: '', name: '', severity: 'error',
         category: `unbalanced-${basis}`, amount: Math.abs(difference),
         title: `فرق في إجمالي الرصيد ${labels[0]}`,
-        detail: `الفرق بين ${labels[1]} و${labels[2]} هو ${difference.toFixed(2)}. تحقق من نطاق الاستيراد والأعمدة والإشارات.`,
+        detail: `الفرق بين ${labels[1]} و${labels[2]} هو ${difference.toFixed(3)}. تحقق من نطاق الاستيراد والأعمدة والإشارات.`,
       });
     }
   }
@@ -179,7 +183,7 @@ export function analyzeTrialBalance(rows, options = {}) {
   const count = severity => issues.filter(issue => issue.severity === severity).length;
   return {
     accountCount: safeRows.length,
-    totals: Object.fromEntries(Object.entries(totals).map(([key, value]) => [key, roundMoney(value)])),
+    totals: Object.fromEntries(Object.entries(totalsFils).map(([key, value]) => [key, fromFils(value)])),
     differences,
     balanced: Object.values(differences).every(value => Math.abs(value) <= tolerance)
       && !issues.some(issue => issue.category === 'invalid-data'),
