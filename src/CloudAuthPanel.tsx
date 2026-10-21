@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import type { SupabaseConfigResult } from './lib/supabase-config';
 
 type CloudUser = { id: string; email?: string };
-type CloudSession = { access_token: string; refresh_token: string; expires_at?: number; expires_in?: number; user?: CloudUser };
-type Props = { config: SupabaseConfigResult };
+export type CloudSession = { access_token: string; refresh_token: string; expires_at?: number; expires_in?: number; user?: CloudUser };
+type Props = { config: SupabaseConfigResult; onSessionChange?: (session: CloudSession | null) => void };
 
 const SESSION_KEY = 'ledgerly.auth.session.v1';
 
@@ -22,7 +22,7 @@ async function authRequest(config: Extract<SupabaseConfigResult, { configured: t
   return data;
 }
 
-export default function CloudAuthPanel({ config }: Props) {
+export default function CloudAuthPanel({ config, onSessionChange }: Props) {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -42,6 +42,7 @@ export default function CloudAuthPanel({ config }: Props) {
 
   const saveSession = (next: CloudSession | null) => {
     setSession(next);
+    onSessionChange?.(next);
     if (next) {
       const expiresAt = next.expires_at ?? Math.floor(Date.now() / 1000) + (next.expires_in ?? 3600);
       const normalized = { ...next, expires_at: expiresAt };
@@ -57,7 +58,7 @@ export default function CloudAuthPanel({ config }: Props) {
       const raw = sessionStorage.getItem(SESSION_KEY);
       if (raw) {
         const stored = JSON.parse(raw) as CloudSession;
-        if (stored.access_token && stored.refresh_token) setSession(stored);
+        if (stored.access_token && stored.refresh_token) { setSession(stored); onSessionChange?.(stored); }
       }
     } catch {
       sessionStorage.removeItem(SESSION_KEY);
@@ -211,7 +212,7 @@ export default function CloudAuthPanel({ config }: Props) {
         <label className="audit-field"><span>اسم المستخدم</span><input value={displayName} onChange={e => setDisplayName(e.target.value)} autoComplete="name" placeholder="الاسم الكامل" /></label>
         <label className="audit-field"><span>اسم مكتب التدقيق</span><input value={firmName} onChange={e => setFirmName(e.target.value)} placeholder="اسم المكتب" /></label>
         <label className="audit-field"><span>البريد الإلكتروني</span><input type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" placeholder="name@example.com" /></label>
-        <label className="audit-field"><span>كلمة المرور</span><input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} placeholder="8 أحرف على الأقل" onKeyDown={e => { if (e.key === 'Enter' && !busy) void runAuth(); }} /></label>
+        <label className="audit-field"><span>كلمة المرور</span><input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} placeholder="12 حرفًا على الأقل" onKeyDown={e => { if (e.key === 'Enter' && !busy) void runAuth(); }} /></label>
       </div>
       {error ? <p className="cloud-auth-error" role="alert">{error}</p> : null}
       {notice ? <p className="cloud-auth-success" role="status">{notice}</p> : null}
