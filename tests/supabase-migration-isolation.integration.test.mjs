@@ -236,7 +236,7 @@ test('replay the complete Supabase migration chain and verify two-office RLS iso
 
     await t.test('engagement-scoped staff cannot read other engagements in the same firm', async () => {
       assert.deepEqual(await idsFor(userScoped, 'SELECT id FROM public.engagement ORDER BY id'), ['eng-a1']);
-      assert.deepEqual(await idsFor(userScoped, 'SELECT id FROM public.working_paper ORDER BY id'), ['wp-a1']);
+      assert.deepEqual(await idsFor(userScoped, 'SELECT id FROM public.working_paper ORDER BY id'), ['wp-a1','wp-self']);
       assert.deepEqual(await idsFor(userScoped, 'SELECT name FROM storage.objects ORDER BY name'), ['firm-a/eng-a1/a.pdf']);
     });
 
