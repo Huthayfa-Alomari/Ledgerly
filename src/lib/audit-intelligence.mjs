@@ -345,7 +345,7 @@ export function buildPartnerDashboard(engagements, clients, database) {
       qualityAttention: quality.attentionCount,
       state: String(engagement.status ?? ''),
     };
-  }).sort((a, b) => (b.qualityAttention - a.qualityAttention) || (b.openFindings - a.openFindings) || String(a.client?.name ?? '').localeCompare(String(b.client?.name ?? ''));
+  }).sort((a, b) => (b.qualityAttention - a.qualityAttention) || (b.openFindings - a.openFindings) || String(a.client?.name ?? '').localeCompare(String(b.client?.name ?? '')));
 }
 
 /** @param {Array<Record<string, any>>} items */
