@@ -1,3 +1,4 @@
+import { deserializeJodVaultPayload, serializeJodVaultPayload } from './jod-vault-format.mjs';
 type VaultRecord = {
   id: 'workspace';
   version: 1;
@@ -93,7 +94,7 @@ async function encryptValue(passphrase: string, value: unknown, salt?: Uint8Arra
   const ciphertext = await requireCrypto().encrypt(
     { name: 'AES-GCM', iv },
     key,
-    encoder.encode(JSON.stringify(value)),
+    encoder.encode(JSON.stringify(serializeJodVaultPayload(value))),
   );
   return {
     id: RECORD_ID,
@@ -113,7 +114,7 @@ async function decryptRecord(passphrase: string, record: VaultRecord): Promise<u
       key,
       record.ciphertext,
     );
-    return JSON.parse(decoder.decode(plaintext)) as unknown;
+    return deserializeJodVaultPayload(JSON.parse(decoder.decode(plaintext)) as unknown);
   } catch {
     throw new Error('تعذر فتح المخزن. كلمة المرور غير صحيحة أو أن النسخة المشفّرة تالفة؛ لم نُعد تهيئة البيانات.');
   }

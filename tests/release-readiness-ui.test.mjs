@@ -9,12 +9,14 @@ test('local save failure exposes recovery export and an explicit retry', () => {
   assert.match(app, /downloadRecoverySnapshot\(db\)/);
   assert.match(app, /ledgerly-recovery-current\.json/);
   assert.match(app, /إعادة محاولة الحفظ/);
-  assert.match(app, /persistLocalData\(\(\)=>localStorage,KEY,db\)/);
+  assert.match(app, /persistEncryptedLocalVault\(vaultPassphrase,db\)/);
+  assert.match(app, /AES-GCM-256/);
 });
 
 test('settings distinguish cloud-enabled features from local-mode and release-gate limitations', () => {
   assert.match(app, /حدود النسخة الحالية قبل الإنتاج/);
-  assert.match(app, /LocalStorage غير مشفّرة/);
+  assert.match(app, /مساحة العمل في IndexedDB بعد تشفير AES-GCM/);
+  assert.doesNotMatch(app, /! بيانات LocalStorage غير مشفّرة على مستوى التطبيق/);
   assert.match(app, /دعوات أعضاء المكاتب يجب أن تبقى معطّلة/);
   assert.match(app, /فحص البرمجيات الخبيثة/);
   assert.doesNotMatch(app, /ميزات تتطلب ربطًا قبل الإنتاج/);

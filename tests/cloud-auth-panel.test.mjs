@@ -47,7 +47,7 @@ test('local audit evidence can attach browser-stored files and preview images', 
   const vault = readFileSync(new URL('../src/lib/local-evidence-files.ts', import.meta.url), 'utf8');
   assert.match(app, /إرفاق صورة أو ملف/);
   assert.match(app, /<LocalEvidenceAttachment row=\{e\}\/?>/);
-  assert.match(app, /saveLocalEvidenceFile\(evidenceFile\)/);
+  assert.match(app, /saveLocalEvidenceFile\(evidenceFile,vaultPassphrase\)/);
   assert.match(vault, /indexedDB\.open/);
   assert.match(vault, /25 \* 1024 \* 1024/);
   assert.doesNotMatch(vault, /service_role|sb_secret_/i);
