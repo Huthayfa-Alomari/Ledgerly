@@ -21,7 +21,7 @@ function firstMatch(headers, aliases) {
   }
   for (const key of keys) {
     if (key.length < 4) continue;
-    const contains = normalized.find(h => h.key.length >= 4 && (h.key.includes(key) || key.includes(h.key)));
+    const contains = normalized.find(h => h.key.length >= 4 && h.key.includes(key));
     if (contains) return contains.header;
   }
   return undefined;
