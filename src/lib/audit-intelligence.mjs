@@ -110,11 +110,15 @@ export function normalizeJournalRows(records) {
       if (get(creditH) === null || get(creditH) === undefined || String(get(creditH)).trim() === '') credit = 0;
     }
     let classification = 'debit-credit-columns';
-    if (!debitH && !creditH && amountH && directionH) {
-      const direction = cleanText(get(directionH));
-      if (/(دائن|credit|\bcr\b|كريديت)/i.test(direction)) { debit = 0; credit = amount; classification = 'direction-column'; }
-      else if (/(مدين|debit|\bdr\b)/i.test(direction)) { debit = amount; credit = 0; classification = 'direction-column'; }
-      else { debit = null; credit = null; classification = 'ambiguous-amount'; }
+    if (!debitH && !creditH && amountH) {
+      if (directionH) {
+        const direction = cleanText(get(directionH));
+        if (/(دائن|credit|\bcr\b|كريديت)/i.test(direction)) { debit = 0; credit = amount; classification = 'direction-column'; }
+        else if (/(مدين|debit|\bdr\b)/i.test(direction)) { debit = amount; credit = 0; classification = 'direction-column'; }
+        else { debit = null; credit = null; classification = 'ambiguous-amount'; }
+      } else {
+        debit = null; credit = null; classification = 'ambiguous-amount';
+      }
     } else {
       if (!debitH && creditH) debit = 0;
       if (!creditH && debitH) credit = 0;
