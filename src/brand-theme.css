@@ -1,0 +1,215 @@
+/* Ledgerly brand system — navy, clean white, verification green */
+:root {
+  --ledgerly-navy: #101827;
+  --ledgerly-navy-raised: #18253B;
+  --ledgerly-navy-soft: #23374D;
+  --ledgerly-green: #3DDC97;
+  --ledgerly-green-deep: #176B4D;
+  --ledgerly-green-soft: #E5F8EF;
+  --audit-ink: #172033;
+  --audit-muted: #667286;
+  --audit-line: #E2E7EE;
+  --audit-bg: #F4F6F9;
+  --audit-paper: #FFFFFF;
+  --audit-green: #176B4D;
+  --audit-green-soft: #E5F8EF;
+  --audit-gold: #3DDC97;
+  --green: #176B4D;
+  color-scheme: light;
+}
+body { background: #F4F6F9; color: #172033; }
+button, input, select, textarea { accent-color: #176B4D; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible,
+textarea:focus-visible, summary:focus-visible {
+  outline: 2px solid #3DDC97;
+  outline-offset: 2px;
+}
+/* Desktop audit suite */
+.audit-shell { background: #F4F6F9; color: #172033; }
+.audit-sidebar { background: #101827; color: #F4F7FB; }
+.audit-brand { border-bottom-color: #FFFFFF1F; }
+.audit-logo {
+  color: transparent !important;
+  font-size: 0 !important;
+  border: 0 !important;
+  background: #101827 url('../favicon.svg') center / cover no-repeat !important;
+  border-radius: 12px;
+}
+.audit-brand strong { color: #F8FAFC; }
+.audit-brand small { color: #AAB5C5; }
+.audit-collapse { color: #CBD5E1; }
+.audit-sidebar nav button { color: #C5D0DE; }
+.audit-sidebar nav button:hover { background: #FFFFFF0D; color: #FFFFFF; }
+.audit-sidebar nav button.active {
+  background: #23374D;
+  color: #FFFFFF;
+  box-shadow: inset -3px 0 #3DDC97;
+}
+.nav-icon { color: #3DDC97; }
+.audit-sidebar nav button.active .nav-icon { color: #3DDC97; }
+.audit-sidebar-foot { border-top-color: #FFFFFF1F; color: #D3DCE7; }
+.audit-sidebar-foot small { color: #9AA8BC; }
+.status-dot { background: #3DDC97; box-shadow: 0 0 0 3px #3DDC971C; }
+.audit-main { color: #172033; }
+.audit-topbar { border-bottom-color: #E2E7EE; }
+.audit-breadcrumb { color: #748198; }
+.audit-topbar h1 { color: #101827; }
+.engagement-picker span { color: #667286; }
+.engagement-picker select, .audit-icon-button {
+  border-color: #D7DFE9;
+  background: #FFFFFF;
+  color: #172033;
+}
+.audit-icon-button:hover { border-color: #3DDC97; background: #F4FCF8; }
+.audit-welcome {
+  background: linear-gradient(115deg, #101827 0%, #18253B 72%, #23374D 100%);
+  color: #F8FAFC;
+}
+.audit-kicker { color: #3DDC97; }
+.audit-welcome h2 { color: #FFFFFF; }
+.audit-welcome p { color: #D2DBE8; }
+.welcome-mark {
+  color: #3DDC97;
+  border-color: #3DDC9755;
+  background: #FFFFFF05;
+}
+.audit-stat, .audit-card {
+  background: #FFFFFF;
+  border-color: #E2E7EE;
+  box-shadow: 0 6px 22px #10182708;
+}
+.stat-icon, .feature-icon {
+  background: #E5F8EF;
+  color: #176B4D;
+}
+.stat-hint { color: #8591A4; }
+.audit-stat > strong { color: #101827; }
+.stat-label { color: #667286; }
+.audit-card h3 { color: #172033; }
+.audit-card-head p { color: #667286; }
+.soft-tag { background: #EEF2F7; color: #5D6A7F; }
+.workflow-row { border-top-color: #E9EDF3; }
+.workflow-num { color: #176B4D; }
+.workflow-state { color: #748198; }
+.quick-actions button {
+  background: #F8FAFC;
+  border-color: #E2E7EE;
+  color: #24334A;
+}
+.quick-actions button:hover { background: #F0FBF6; border-color: #A7E9CA; }
+.audit-text-button { color: #176B4D; }
+.audit-text-button:hover { color: #0D4A34; text-decoration: underline; }
+.audit-table { color: #243148; }
+.audit-table th { background: #F4F7FB; color: #667286; }
+.audit-table th, .audit-table td { border-bottom-color: #E9EDF3; }
+.audit-table tbody tr:hover { background: #F8FCFA; }
+.audit-table td { color: #3F4C60; }
+.cell-strong { color: #172033; }
+.audit-pill { background: #E5F8EF; color: #176B4D; }
+.risk-pill { background: #FFF0EB; color: #A44C3D; }
+.inline-select { border-color: #D7DFE9; color: #35435A; }
+.audit-primary, .audit-secondary, .audit-danger {
+  border-radius: 9px;
+  transition: background-color .15s ease, border-color .15s ease, transform .15s ease;
+}
+.audit-primary {
+  background: #101827;
+  border-color: #101827;
+  color: #FFFFFF;
+}
+.audit-primary:hover { background: #18253B; border-color: #18253B; }
+.audit-secondary {
+  background: #FFFFFF;
+  border-color: #D7DFE9;
+  color: #24334A;
+}
+.audit-secondary:hover { background: #F4FCF8; border-color: #8BE5B9; color: #124B36; }
+.audit-danger { background: #FFF3F1; border-color: #F0D6D2; color: #A34D45; }
+.audit-search { border-color: #D7DFE9; background: #FFFFFF; }
+.audit-search:focus-within { border-color: #3DDC97; box-shadow: 0 0 0 3px #3DDC9726; }
+.audit-search span { color: #7C899C; }
+.audit-search input { color: #172033; }
+.audit-empty { color: #748198; }
+.audit-empty > span { background: #E5F8EF; color: #176B4D; }
+.audit-form-grid { color: #172033; }
+.audit-field { color: #536178; }
+.audit-field input, .audit-field select, .audit-field textarea {
+  border-color: #D7DFE9;
+  background: #FFFFFF;
+  color: #172033;
+}
+.audit-field input:focus, .audit-field select:focus, .audit-field textarea:focus {
+  border-color: #3DDC97;
+  box-shadow: 0 0 0 3px #3DDC9726;
+}
+.form-actions { border-top-color: #E9EDF3; }
+.form-hint { color: #667286; }
+.audit-toast { background: #E5F8EF; border-color: #B9EDD3; color: #176B4D; }
+.audit-warning { background: #FFF8E9; color: #805F20; border-color: #F0E3C5; }
+.feature-banner { background: #F8FAFC; border-color: #E2E7EE; }
+.feature-banner p { color: #667286; }
+.check-grid > div { color: #536178; border-color: #E7ECF2; }
+.audit-checklist label { border-color: #E2E7EE; }
+.audit-checklist label.checked span { color: #176B4D; }
+.audit-footer { color: #748198; }
+.audit-footer span { color: #536178; }
+/* Bank reconciliation surface shares the same brand and status language */
+.topbar { border-bottom-color: #E2E7EE; }
+.brand-icon {
+  color: transparent !important;
+  font-size: 0 !important;
+  border: 0 !important;
+  background: #101827 url('../favicon.svg') center / cover no-repeat !important;
+  border-radius: 13px;
+}
+.brand strong { color: #101827; }
+.brand span { color: #748198; }
+.language { border-color: #D7DFE9; background: #FFFFFF; color: #35435A; }
+.language:hover { border-color: #3DDC97; background: #F4FCF8; }
+.hero h1 { color: #101827; }
+.eyebrow { color: #176B4D; }
+.hero p, .helper { color: #667286; }
+.privacy { border-color: #B9EDD3; background: #F0FBF6; }
+.shield { background: #D1F5E3; color: #176B4D; }
+.privacy b { color: #14563E; }
+.privacy small { color: #557A69; }
+.panel { border-color: #E2E7EE; box-shadow: 0 8px 28px #1018270A; }
+.step { color: #176B4D; background: #E5F8EF; }
+.dropzone { border-color: #CBD5E1; background: #F8FAFC; }
+.dropzone:hover { border-color: #3DDC97; background: #F4FCF8; }
+.upload-icon { background: #E5F8EF; color: #176B4D; }
+.status { color: #176B4D; }
+.file-badge { background: #EEF2F7; color: #52627A; }
+.ok-pill { background: #E5F8EF; color: #176B4D; }
+.warning-pill { background: #FFF3D9; color: #805F20; }
+.alert { background: #F0F4F9; color: #536178; }
+.alert.success { background: #E5F8EF; color: #176B4D; }
+.alert.error { background: #FFF0F0; color: #A33838; }
+.map-field select, .match-controls select {
+  border-color: #D7DFE9;
+  background: #FFFFFF;
+  color: #172033;
+}
+th { background: #F4F7FB; color: #667286; }
+td { color: #3F4C60; }
+.validation { border-color: #E2E7EE; }
+.validation .good { color: #176B4D; }
+.primary {
+  background: #101827;
+  color: #FFFFFF;
+  border: 1px solid #101827;
+}
+.primary:hover { background: #18253B; border-color: #18253B; }
+.secondary {
+  border-color: #D7DFE9;
+  color: #24334A;
+}
+.secondary:hover { background: #F4FCF8; border-color: #A7E9CA; }
+.match-summary > div { border-color: #E2E7EE; background: #FFFFFF; }
+.match-summary strong { color: #101827; }
+.match-summary span { color: #748198; }
+.opening-balance-row { background: #E5F8EF; }
+.row-tag { color: #176B4D; background: #D1F5E3; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; scroll-behavior: auto !important; }
+}
