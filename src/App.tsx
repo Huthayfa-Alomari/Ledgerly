@@ -9,7 +9,9 @@ import CloudWorkspacePanel from './CloudWorkspacePanel';
 import type { CloudDB } from './lib/cloud-workspace';
 import './styles.css';
 import { readSupabaseBrowserConfig } from './lib/supabase-config';
-import { loadLocalData, localDataShapeIssue, persistLocalData } from './lib/local-db-storage.mjs';
+import { loadLocalData, localDataShapeIssue } from './lib/local-db-storage.mjs';
+import { encryptedVaultBackup, hasEncryptedLocalVault, migrateLegacyEvidenceIfNeeded, persistEncryptedLocalVault, restoreEncryptedVaultBackup, unlockOrInitializeLocalVault } from './lib/secure-local-vault';
+import { auditChainCsv, sealNewAuditEvents, verifyAuditChain } from './lib/audit-log-chain.mjs';
 import { deleteLocalEvidenceFile, getLocalEvidenceFile, saveLocalEvidenceFile } from './lib/local-evidence-files';
 import { fromFils, toFils, parseJodAmount } from './lib/jod-money.mjs';
 import { MAX_IMPORT_FILE_BYTES, MAX_WORKSHEET_ROWS, worksheetDimensionIssue, matrixDimensionIssue } from './lib/import-safety.mjs';
@@ -24,7 +26,7 @@ type Workpaper = { id: string; engagementId: string; ref: string; title: string;
 type Finding = { id: string; engagementId: string; title: string; criteria: string; condition: string; effect: string; recommendation: string; severity: string; status: string };
 type Evidence = { id: string; engagementId: string; title: string; type: string; reference: string; workpaperRef: string; notes: string; addedAt: string; attachmentId?: string; fileName?: string; fileType?: string; fileSize?: number };
 type TBRow = { id: string; engagementId: string; code: string; name: string; openingDebit: number; openingCredit: number; debit: number; credit: number; closingDebit: number; closingCredit: number; source: string };
-type AuditEvent = { id: string; at: string; action: string; entity: string; details: string; engagementId?: string }; 
+type AuditEvent = { id: string; at: string; action: string; entity: string; details: string; engagementId?: string; actorId?: string; prevHash?: string; hash?: string }; 
 type Module = 'dashboard'|'clients'|'engagements'|'planning'|'trial-balance'|'workpapers'|'evidence'|'findings'|'reports'|'reconciliation'|'ai-assistant'|'intelligence'|'settings';
 type DB = { clients: Client[]; engagements: Engagement[]; risks: Risk[]; workpapers: Workpaper[]; findings: Finding[]; evidence: Evidence[]; trialBalance: TBRow[]; auditLog: AuditEvent[]; completionChecks: Record<string, boolean>; };
 const KEY = 'brp.audit-platform.v1';
@@ -77,21 +79,21 @@ function downloadRecoverySnapshot(db: DB) {
 
 function Field({label,value,onChange,placeholder='',type='text'}:{label:string;value:string;onChange:(v:string)=>void;placeholder?:string;type?:string}) { return <label className="audit-field"><span>{label}</span><input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}/></label>; }
 function SelectField({label,value,onChange,options}:{label:string;value:string;onChange:(v:string)=>void;options:string[]}) { return <label className="audit-field"><span>{label}</span><select value={value} onChange={e=>onChange(e.target.value)}>{options.map(x=>{const parts=x.split('|||'); const val=parts.length>1?parts[0]:x; const label=parts.length>1?parts.slice(1).join('|||'):x; return <option key={x} value={val}>{label}</option>;})}</select></label>; }
-function LocalEvidenceAttachment({row}:{row:Evidence}) {
+function LocalEvidenceAttachment({row,passphrase}:{row:Evidence;passphrase:string}) {
  const [url,setUrl] = useState('');
  const [loadError,setLoadError] = useState('');
  useEffect(()=>{
   let cancelled=false;
   let objectUrl='';
   if(!row.attachmentId)return;
-  void getLocalEvidenceFile(row.attachmentId).then(file=>{
+  void getLocalEvidenceFile(row.attachmentId,passphrase).then(file=>{
    if(!file){if(!cancelled)setLoadError('الملف غير موجود في هذا المتصفح');return;}
    objectUrl=URL.createObjectURL(file.blob);
    if(cancelled){URL.revokeObjectURL(objectUrl);return;}
    setUrl(objectUrl);
   }).catch(e=>{if(!cancelled)setLoadError(e instanceof Error?e.message:'تعذر تحميل المرفق.');});
   return ()=>{cancelled=true;if(objectUrl)URL.revokeObjectURL(objectUrl);};
- },[row.attachmentId]);
+ },[row.attachmentId,passphrase]);
  if(!row.attachmentId||!row.fileName)return <span>—</span>;
  if(loadError)return <span className="table-sub">{loadError}</span>;
  if(!url)return <span className="table-sub">جارٍ تجهيز المرفق…</span>;
@@ -100,10 +102,18 @@ function LocalEvidenceAttachment({row}:{row:Evidence}) {
 }
 function App() {
  const [initialData] = useState(readDB);
- const [db,setDB] = useState<DB>(initialData.db);
+ const [db,setDB] = useState<DB>(emptyDB);
  const [storageLoadError,setStorageLoadError] = useState(initialData.error);
- const [storagePersistenceEnabled,setStoragePersistenceEnabled] = useState(!initialData.error);
- const [rawBackupDownloaded,setRawBackupDownloaded] = useState(false);
+ const [storagePersistenceEnabled,setStoragePersistenceEnabled] = useState(false);
+ const [vaultUnlocked,setVaultUnlocked] = useState(false);
+ const [vaultPassphrase,setVaultPassphrase] = useState('');
+ const [vaultConfirmPassphrase,setVaultConfirmPassphrase] = useState('');
+ const [vaultPresent,setVaultPresent] = useState<boolean|null>(null);
+ const [vaultBusy,setVaultBusy] = useState(false);
+ const [vaultError,setVaultError] = useState('');
+ const [vaultNotice,setVaultNotice] = useState('');
+ const [vaultRawBackupDownloaded,setVaultRawBackupDownloaded] = useState(false);
+ const [auditChainHealth,setAuditChainHealth] = useState<{valid:boolean;checked:number;unsealed:number;reason:string}>({valid:true,checked:0,unsealed:0,reason:'loading'});
  const [module,setModule] = useState<Module>('dashboard');
  const [selectedEngagement,setSelectedEngagement] = useState('');
  const [query,setQuery] = useState('');
@@ -121,8 +131,71 @@ function App() {
  const [cloudWorkspaceRefresh,setCloudWorkspaceRefresh] = useState(0);
  const [cloudGateDismissed, setCloudGateDismissed] = useState(false);
  const supabaseConfig = readSupabaseBrowserConfig({ VITE_SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY: import.meta.env.VITE_SUPABASE_ANON_KEY });
- useEffect(()=>{ if(!storagePersistenceEnabled)return; const error = persistLocalData(()=>localStorage, KEY, db); setStorageError(error || ''); },[db,storagePersistenceEnabled]);
+ useEffect(()=>{if(!storagePersistenceEnabled||!vaultUnlocked)return;let cancelled=false;void persistEncryptedLocalVault(vaultPassphrase,db).then(error=>{if(!cancelled)setStorageError(error||'');});return()=>{cancelled=true;};},[db,storagePersistenceEnabled,vaultUnlocked,vaultPassphrase]);
+ useEffect(()=>{let active=true;void hasEncryptedLocalVault().then(exists=>{if(active)setVaultPresent(exists);}).catch(error=>{if(active)setVaultError(error instanceof Error?error.message:'تعذر فحص المخزن المحلي.');});return()=>{active=false;};},[]);
+ useEffect(()=>{if(!vaultUnlocked||!Array.isArray(db.auditLog)||!db.auditLog.length)return;let cancelled=false;void sealNewAuditEvents(db.auditLog,cloudSession?.user?.id||'local-workstation').then(result=>{if(cancelled)return;setAuditChainHealth(result.verification);if(result.changed&&!result.tampered){const snapshot=JSON.stringify(db.auditLog);setDB(previous=>JSON.stringify(previous.auditLog)===snapshot?{...previous,auditLog:result.events as AuditEvent[]}:previous);}}).catch(()=>{if(!cancelled)setAuditChainHealth({valid:false,checked:0,unsealed:db.auditLog.filter(event=>!event.hash).length,reason:'crypto-unavailable'});});return()=>{cancelled=true;};},[db.auditLog,vaultUnlocked,cloudSession?.user?.id]);
  useEffect(()=>{ if(notice){const t=window.setTimeout(()=>setNotice(''),3500);return()=>window.clearTimeout(t);} },[notice]);
+ async function unlockLocalVault(){
+  setVaultError('');setVaultNotice('');setVaultBusy(true);
+  try{
+   if(vaultPresent===false&&vaultPassphrase!==vaultConfirmPassphrase)throw new Error('كلمتا المرور غير متطابقتين.');
+   const raw=window.localStorage.getItem(KEY);
+   const opened=await unlockOrInitializeLocalVault<unknown>(vaultPassphrase,raw,emptyDB,['clients','engagements','risks','workpapers','findings','evidence','trialBalance']);
+   const parsed=opened.value as Partial<DB>;
+   const issue=localDataShapeIssue(parsed,['clients','engagements','risks','workpapers','findings','evidence','trialBalance']);
+   if(issue)throw new Error('بنية بيانات المكتب غير سليمة: '+issue);
+   const restored:DB={...emptyDB,...parsed,
+    clients:Array.isArray(parsed.clients)?parsed.clients:[],engagements:Array.isArray(parsed.engagements)?parsed.engagements:[],
+    risks:Array.isArray(parsed.risks)?parsed.risks:[],workpapers:Array.isArray(parsed.workpapers)?parsed.workpapers:[],
+    findings:Array.isArray(parsed.findings)?parsed.findings:[],evidence:Array.isArray(parsed.evidence)?parsed.evidence:[],
+    trialBalance:Array.isArray(parsed.trialBalance)?parsed.trialBalance:[],auditLog:Array.isArray(parsed.auditLog)?parsed.auditLog:[],
+    completionChecks:parsed.completionChecks&&typeof parsed.completionChecks==='object'&&!Array.isArray(parsed.completionChecks)?parsed.completionChecks:{}};
+   const legacyRawStillPresent=window.localStorage.getItem(KEY);
+   let legacyCopyMatches=false;
+   if(legacyRawStillPresent){try{legacyCopyMatches=JSON.stringify(JSON.parse(legacyRawStillPresent))===JSON.stringify(opened.value);}catch{}}
+   let migratedFiles=0;
+   try{migratedFiles=await migrateLegacyEvidenceIfNeeded(vaultPassphrase);}catch{
+    setVaultNotice('تم فتح مخزن البيانات، لكن تعذرت ترقية بعض المرفقات القديمة إلى النسخة المشفّرة. لا تستخدم هذه المرفقات الحساسة قبل معالجة التحذير.');
+   }
+   if(opened.migratedLegacy||legacyCopyMatches)window.localStorage.removeItem(KEY);
+   setDB(restored);setSelectedEngagement('');setVaultUnlocked(true);setStoragePersistenceEnabled(true);
+   setStorageLoadError('');setVaultPresent(true);
+   if(migratedFiles>0)setVaultNotice('تم تشفير '+migratedFiles+' مرفق قديم ونقل بيانات مساحة العمل إلى المخزن المشفّر.');
+   else if(opened.migratedLegacy)setVaultNotice('تم نقل البيانات القديمة إلى المخزن المشفّر والتحقق من إمكانية فكها قبل إزالة النسخة النصية القديمة.');
+   else if(opened.wasNew)setVaultNotice('تم إنشاء مخزن محلي مشفّر جديد. احتفظ بكلمة المرور والنسخة الاحتياطية المشفّرة؛ لا يمكن استعادة كلمة المرور المفقودة.');
+   setVaultConfirmPassphrase('');
+  }catch(error){
+   setVaultError(error instanceof Error?error.message:'تعذر فتح المخزن المشفّر.');
+  }finally{setVaultBusy(false);}
+ }
+ async function restoreVaultBackup(file?:File){
+  if(!file)return;setVaultError('');setVaultBusy(true);
+  try{
+   const restored=await restoreEncryptedVaultBackup(vaultPassphrase,await file.text(),['clients','engagements','risks','workpapers','findings','evidence','trialBalance']);
+   const parsed=restored as Partial<DB>;
+   const issue=localDataShapeIssue(parsed,['clients','engagements','risks','workpapers','findings','evidence','trialBalance']);
+   if(issue)throw new Error('النسخة لا تحتوي بنية مساحة عمل Ledgerly صالحة: '+issue);
+   const normalized:DB={...emptyDB,...parsed,
+    clients:Array.isArray(parsed.clients)?parsed.clients:[],engagements:Array.isArray(parsed.engagements)?parsed.engagements:[],
+    risks:Array.isArray(parsed.risks)?parsed.risks:[],workpapers:Array.isArray(parsed.workpapers)?parsed.workpapers:[],
+    findings:Array.isArray(parsed.findings)?parsed.findings:[],evidence:Array.isArray(parsed.evidence)?parsed.evidence:[],
+    trialBalance:Array.isArray(parsed.trialBalance)?parsed.trialBalance:[],auditLog:Array.isArray(parsed.auditLog)?parsed.auditLog:[],
+    completionChecks:parsed.completionChecks&&typeof parsed.completionChecks==='object'&&!Array.isArray(parsed.completionChecks)?parsed.completionChecks:{}};
+   await migrateLegacyEvidenceIfNeeded(vaultPassphrase);
+   setDB(normalized);setVaultUnlocked(true);setStoragePersistenceEnabled(true);setStorageLoadError('');setVaultPresent(true);
+   setVaultNotice('تم استعادة النسخة المشفّرة والتحقق من كلمة المرور. راجع البيانات قبل العمل.');
+  }catch(error){setVaultError(error instanceof Error?error.message:'تعذرت استعادة النسخة المشفّرة.');}
+  finally{setVaultBusy(false);}
+ }
+ async function exportEncryptedBackup(){
+  try{const blob=await encryptedVaultBackup(vaultPassphrase);const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download='ledgerly-encrypted-backup.json';link.click();window.setTimeout(()=>URL.revokeObjectURL(url),1000);setNotice('تم تنزيل نسخة احتياطية مشفّرة. ستحتاج كلمة مرور المخزن لاستعادتها.');}
+  catch(error){setNotice(error instanceof Error?error.message:'تعذر تصدير النسخة المشفّرة.');}
+ }
+ async function lockLocalVault(){
+  if(!window.confirm('سيُقفل المخزن وتُزال بياناته من ذاكرة واجهة البرنامج. تأكد من اكتمال الحفظ وتنزيل نسخة احتياطية.'))return;
+  setStoragePersistenceEnabled(false);setVaultUnlocked(false);setVaultPassphrase('');setVaultConfirmPassphrase('');
+  setDB(emptyDB);setSelectedEngagement('');setStorageError('');
+ }
  const activeEngagement = db.engagements.find(e=>e.id===selectedEngagement) ?? db.engagements[0];
  const currentClient = db.clients.find(c=>c.id===activeEngagement?.clientId);
  const scoped = <T extends {engagementId:string},>(rows:T[])=>rows.filter(r=>!activeEngagement || r.engagementId===activeEngagement.id);
@@ -255,7 +328,7 @@ function App() {
    if(!form.title?.trim()){setNotice('وصف الدليل مطلوب.');return;}
    let attachment: Awaited<ReturnType<typeof saveLocalEvidenceFile>> | undefined;
    if(evidenceFile){
-    try{attachment=await saveLocalEvidenceFile(evidenceFile);}
+    try{attachment=await saveLocalEvidenceFile(evidenceFile,vaultPassphrase);}
     catch(e){setNotice(e instanceof Error?e.message:'تعذر حفظ الملف المرفق.');return;}
    }
    const row:Evidence={id:uid(),engagementId:activeEngagement?.id||'',title:form.title.trim(),type:form.type||'مستند',reference:form.reference||'',workpaperRef:form.workpaperRef||'',notes:form.notes||'',addedAt:today(),...(attachment?{attachmentId:attachment.id,fileName:attachment.fileName,fileType:attachment.fileType,fileSize:attachment.fileSize}:{})};
@@ -286,6 +359,23 @@ function App() {
  const title=modules.find(m=>m.id===module)?.label||'لوحة المتابعة';
  const noEngagement=module!=='dashboard'&&module!=='clients'&&module!=='engagements'&&module!=='settings'&&module!=='reconciliation'&&module!=='intelligence'&&!activeEngagement;
  function headerActions(){ return <div className="audit-actions">{(module==='clients'||module==='engagements'||module==='planning'||module==='workpapers'||module==='evidence'||module==='findings')&&<button className="audit-primary" onClick={()=>startForm(module==='engagements'?{year:String(new Date().getFullYear()),type:'تدقيق سنوي',framework:'IFRS'}:module==='planning'?{likelihood:'متوسط',impact:'متوسط'}:module==='findings'?{severity:'متوسطة'}:{})}>＋ إضافة جديد</button>}{module==='reports'&&<button className="audit-primary" onClick={()=>download('ledgerly-backup.json',JSON.stringify(db,null,2))}>تصدير نسخة احتياطية</button>}</div>; }
+ if(!vaultUnlocked){
+  return <div dir="rtl" style={{minHeight:'100vh',display:'grid',placeItems:'center',padding:'24px',background:'#f6f4ef'}}>
+   <section className="audit-card cloud-auth-card" style={{width:'min(100%,680px)'}}>
+    <div className="audit-card-head"><div><h1>مخزن Ledgerly المحلي المشفّر</h1><p className="muted-copy">تشفير AES-GCM-256 مع اشتقاق مفتاح من كلمة مرور باستخدام PBKDF2. كلمة المرور لا تُحفظ داخل المخزن؛ فقدانها يعني تعذّر فك البيانات.</p></div><span className="audit-pill">{vaultPresent===null?'جارٍ التحقق':vaultPresent?'مخزن موجود':'إعداد أول مرة'}</span></div>
+    <p className="cloud-auth-note">{vaultPresent?'أدخل كلمة مرور المخزن الحالي لفتح بياناتك. لن تتم إعادة تهيئة المخزن عند فشل كلمة المرور.':'أنشئ كلمة مرور فريدة من 12 حرفًا على الأقل. إذا كانت لديك بيانات قديمة، سيحاول Ledgerly تشفيرها والتحقق من الاستعادة قبل إزالة النسخة النصية القديمة.'}</p>
+    <div className="cloud-auth-fields">
+     <label className="audit-field full-field"><span>كلمة مرور المخزن المحلي</span><input type="password" value={vaultPassphrase} autoComplete="current-password" onChange={event=>setVaultPassphrase(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'&&!vaultBusy&&vaultPresent!==null)void unlockLocalVault();}} placeholder="12 حرفًا على الأقل"/></label>
+     {vaultPresent===false&&<label className="audit-field full-field"><span>تأكيد كلمة المرور</span><input type="password" value={vaultConfirmPassphrase} autoComplete="new-password" onChange={event=>setVaultConfirmPassphrase(event.target.value)} placeholder="أعد كتابة كلمة المرور"/></label>}
+    </div>
+    {vaultError&&<p className="cloud-auth-error" role="alert">{vaultError}</p>}
+    {vaultNotice&&<p className="cloud-auth-success" role="status">{vaultNotice}</p>}
+    {storageLoadError&&<div className="audit-warning"><p>{storageLoadError}</p><p>لم يمسح Ledgerly النسخة القديمة. نزّلها خامًا قبل إزالة بيانات غير قابلة للقراءة.</p><div className="stack-actions"><button className="audit-secondary" onClick={()=>{const raw=window.localStorage.getItem(KEY);if(raw===null){setVaultError('لم نعثر على نسخة نصية خام.');return;}download('ledgerly-legacy-recovery-plaintext.json',raw,'application/json;charset=utf-8');setVaultRawBackupDownloaded(true);}}>تنزيل النسخة القديمة الخام</button><button className="audit-danger" disabled={!vaultRawBackupDownloaded} onClick={()=>{if(!window.confirm('سيُحذف السجل المحلي القديم غير القابل للقراءة من هذا المتصفح فقط بعد تنزيل النسخة الخام. هل تريد المتابعة؟'))return;window.localStorage.removeItem(KEY);setStorageLoadError('');setVaultError('تم حفظ النسخة الخام وإزالة النسخة المحلية غير القابلة للقراءة. يمكنك الآن إنشاء مخزن فارغ بكلمة مرور جديدة.');setVaultPresent(false);}}>إعادة التهيئة بعد حفظ النسخة الخام</button></div></div>}
+    <div className="cloud-auth-actions"><button className="audit-primary" disabled={vaultBusy||vaultPresent===null} onClick={()=>void unlockLocalVault()}>{vaultBusy?'جارٍ التحقق والتشفير…':vaultPresent?'فتح المخزن':'إنشاء المخزن المشفّر'}</button><label className="audit-secondary restore-upload">استعادة نسخة احتياطية مشفّرة<input type="file" accept=".json,application/json" onChange={event=>{void restoreVaultBackup(event.target.files?.[0]);event.currentTarget.value='';}}/></label></div>
+    <p className="cloud-auth-note">المرفقات تُشفّر كذلك قبل تخزينها محليًا. التشفير لا يمنع البرمجيات الخبيثة من قراءة البيانات عندما يكون المخزن مفتوحًا، ولا يغني عن حماية الجهاز واختبارات الاستعادة.</p>
+   </section>
+  </div>;
+ }
  if (!cloudSession && !cloudGateDismissed) {
   return <div dir="rtl" style={{minHeight:'100vh',display:'grid',placeItems:'center',padding:'24px',background:'#f6f4ef'}}>
     <div style={{width:'min(100%, 860px)'}}>
@@ -303,8 +393,8 @@ function App() {
  }
  return <div className={`audit-shell ${collapsed?'nav-collapsed':''}`} dir="rtl">
   <aside className="audit-sidebar"><div className="audit-brand"><div className="audit-logo">L</div>{!collapsed&&<div><strong>Ledgerly</strong><small>Audit Practice Platform</small></div>}</div><button className="audit-collapse" onClick={()=>setCollapsed(v=>!v)}>{collapsed?'☰':'إخفاء القائمة ‹'}</button><nav>{modules.map(m=><button key={m.id} className={module===m.id?'active':''} onClick={()=>{setModule(m.id);setShowForm(false);setQuery('');}} title={m.label}><span className="nav-icon">{m.icon}</span>{!collapsed&&<span>{m.label}</span>}</button>)}</nav><div className="audit-sidebar-foot">{!collapsed&&<><span className="status-dot"/> وضع محلي تجريبي<small>البيانات محفوظة في هذا المتصفح فقط</small></>}</div></aside>
-  <main className="audit-main"><header className="audit-topbar"><div><div className="audit-breadcrumb">مساحة العمل / {title}</div><h1>{title}</h1></div><div className="audit-top-actions"><label className="engagement-picker"><span>ملف التدقيق الحالي</span><select value={activeEngagement?.id||''} onChange={e=>setSelectedEngagement(e.target.value)}><option value="">اختر ملفًا</option>{db.engagements.map(e=><option key={e.id} value={e.id}>{db.clients.find(c=>c.id===e.clientId)?.name||'عميل'} · {e.year}</option>)}</select></label><button className="audit-icon-button" title="تصدير نسخة احتياطية" onClick={()=>download('ledgerly-backup.json',JSON.stringify(db,null,2))}>⇩</button></div></header>
-   {storageError&&<div className="audit-warning" role="alert"><strong>تعذّر حفظ البيانات محليًا؛ قد تبقى تعديلاتك الحالية في الذاكرة فقط.</strong><p>نزّل نسخة استعادة من أحدث حالة موجودة في الذاكرة قبل إغلاق التطبيق. سبب الخطأ: {storageError}</p><div className="stack-actions"><button className="audit-primary" onClick={()=>downloadRecoverySnapshot(db)}>تنزيل أحدث نسخة للاستعادة</button><button className="audit-secondary" onClick={()=>{const error=persistLocalData(()=>localStorage,KEY,db);setStorageError(error||'');if(!error)setNotice('نجح الحفظ المحلي مجددًا.');}}>إعادة محاولة الحفظ</button></div></div>}
+  <main className="audit-main"><header className="audit-topbar"><div><div className="audit-breadcrumb">مساحة العمل / {title}</div><h1>{title}</h1></div><div className="audit-top-actions"><label className="engagement-picker"><span>ملف التدقيق الحالي</span><select value={activeEngagement?.id||''} onChange={e=>setSelectedEngagement(e.target.value)}><option value="">اختر ملفًا</option>{db.engagements.map(e=><option key={e.id} value={e.id}>{db.clients.find(c=>c.id===e.clientId)?.name||'عميل'} · {e.year}</option>)}</select></label><button className="audit-icon-button" title="تصدير نسخة احتياطية" onClick={()=>{if(!window.confirm('سيصدر ملف JSON غير مشفّر. احفظه خارج المجلدات المشتركة فقط. هل تريد المتابعة؟'))return;download('ledgerly-backup-plaintext.json',JSON.stringify(db,null,2));}}>⇩</button></div></header>
+   {storageError&&<div className="audit-warning" role="alert"><strong>تعذّر حفظ البيانات محليًا؛ قد تبقى تعديلاتك الحالية في الذاكرة فقط.</strong><p>نزّل نسخة استعادة من أحدث حالة موجودة في الذاكرة قبل إغلاق التطبيق. سبب الخطأ: {storageError}</p><div className="stack-actions"><button className="audit-primary" onClick={()=>downloadRecoverySnapshot(db)}>تنزيل أحدث نسخة للاستعادة</button><button className="audit-secondary" onClick={()=>{void persistEncryptedLocalVault(vaultPassphrase,db).then(error=>{setStorageError(error||'');if(!error)setNotice('نجح حفظ المخزن المشفّر مجددًا.');});}}>إعادة محاولة الحفظ</button></div></div>}
    {notice&&<div className="audit-toast">✓ {notice}</div>}
    {module==='dashboard'&&<>
     <section className="audit-welcome"><div><span className="audit-kicker">نظام إدارة أعمال التدقيق</span><h2>من قبول العميل إلى إقفال ملف التدقيق.</h2><p>مساحة عمل موحدة لإدارة ملفات التدقيق، المخاطر، أوراق العمل، الأدلة والملاحظات. ابدأ بإنشاء عميل ثم افتح ملف تدقيق للسنة المالية.</p></div><div className="welcome-mark">L<span>LEDGERLY</span></div></section>
@@ -331,7 +421,7 @@ function App() {
    {module==='intelligence'&&<AuditIntelligence engagementId={activeEngagement?.id} engagements={db.engagements} clients={db.clients} trialBalance={db.trialBalance} workpapers={db.workpapers} evidence={db.evidence} findings={db.findings} risks={db.risks} onOpenCopilot={()=>setModule('ai-assistant')}/>}
    {module==='ai-assistant'&&<><SectionIntro text="مساعد اختياري يعمل على ملخص منقّح من ملف التدقيق الحالي. لا يرسل ملفات الأدلة ولا يحفظ نتيجة الذكاء الاصطناعي في سجلات المهمة."/><AuditCopilot config={supabaseConfig} context={aiCopilotContext} hasEngagement={!!activeEngagement}/></>}
    {module==='reconciliation'&&<Suspense fallback={<section className="audit-card">جارٍ تحميل وحدة المطابقة البنكية…</section>}><Reconciliation/></Suspense>}
-   {module==='settings'&&<><SectionIntro text="إعدادات المكتب والمنهجية والاتصال السحابي. بيانات التدقيق المهنية تبقى محلية حتى تفعيل المزامنة الآمنة."/><section className="audit-card"><div className="audit-card-head"><div><h3>حالة الاتصال السحابي</h3><p className="muted-copy">فحص إعدادات الاتصال. تسجيل الدخول والمزامنة السحابية اختياريان. لا تُرفع البيانات إلا بإجراء صريح، والأدلة محفوظة في مخزن خاص.</p></div><span className={supabaseConfig.configured ? "audit-pill" : "audit-pill risk-pill"}>{supabaseConfig.configured ? "الإعدادات موجودة" : "غير مهيأ"}</span></div><div className="summary-lines"><SummaryLine label="عنوان Supabase" value={supabaseConfig.configured ? supabaseConfig.config.url : "لم يتم ضبطه"}/><SummaryLine label="مفتاح المتصفح" value={supabaseConfig.configured ? "موجود — مفتاح anon/publishable فقط" : supabaseConfig.reason === "unsafe-key" ? "مرفوض: يبدو أنه مفتاح سري" : "غير موجود أو غير صالح"}/><SummaryLine label="حالة المصادقة والمزامنة" value="المزامنة اختيارية — لا رفع تلقائي"/></div></section><CloudAuthPanel config={supabaseConfig} onSessionChange={setCloudSession} onFirmProvisioned={()=>setCloudWorkspaceRefresh(v=>v+1)}/>{supabaseConfig.configured&&<CloudWorkspacePanel key={cloudWorkspaceRefresh} config={supabaseConfig.config} session={cloudSession} db={db as unknown as CloudDB} onRestore={restored=>{setDB({...emptyDB,...(restored as unknown as DB),auditLog:Array.isArray(restored.auditLog)?restored.auditLog as AuditEvent[]:[],completionChecks:restored.completionChecks&&typeof restored.completionChecks==='object'?restored.completionChecks:{}});setSelectedEngagement('');setStorageLoadError('');setStoragePersistenceEnabled(true);setRawBackupDownloaded(false);setNotice('تم استرجاع بيانات المكتب من النسخة السحابية. راجعها قبل المتابعة.');}}/>}<div className="audit-content-grid"><div className="audit-card"><h3>المنهجية</h3><div className="summary-lines"><SummaryLine label="العملة الافتراضية" value="JOD — دينار أردني"/><SummaryLine label="المنطقة الزمنية" value="Asia/Amman"/><SummaryLine label="الإطار الافتراضي" value="يُحدد لكل مهمة"/><SummaryLine label="الخصوصية" value="تخزين محلي في المتصفح"/></div></div><div className="audit-card"><h3>إدارة البيانات المحلية</h3><p className="muted-copy">تُحفظ سجلات العملاء وملفات التدقيق في LocalStorage ضمن هذا المتصفح، والتخزين المحلي غير مشفر على مستوى التطبيق. مسح بيانات المتصفح أو استخدام جهاز آخر قد يؤدي إلى فقدانها؛ لا تستخدم بيانات عملاء حساسة فعلية في هذه النسخة.</p><div className="stack-actions"><button className="audit-secondary" onClick={()=>download('brp-local-data.json',JSON.stringify(db,null,2))}>تصدير البيانات</button><label className="audit-secondary restore-upload">استعادة نسخة<input type="file" accept=".json,application/json" onChange={e=>restoreBackup(e.target.files?.[0])}/></label><button className="audit-danger" onClick={()=>{if(window.confirm('سيتم حذف كل البيانات المحلية من هذا المتصفح. هل أنت متأكد؟')){setDB(emptyDB);setSelectedEngagement('');setNotice('تم مسح بيانات النموذج المحلي.');}}}>مسح كل البيانات المحلية</button></div>{restoreError&&<p className="audit-warning">{restoreError}</p>}</div></div><section className="audit-card"><h3>حدود النسخة الحالية قبل الإنتاج</h3><div className="check-grid"><div>✓ تسجيل الدخول السحابي متاح عند إعداد Supabase؛ الوضع المحلي لا يوفّر هوية أو صلاحيات مستخدمين.</div><div>✓ أدوار المكاتب تُطبّق على الخادم في الوضع السحابي؛ يلزم إكمال اختبار حسابين حقيقيين في مكتبين منفصلين.</div><div>✓ مزامنة لقطات مساحة المكتب اختيارية وتتطلب إعداد Supabase؛ ليست تعاونًا لحظيًا أو دمجًا على مستوى السجل.</div><div>! بيانات LocalStorage غير مشفّرة على مستوى التطبيق؛ لا تخزّن ملفات عملاء حساسة على جهاز مشترك أو غير مُدار.</div><div>✓ رفع الأدلة السحابي يستخدم مخزنًا خاصًا وضوابط نطاق المكتب والملف؛ يلزم اختبار دورة الرفع والتنزيل والاحتفاظ على بيئة تجريبية.</div><div>! سجل النشاط المحلي قابل للتعديل؛ لا يُعد سجل تدقيق غير قابل للتلاعب أو بديلًا عن سجل خادمي موثوق.</div><div>! فحص البرمجيات الخبيثة والاحتفاظ القانوني وخطة استعادة الكوارث ومراجعة الاختراق المستقلة ما زالت بوابات إطلاق مطلوبة.</div><div>! دعوات أعضاء المكاتب يجب أن تبقى معطّلة حتى اجتياز اختبارات الأدوار والعزل الحية.</div></div></section><section className="audit-card"><div className="audit-card-head"><div><h3>سجل النشاط المحلي</h3><p>آخر 2,000 حدث مسجل داخل هذا المتصفح؛ ليس سجلًا غير قابل للتعديل أو بديلًا عن سجل خادمي.</p></div><button className="audit-secondary" onClick={()=>download('brp-audit-log.csv',['timestamp,action,entity,details,engagement_id',...(db.auditLog||[]).map(x=>[JSON.stringify(x.at),JSON.stringify(x.action),JSON.stringify(x.entity),JSON.stringify(x.details),JSON.stringify(x.engagementId||'')].join(','))].join('\n'),'text/csv;charset=utf-8')}>تصدير سجل النشاط</button></div>{(db.auditLog||[]).length?<div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>الوقت</th><th>الإجراء</th><th>الكيان</th><th>التفاصيل</th></tr></thead><tbody>{(db.auditLog||[]).slice(0,100).map(x=><tr key={x.id}><td>{new Date(x.at).toLocaleString('ar-JO')}</td><td>{x.action}</td><td>{x.entity}</td><td>{x.details}</td></tr>)}</tbody></table></div>:<Empty text="لم تُسجل أحداث بعد."/>}</section></>}
+   {module==='settings'&&<><SectionIntro text="إعدادات المكتب والمنهجية والاتصال السحابي. بيانات التدقيق المهنية تبقى محلية حتى تفعيل المزامنة الآمنة."/><section className="audit-card"><div className="audit-card-head"><div><h3>حالة الاتصال السحابي</h3><p className="muted-copy">فحص إعدادات الاتصال. تسجيل الدخول والمزامنة السحابية اختياريان. لا تُرفع البيانات إلا بإجراء صريح، والأدلة محفوظة في مخزن خاص.</p></div><span className={supabaseConfig.configured ? "audit-pill" : "audit-pill risk-pill"}>{supabaseConfig.configured ? "الإعدادات موجودة" : "غير مهيأ"}</span></div><div className="summary-lines"><SummaryLine label="عنوان Supabase" value={supabaseConfig.configured ? supabaseConfig.config.url : "لم يتم ضبطه"}/><SummaryLine label="مفتاح المتصفح" value={supabaseConfig.configured ? "موجود — مفتاح anon/publishable فقط" : supabaseConfig.reason === "unsafe-key" ? "مرفوض: يبدو أنه مفتاح سري" : "غير موجود أو غير صالح"}/><SummaryLine label="حالة المصادقة والمزامنة" value="المزامنة اختيارية — لا رفع تلقائي"/></div></section><CloudAuthPanel config={supabaseConfig} onSessionChange={setCloudSession} onFirmProvisioned={()=>setCloudWorkspaceRefresh(v=>v+1)}/>{supabaseConfig.configured&&<CloudWorkspacePanel key={cloudWorkspaceRefresh} config={supabaseConfig.config} session={cloudSession} db={db as unknown as CloudDB} onRestore={restored=>{setDB({...emptyDB,...(restored as unknown as DB),auditLog:Array.isArray(restored.auditLog)?restored.auditLog as AuditEvent[]:[],completionChecks:restored.completionChecks&&typeof restored.completionChecks==='object'?restored.completionChecks:{}});setSelectedEngagement('');setStorageLoadError('');setStoragePersistenceEnabled(true);setRawBackupDownloaded(false);setNotice('تم استرجاع بيانات المكتب من النسخة السحابية. راجعها قبل المتابعة.');}}/>}<div className="audit-content-grid"><div className="audit-card"><h3>المنهجية</h3><div className="summary-lines"><SummaryLine label="العملة الافتراضية" value="JOD — دينار أردني"/><SummaryLine label="المنطقة الزمنية" value="Asia/Amman"/><SummaryLine label="الإطار الافتراضي" value="يُحدد لكل مهمة"/><SummaryLine label="الخصوصية" value="تخزين محلي في المتصفح"/></div></div><div className="audit-card"><h3>إدارة البيانات المحلية</h3><p className="muted-copy">تُحفظ مساحة العمل في IndexedDB بعد تشفير AES-GCM. تعتمد إمكانية الاستعادة على كلمة المرور والنسخة الاحتياطية المشفّرة؛ حماية الجهاز وكلمة المرور وخطة النسخ الاحتياطي تظل مطلوبة.</p><div className="stack-actions"><button className="audit-primary" onClick={()=>void exportEncryptedBackup()}>تنزيل نسخة احتياطية مشفّرة</button><button className="audit-secondary" onClick={()=>{if(!window.confirm('سيصدّر هذا الخيار ملف JSON غير مشفّر يحتوي بيانات العمل. احفظه في مكان آمن. هل تريد المتابعة؟'))return;download('brp-local-data-plaintext.json',JSON.stringify(db,null,2));}}>تصدير JSON غير مشفّر</button><label className="audit-secondary restore-upload">استعادة نسخة مشفّرة<input type="file" accept=".json,application/json" onChange={e=>{void restoreVaultBackup(e.target.files?.[0]);e.currentTarget.value='';}}/></label><button className="audit-secondary" onClick={()=>void lockLocalVault()}>قفل المخزن المحلي</button><button className="audit-danger" onClick={()=>{if(window.confirm('سيتم حذف كل البيانات المحلية من هذا المتصفح. هل أنت متأكد؟')){setDB(emptyDB);setSelectedEngagement('');setNotice('تم مسح بيانات النموذج المحلي.');}}}>مسح كل البيانات المحلية</button></div>{restoreError&&<p className="audit-warning">{restoreError}</p>}</div></div><section className="audit-card"><div className="audit-card-head"><div><h3>سلامة سجل النشاط المحلي</h3><p className="muted-copy">تُربط أحداث السجل بسلسلة SHA-256 لكشف تعديلات لا تتوافق مع البصمات المحفوظة. تبقى هذه السلسلة محلية وليست سجلًا خادميًا غير قابل للتلاعب.</p></div><span className={auditChainHealth.valid?'audit-pill':'audit-pill risk-pill'}>{auditChainHealth.reason==='loading'?'جارٍ الفحص':auditChainHealth.valid?'البصمات سليمة':'تعذر التحقق'}</span></div><div className="summary-lines"><SummaryLine label="أحداث تم التحقق منها" value={String(auditChainHealth.checked)}/><SummaryLine label="أحداث بانتظار البصمة" value={String(auditChainHealth.unsealed)}/><SummaryLine label="نتيجة التحقق" value={auditChainHealth.reason}/></div><div className="stack-actions"><button className="audit-secondary" onClick={()=>void verifyAuditChain(db.auditLog).then(result=>{setAuditChainHealth(result);setNotice(result.valid?'اكتمل فحص سلسلة البصمات.':'فشل التحقق من سلسلة البصمات؛ احتفظ بنسخة ولا تعاود ختم السجل.');})}>فحص السلسلة الآن</button><button className="audit-secondary" onClick={()=>void auditChainCsv(db.auditLog).then(csv=>download('ledgerly-local-audit-chain.csv',csv,'text/csv;charset=utf-8'))}>تصدير سجل البصمات</button></div></section><section className="audit-card"><h3>حدود النسخة الحالية قبل الإنتاج</h3><div className="check-grid"><div>✓ تسجيل الدخول السحابي متاح عند إعداد Supabase؛ الوضع المحلي لا يوفّر هوية أو صلاحيات مستخدمين.</div><div>✓ أدوار المكاتب تُطبّق على الخادم في الوضع السحابي؛ يلزم إكمال اختبار حسابين حقيقيين في مكتبين منفصلين.</div><div>✓ مزامنة لقطات مساحة المكتب اختيارية وتتطلب إعداد Supabase؛ ليست تعاونًا لحظيًا أو دمجًا على مستوى السجل.</div><div>! بيانات LocalStorage غير مشفّرة على مستوى التطبيق؛ لا تخزّن ملفات عملاء حساسة على جهاز مشترك أو غير مُدار.</div><div>✓ رفع الأدلة السحابي يستخدم مخزنًا خاصًا وضوابط نطاق المكتب والملف؛ يلزم اختبار دورة الرفع والتنزيل والاحتفاظ على بيئة تجريبية.</div><div>! سجل النشاط المحلي قابل للتعديل؛ لا يُعد سجل تدقيق غير قابل للتلاعب أو بديلًا عن سجل خادمي موثوق.</div><div>! فحص البرمجيات الخبيثة والاحتفاظ القانوني وخطة استعادة الكوارث ومراجعة الاختراق المستقلة ما زالت بوابات إطلاق مطلوبة.</div><div>! دعوات أعضاء المكاتب يجب أن تبقى معطّلة حتى اجتياز اختبارات الأدوار والعزل الحية.</div></div></section><section className="audit-card"><div className="audit-card-head"><div><h3>سجل النشاط المحلي</h3><p>آخر 2,000 حدث مسجل داخل هذا المتصفح؛ ليس سجلًا غير قابل للتعديل أو بديلًا عن سجل خادمي.</p></div><button className="audit-secondary" onClick={()=>download('brp-audit-log.csv',['timestamp,action,entity,details,engagement_id',...(db.auditLog||[]).map(x=>[JSON.stringify(x.at),JSON.stringify(x.action),JSON.stringify(x.entity),JSON.stringify(x.details),JSON.stringify(x.engagementId||'')].join(','))].join('\n'),'text/csv;charset=utf-8')}>تصدير سجل النشاط</button></div>{(db.auditLog||[]).length?<div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>الوقت</th><th>الإجراء</th><th>الكيان</th><th>التفاصيل</th></tr></thead><tbody>{(db.auditLog||[]).slice(0,100).map(x=><tr key={x.id}><td>{new Date(x.at).toLocaleString('ar-JO')}</td><td>{x.action}</td><td>{x.entity}</td><td>{x.details}</td></tr>)}</tbody></table></div>:<Empty text="لم تُسجل أحداث بعد."/>}</section></>}
    <footer className="audit-footer">Bank Reconciliation Pro · منصة أولية لإدارة أعمال التدقيق <span>•</span> لا تصدر رأيًا تدقيقيًا تلقائيًا <span>•</span> البيانات محلية</footer>
   </main>
   {storageLoadError&&<div className="ledgerly-recovery-overlay" role="alertdialog" aria-modal="true" aria-labelledby="ledgerly-recovery-title">
