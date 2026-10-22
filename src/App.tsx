@@ -94,6 +94,7 @@ function App() {
  const [storageError,setStorageError] = useState('');
  const [cloudSession,setCloudSession] = useState<CloudSession | null>(null);
  const [cloudWorkspaceRefresh,setCloudWorkspaceRefresh] = useState(0);
+ const [cloudGateDismissed, setCloudGateDismissed] = useState(false);
  const supabaseConfig = readSupabaseBrowserConfig({ VITE_SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY: import.meta.env.VITE_SUPABASE_ANON_KEY });
  useEffect(()=>{ if(!storagePersistenceEnabled)return; const error = persistLocalData(()=>localStorage, KEY, db); setStorageError(error || ''); },[db,storagePersistenceEnabled]);
  useEffect(()=>{ if(notice){const t=window.setTimeout(()=>setNotice(''),3500);return()=>window.clearTimeout(t);} },[notice]);
@@ -249,6 +250,21 @@ function App() {
  const title=modules.find(m=>m.id===module)?.label||'لوحة المتابعة';
  const noEngagement=module!=='dashboard'&&module!=='clients'&&module!=='engagements'&&module!=='settings'&&module!=='reconciliation'&&!activeEngagement;
  function headerActions(){ return <div className="audit-actions">{(module==='clients'||module==='engagements'||module==='planning'||module==='workpapers'||module==='evidence'||module==='findings')&&<button className="audit-primary" onClick={()=>startForm(module==='engagements'?{year:String(new Date().getFullYear()),type:'تدقيق سنوي',framework:'IFRS'}:module==='planning'?{likelihood:'متوسط',impact:'متوسط'}:module==='findings'?{severity:'متوسطة'}:{})}>＋ إضافة جديد</button>}{module==='reports'&&<button className="audit-primary" onClick={()=>download('ledgerly-backup.json',JSON.stringify(db,null,2))}>تصدير نسخة احتياطية</button>}</div>; }
+ if (!cloudSession && !cloudGateDismissed) {
+  return <div dir="rtl" style={{minHeight:'100vh',display:'grid',placeItems:'center',padding:'24px',background:'#f6f4ef'}}>
+    <div style={{width:'min(100%, 860px)'}}>
+      <header style={{textAlign:'center',marginBottom:'20px'}}>
+        <div className="audit-brand" style={{justifyContent:'center',marginBottom:'16px'}}><div className="audit-logo">L</div><div><strong>Ledgerly</strong><small>Audit Practice Platform</small></div></div>
+        <h1 style={{marginBottom:'8px'}}>تسجيل الدخول إلى Ledgerly</h1>
+        <p className="muted-copy">سجّل الدخول إلى مساحة مكتبك، أو تابع بالوضع المحلي للتجربة فقط.</p>
+      </header>
+      <CloudAuthPanel config={supabaseConfig} onSessionChange={setCloudSession} onFirmProvisioned={()=>setCloudWorkspaceRefresh(v=>v+1)}/>
+      {!supabaseConfig.configured && <p className="audit-warning">المصادقة السحابية غير مهيأة بعد. يلزم ضبط VITE_SUPABASE_URL ومفتاح المتصفح العام في ملف .env.local ثم إعادة تشغيل التطبيق حتى تظهر حقول الدخول.</p>}
+      <button className="audit-secondary" style={{width:'100%',marginTop:'12px'}} onClick={()=>setCloudGateDismissed(true)}>متابعة بالوضع المحلي دون تسجيل الدخول</button>
+      <p className="cloud-auth-note" style={{textAlign:'center',marginTop:'12px'}}>الوضع المحلي لا يربط بياناتك بحساب سحابي؛ لا تستخدم بيانات تدقيق حقيقية قبل إكمال اختبارات الأمان.</p>
+    </div>
+  </div>;
+ }
  return <div className={`audit-shell ${collapsed?'nav-collapsed':''}`} dir="rtl">
   <aside className="audit-sidebar"><div className="audit-brand"><div className="audit-logo">L</div>{!collapsed&&<div><strong>Ledgerly</strong><small>Audit Practice Platform</small></div>}</div><button className="audit-collapse" onClick={()=>setCollapsed(v=>!v)}>{collapsed?'☰':'إخفاء القائمة ‹'}</button><nav>{modules.map(m=><button key={m.id} className={module===m.id?'active':''} onClick={()=>{setModule(m.id);setShowForm(false);setQuery('');}} title={m.label}><span className="nav-icon">{m.icon}</span>{!collapsed&&<span>{m.label}</span>}</button>)}</nav><div className="audit-sidebar-foot">{!collapsed&&<><span className="status-dot"/> وضع محلي تجريبي<small>البيانات محفوظة في هذا المتصفح فقط</small></>}</div></aside>
   <main className="audit-main"><header className="audit-topbar"><div><div className="audit-breadcrumb">مساحة العمل / {title}</div><h1>{title}</h1></div><div className="audit-top-actions"><label className="engagement-picker"><span>ملف التدقيق الحالي</span><select value={activeEngagement?.id||''} onChange={e=>setSelectedEngagement(e.target.value)}><option value="">اختر ملفًا</option>{db.engagements.map(e=><option key={e.id} value={e.id}>{db.clients.find(c=>c.id===e.clientId)?.name||'عميل'} · {e.year}</option>)}</select></label><button className="audit-icon-button" title="تصدير نسخة احتياطية" onClick={()=>download('ledgerly-backup.json',JSON.stringify(db,null,2))}>⇩</button></div></header>
