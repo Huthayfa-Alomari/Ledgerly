@@ -3,7 +3,7 @@ import type { SupabaseConfigResult } from './lib/supabase-config';
 
 type CloudUser = { id: string; email?: string };
 export type CloudSession = { access_token: string; refresh_token: string; expires_at?: number; expires_in?: number; user?: CloudUser };
-type Props = { config: SupabaseConfigResult; onSessionChange?: (session: CloudSession | null) => void };
+type Props = { config: SupabaseConfigResult; onSessionChange?: (session: CloudSession | null) => void; onFirmProvisioned?: () => void };
 
 const SESSION_KEY = 'ledgerly.auth.session.v1';
 
@@ -22,7 +22,7 @@ async function authRequest(config: Extract<SupabaseConfigResult, { configured: t
   return data;
 }
 
-export default function CloudAuthPanel({ config, onSessionChange }: Props) {
+export default function CloudAuthPanel({ config, onSessionChange, onFirmProvisioned }: Props) {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -144,6 +144,7 @@ export default function CloudAuthPanel({ config, onSessionChange }: Props) {
         throw new Error(message);
       }
       setNotice('تم إنشاء مكتب التدقيق وربط حسابك بدور مدير المكتب. البيانات المهنية ما زالت محلية ولم تُزامن بعد.');
+      onFirmProvisioned?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'تعذرت تهيئة المكتب.');
     } finally {
