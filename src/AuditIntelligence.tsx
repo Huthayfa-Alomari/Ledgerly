@@ -271,13 +271,13 @@ export default function AuditIntelligence(props: Props) {
           {journalAnalysis.issues.length ? <div className="audit-intel-issue-list">{journalAnalysis.issues.map(item => <article className="audit-intel-issue" key={item.id}>
             <div className="audit-intel-issue-top"><strong>{item.title}</strong><span className={'audit-pill ' + severityClass(item.severity)}>{severityName(item.severity)} · {item.count} صف</span></div>
             <p>{item.detail}</p><small><b>الخطوة المقترحة:</b> {item.action}</small>
-            {item.rowNumbers?.length > 0 && <small className="audit-intel-rowlist">أمثلة الصفوف: {item.rowNumbers.slice(0, 15).join('، ')}{item.rowNumbers.length > 15 ? ' …' : ''}</small>}
+            {(item.rowNumbers ?? []).length > 0 && <small className="audit-intel-rowlist">أمثلة الصفوف: {(item.rowNumbers ?? []).slice(0, 15).join('، ')}{(item.rowNumbers ?? []).length > 15 ? ' …' : ''}</small>}
           </article>)}</div> : <div className="audit-intel-clear">✓ لم تظهر مؤشرات وفق القواعد الحالية. راجع صلاحية الاختبارات وملاءمتها للمهمة.</div>}
           <div className="stack-actions">
             <button className="audit-primary" onClick={() => downloadFile('ledgerly-journal-screening.json', JSON.stringify({ filename: importedJournal.filename, warnings: importedJournal.warnings, scannedCount: journalAnalysis.scannedCount, results: journalAnalysis }, null, 2), 'application/json;charset=utf-8')}>تصدير نتائج الفحص</button>
             <button className="audit-secondary" onClick={() => downloadCsv('ledgerly-journal-exceptions.csv', [
               ['rule_id', 'title', 'severity', 'count', 'row_numbers', 'detail', 'recommended_action'],
-              ...journalAnalysis.issues.map(row => [row.id, row.title, severityName(row.severity), row.count, row.rowNumbers.join(';'), row.detail, row.action]),
+              ...journalAnalysis.issues.map(row => [row.id, row.title, severityName(row.severity), row.count, (row.rowNumbers ?? []).join(';'), row.detail, row.action]),
             ])}>تنزيل مؤشرات الفحص CSV</button>
           </div>
         </>}
