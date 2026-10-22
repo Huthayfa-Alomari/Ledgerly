@@ -37,7 +37,8 @@
           ]
         }
       ],
-      "artifactName": "Ledgerly-Setup-${version}-${arch}.${ext}"
+      "artifactName": "Ledgerly-Setup-${version}-${arch}.${ext}",
+      "icon": "build/icon.ico"
     },
     "nsis": {
       "oneClick": false,

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Ledgerly">
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#18253B"/>
+      <stop offset="1" stop-color="#0B1220"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="108" fill="url(#plate)"/>
+  <g transform="translate(-6 0)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M148 120V372H352" stroke="#F2F6F3" stroke-width="58"/>
+    <path d="M224 222L270 272L384 116" stroke="#3DDC97" stroke-width="52"/>
+  </g>
+</svg>

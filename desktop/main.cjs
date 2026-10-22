@@ -12,6 +12,7 @@ function createWindow() {
     minHeight: 720,
     backgroundColor: '#101827',
     autoHideMenuBar: true,
+    ...(app.isPackaged ? {} : { icon: path.join(__dirname, 'build', 'icon.png') }),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
