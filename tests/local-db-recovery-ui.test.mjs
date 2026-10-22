@@ -19,7 +19,7 @@ test('recovery UI offers a raw export before reinitializing unreadable legacy da
   
   
   assert.match(app, /setStorageLoadError\(''\);setStoragePersistenceEnabled\(true\)/);
-  assert.match(app, /if\(!vaultRawBackupDownloaded\)/);
+  assert.match(app, /disabled=\{!vaultRawBackupDownloaded\}/);
 });
 
 test('backup restore validates JSON collections and only then re-enables persistence', () => {

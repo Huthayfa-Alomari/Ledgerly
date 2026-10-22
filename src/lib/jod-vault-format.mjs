@@ -35,6 +35,7 @@ function encodeFields(row, fields) {
     if (fils === null) continue;
     output[stored] = fils;
     output['__kind_' + stored] = typeof output[source] === 'string' ? 'string' : 'number';
+    if (typeof output[source] === 'string') output['__text_' + stored] = String(output[source]);
     delete output[source];
   }
   return output;
@@ -44,9 +45,10 @@ function decodeFields(row, fields) {
   for (const [source, stored] of fields) {
     if (!Number.isSafeInteger(output[stored])) continue;
     const value = fromFils(output[stored]);
-    output[source] = output['__kind_' + stored] === 'string' ? value.toFixed(3) : value;
+    output[source] = output['__kind_' + stored] === 'string' ? (output['__text_' + stored] ?? value.toFixed(3)) : value;
     delete output[stored];
     delete output['__kind_' + stored];
+    delete output['__text_' + stored];
   }
   return output;
 }
