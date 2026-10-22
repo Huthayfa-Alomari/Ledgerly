@@ -32,7 +32,7 @@ textarea:focus-visible, summary:focus-visible {
   color: transparent !important;
   font-size: 0 !important;
   border: 0 !important;
-  background: #101827 url('../favicon.svg') center / cover no-repeat !important;
+  background: #101827 url('./ledgerly-icon.svg') center / cover no-repeat !important;
   border-radius: 12px;
 }
 .audit-brand strong { color: #F8FAFC; }
@@ -159,7 +159,7 @@ textarea:focus-visible, summary:focus-visible {
   color: transparent !important;
   font-size: 0 !important;
   border: 0 !important;
-  background: #101827 url('../favicon.svg') center / cover no-repeat !important;
+  background: #101827 url('./ledgerly-icon.svg') center / cover no-repeat !important;
   border-radius: 13px;
 }
 .brand strong { color: #101827; }
