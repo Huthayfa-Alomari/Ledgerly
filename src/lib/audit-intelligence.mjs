@@ -20,8 +20,9 @@ function firstMatch(headers, aliases) {
     if (exact) return exact.header;
   }
   for (const key of keys) {
-    const contains = normalized.find(h => h.key.includes(key) || key.includes(h.key));
-    if (contains && contains.key.length > 2) return contains.header;
+    if (key.length < 4) continue;
+    const contains = normalized.find(h => h.key.length >= 4 && (h.key.includes(key) || key.includes(h.key)));
+    if (contains) return contains.header;
   }
   return undefined;
 }
@@ -104,6 +105,10 @@ export function normalizeJournalRows(records) {
     let debit = debitH ? parseAuditAmount(get(debitH)) : null;
     let credit = creditH ? parseAuditAmount(get(creditH)) : null;
     const amount = amountH ? parseAuditAmount(get(amountH)) : null;
+    if (debitH && creditH) {
+      if (get(debitH) === null || get(debitH) === undefined || String(get(debitH)).trim() === '') debit = 0;
+      if (get(creditH) === null || get(creditH) === undefined || String(get(creditH)).trim() === '') credit = 0;
+    }
     let classification = 'debit-credit-columns';
     if (!debitH && !creditH && amountH && directionH) {
       const direction = cleanText(get(directionH));

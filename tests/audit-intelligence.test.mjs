@@ -37,6 +37,13 @@ test('normalizes Arabic journal headers and Arabic/Persian numerals', () => {
   assert.deepEqual(result.warnings, []);
 });
 
+test('blank side in paired debit-credit columns is normalized as zero', () => {
+  const result = normalizeJournalRows([{ Date: '2026-01-01', Account: '100', Description: 'Test', Debit: '125', Credit: '' }]);
+  assert.equal(result.rows[0].debit, 125);
+  assert.equal(result.rows[0].credit, 0);
+  assert.equal(result.rows[0].classification, 'debit-credit-columns');
+});
+
 test('does not guess debit or credit for ambiguous amount-only files', () => {
   const result = normalizeJournalRows([{ Date: '2026-01-01', Account: '100', Description: 'Test', Amount: '500' }]);
   assert.equal(result.rows[0].classification, 'ambiguous-amount');
