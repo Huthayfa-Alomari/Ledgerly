@@ -33,3 +33,22 @@ test('successful first-firm setup refreshes the cloud workspace without requirin
   assert.match(app, /onFirmProvisioned=\{\(\)=>setCloudWorkspaceRefresh\(v=>v\+1\)\}/);
   assert.match(app, /key=\{cloudWorkspaceRefresh\}/);
 });
+
+test('first launch shows a login gate with an explicit local-only escape hatch', () => {
+  const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  assert.match(app, /تسجيل الدخول إلى Ledgerly/);
+  assert.match(app, /if \(!cloudSession && !cloudGateDismissed\)/);
+  assert.match(app, /متابعة بالوضع المحلي دون تسجيل الدخول/);
+  assert.match(app, /VITE_SUPABASE_URL/);
+});
+
+test('local audit evidence can attach browser-stored files and preview images', () => {
+  const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  const vault = readFileSync(new URL('../src/lib/local-evidence-files.ts', import.meta.url), 'utf8');
+  assert.match(app, /إرفاق صورة أو ملف/);
+  assert.match(app, /<LocalEvidenceAttachment row=\{e\} \/>/);
+  assert.match(app, /saveLocalEvidenceFile\(evidenceFile\)/);
+  assert.match(vault, /indexedDB\.open/);
+  assert.match(vault, /25 \* 1024 \* 1024/);
+  assert.doesNotMatch(vault, /service_role|sb_secret_/i);
+});
