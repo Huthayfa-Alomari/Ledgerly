@@ -25,3 +25,11 @@ test('first-firm bootstrap requires an authenticated caller and serializes first
   assert.match(migration, /GRANT EXECUTE ON FUNCTION public\.ledgerly_bootstrap_first_firm\(uuid, text, text\) TO service_role/);
   assert.match(edgeFunction, /Deno\.env\.get\("SUPABASE_SERVICE_ROLE_KEY"\)/);
 });
+
+test('successful first-firm setup refreshes the cloud workspace without requiring a page reload', () => {
+  const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  assert.match(panel, /onFirmProvisioned\?: \(\) => void/);
+  assert.match(panel, /onFirmProvisioned\?\.\(\)/);
+  assert.match(app, /onFirmProvisioned=\{\(\)=>setCloudWorkspaceRefresh\(v=>v\+1\)\}/);
+  assert.match(app, /key=\{cloudWorkspaceRefresh\}/);
+});
