@@ -235,7 +235,7 @@ export function runDataTrustChecks(rows, options = {}) {
   if (Number.isFinite(expectedRowCount) && expectedRowCount >= 0 && expectedRowCount !== data.length) issues.push(issue('tb-source-row-count', 'high', 'عدد الصفوف لا يطابق المصدر', 1, 'المستورد ' + data.length + ' صفًا بينما يتوقع المصدر ' + expectedRowCount + '.', 'تحقق من الفلاتر والصفوف المخفية والورقة الصحيحة قبل الاعتماد.'));
   const expectedTotals = options?.sourceTotals;
   if (expectedTotals && typeof expectedTotals === 'object') {
-    const mismatches = fields.filter(field => expectedTotals[field] !== undefined && Number.isFinite(Number(expectedTotals[field])) && Math.abs(totals[field] - Number(expectedTotals[field])) >= TOLERANCE);
+    const mismatches = fields.filter(field => availableFields.includes(field) && expectedTotals[field] !== undefined && Number.isFinite(Number(expectedTotals[field])) && Math.abs(totals[field] - Number(expectedTotals[field])) >= TOLERANCE);
     if (mismatches.length) issues.push({ ...issue('tb-source-totals-mismatch', 'high', 'إجماليات المصدر لا تطابق البيانات المستوردة', mismatches.length, 'تختلف الحقول التالية عن إجماليات المصدر المعلنة: ' + mismatches.join('، ') + '.', 'أعد مراجعة نطاق التصدير وتعيين الأعمدة والفلاتر؛ لا تبدأ التحليل قبل تفسير الفروق.'), fields: mismatches });
   }
   const unmappedCodes = [...new Set(Array.isArray(options?.unmappedAccountCodes) ? options.unmappedAccountCodes.map(value => String(value).trim()).filter(Boolean) : [])];
