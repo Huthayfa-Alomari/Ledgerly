@@ -265,6 +265,8 @@ export default function AuditIntelligence(props: Props) {
           <Kpi label="صفوف الميزان" value={dataTrust.rowCount} note="الحسابات المستوردة" />
           <Kpi label="إجمالي المدين الختامي" value={formatMoney(dataTrust.totals.closingDebit)} note="من البيانات المحلية" />
           <Kpi label="إجمالي الدائن الختامي" value={formatMoney(dataTrust.totals.closingCredit)} note="من البيانات المحلية" />
+          <Kpi label="فرق الأرصدة الافتتاحية" value={formatMoney(dataTrust.openingDifference)} note="صافي المدين ناقص الدائن أول المدة" />
+          <Kpi label="فرق حركة الفترة" value={formatMoney(dataTrust.movementDifference)} note="صافي المدين ناقص الدائن للحركة" />
           <Kpi label="فرق المدين والدائن" value={formatMoney(dataTrust.closingDifference)} note="المتوقع أن يقترب من الصفر" />
         </div>
         {dataTrust.issues.length ? <div className="audit-intel-issue-list">{dataTrust.issues.map(item => <article className="audit-intel-issue" key={item.id}>
