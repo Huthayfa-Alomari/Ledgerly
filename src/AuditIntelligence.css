@@ -103,3 +103,6 @@
   .audit-intel-request-item>a{margin-inline-start:26px}
   .audit-ops-signature canvas{height:150px}
 }
+
+.audit-intel-screening-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:14px 0;align-items:end}
+.audit-intel-screening-options .audit-field{max-width:100%;}
