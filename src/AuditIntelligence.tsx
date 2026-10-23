@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react';
+import AuditOperationsPanels from './AuditOperationsPanels';
+import { buildWhatsappReminder } from './lib/audit-operations-engine.mjs';
 import * as XLSX from 'xlsx';
 import {
   analyzeJournalEntries,
@@ -19,7 +21,8 @@ type Evidence = { id: string; engagementId: string; title: string; type: string;
 type Finding = { id: string; engagementId: string; title: string; criteria: string; condition: string; effect: string; recommendation: string; severity: string; status: string };
 type Risk = { id: string; engagementId: string; title: string; area?: string; likelihood: string; impact: string; response: string; status: string };
 type DBShape = { workpapers: Workpaper[]; evidence: Evidence[]; findings: Finding[]; risks: Risk[]; trialBalance: TBRow[] };
-type RequestItem = { id: string; title: string; dueDate: string; done: boolean };
+type RequestItem = { id: string; title: string; dueDate: string; done: boolean; engagementId?: string; clientName?: string; phone?: string };
+type AuditOperationsState = { clientRequests: Array<Record<string, any>>; samplingRuns: Array<Record<string, any>>; accountMappings: Record<string, Record<string, any>>; bankProfiles: Array<Record<string, any>>; timeEntries: Array<Record<string, any>>; officeInvoices: Array<Record<string, any>>; fieldworkRecords: Array<Record<string, any>>; externalConfirmations: Array<Record<string, any>>; reportDrafts: Array<Record<string, any>> };
 type Props = {
   engagementId?: string;
   engagements: Engagement[];
@@ -29,7 +32,12 @@ type Props = {
   evidence: Evidence[];
   findings: Finding[];
   risks: Risk[];
+  operations: AuditOperationsState;
+  vaultPassphrase: string;
+  onOperationsChange: (operations: AuditOperationsState) => void;
+  onAddEvidence: (evidence: Evidence) => void;
   onOpenCopilot: () => void;
+  onOpenReconciliation: () => void;
 };
 type ImportedJournal = { filename: string; rows: ReturnType<typeof normalizeJournalRows>['rows']; warnings: string[]; fieldsDetected: string[] };
 
@@ -75,16 +83,25 @@ function Kpi({ label, value, note }: { label: string; value: string | number; no
 }
 
 export default function AuditIntelligence(props: Props) {
-  const { engagementId, engagements, clients, trialBalance, workpapers, evidence, findings, risks, onOpenCopilot } = props;
+  const { engagementId, engagements, clients, trialBalance, workpapers, evidence, findings, risks, operations, vaultPassphrase, onOperationsChange, onAddEvidence, onOpenCopilot, onOpenReconciliation } = props;
   const [importedJournal, setImportedJournal] = useState<ImportedJournal | null>(null);
   const [fileBusy, setFileBusy] = useState(false);
   const [fileError, setFileError] = useState('');
   const [customRequest, setCustomRequest] = useState('');
   const [customDueDate, setCustomDueDate] = useState('');
-  const [requests, setRequests] = useState<RequestItem[]>(() => REQUEST_STARTERS.map((title, i) => ({ id: 'request-' + i, title, dueDate: '', done: false })));
+  const [customPhone, setCustomPhone] = useState('');
+  const [customClientName, setCustomClientName] = useState('');
   const [requestNotice, setRequestNotice] = useState('');
   const engagement = engagements.find(row => row.id === engagementId);
   const client = clients.find(row => row.id === engagement?.clientId);
+  const starterRequests: RequestItem[] = REQUEST_STARTERS.map((title, index) => ({ id: 'request-' + index, title, dueDate: '', done: false, engagementId, clientName: client?.name || '', phone: '' }));
+  const storedRequests = (operations.clientRequests || []).filter(row => row.engagementId === engagementId) as RequestItem[];
+  const requests: RequestItem[] = storedRequests.length ? storedRequests : starterRequests;
+  const updateOperations = (patch: Partial<AuditOperationsState>) => onOperationsChange({ ...operations, ...patch });
+  const saveRequests = (next: RequestItem[]) => {
+    const otherRequests = (operations.clientRequests || []).filter(row => row.engagementId !== engagementId);
+    updateOperations({ clientRequests: [...otherRequests, ...next] });
+  };
   const scoped = <T extends { engagementId: string }>(rows: T[]) => engagementId ? rows.filter(row => row.engagementId === engagementId) : [];
   const currentTB = scoped(trialBalance);
   const currentWorkpapers = scoped(workpapers);
@@ -163,16 +180,19 @@ export default function AuditIntelligence(props: Props) {
   function addRequest() {
     const title = customRequest.trim();
     if (!title) { setRequestNotice('اكتب اسم المستند المطلوب أولًا.'); return; }
-    setRequests(previous => [...previous, { id: 'custom-' + Date.now(), title, dueDate: customDueDate, done: false }]);
-    setCustomRequest('');
-    setCustomDueDate('');
-    setRequestNotice('أُضيف الطلب إلى القائمة المحلية. صدّر القائمة للاحتفاظ بها خارج هذه الجلسة.');
+    const next: RequestItem = {
+      id: 'request-' + Date.now(), title, dueDate: customDueDate, done: false,
+      engagementId, clientName: customClientName.trim() || client?.name || '', phone: customPhone.trim(),
+    };
+    saveRequests([...requests, next]);
+    setCustomRequest(''); setCustomDueDate(''); setCustomPhone(''); setCustomClientName('');
+    setRequestNotice('تم حفظ الطلب داخل المخزن المشفّر. تحقق من رقم المستلم قبل فتح تذكير واتساب.');
   }
 
   function exportRequests() {
     downloadCsv('ledgerly-client-document-requests.csv', [
-      ['request_id', 'اسم المستند المطلوب', 'تاريخ الاستحقاق', 'الحالة'],
-      ...requests.map(row => [row.id, row.title, row.dueDate, row.done ? 'مستلم للمراجعة' : 'بانتظار المستند']),
+      ['request_id', 'engagement_id', 'اسم العميل', 'اسم المستند المطلوب', 'تاريخ الاستحقاق', 'رقم التواصل', 'الحالة'],
+      ...requests.map(row => [row.id, row.engagementId || '', row.clientName || '', row.title, row.dueDate, row.phone || '', row.done ? 'مستلم للمراجعة' : 'بانتظار المستند']),
     ]);
   }
 
@@ -341,14 +361,22 @@ export default function AuditIntelligence(props: Props) {
         <div className="audit-intel-request-add">
           <label className="audit-field"><span>المستند المطلوب</span><input value={customRequest} onChange={event => setCustomRequest(event.target.value)} placeholder="مثال: مطابقة رصيد الموردين بتاريخ الإقفال" /></label>
           <label className="audit-field"><span>تاريخ الاستحقاق</span><input type="date" value={customDueDate} onChange={event => setCustomDueDate(event.target.value)} /></label>
+          <label className="audit-field"><span>اسم المستلم (اختياري)</span><input value={customClientName} onChange={event => setCustomClientName(event.target.value)} placeholder={client?.name || 'اسم جهة الاتصال'} /></label>
+          <label className="audit-field"><span>رقم واتساب الدولي (اختياري)</span><input value={customPhone} onChange={event => setCustomPhone(event.target.value)} placeholder="+9627..." /></label>
           <button className="audit-primary" onClick={addRequest}>إضافة إلى القائمة</button>
         </div>
         {requestNotice && <p className="muted-copy" role="status">{requestNotice}</p>}
-        <div className="audit-intel-request-list">{requests.map(row => <label key={row.id} className={row.done ? 'is-done' : ''}>
-          <input type="checkbox" checked={row.done} onChange={event => setRequests(previous => previous.map(item => item.id === row.id ? { ...item, done: event.target.checked } : item))} />
-          <span>{row.title}<small>{row.dueDate ? 'الاستحقاق: ' + row.dueDate : 'لم يُحدد تاريخ استحقاق'}</small></span>
-          <b>{row.done ? 'مستلم للمراجعة' : 'بانتظار المستند'}</b>
-        </label>)}</div>
+        <div className="audit-intel-request-list">{requests.map(row => {
+          const reminder = buildWhatsappReminder({ phone: row.phone || '', firmName: 'مكتب التدقيق', clientName: row.clientName || client?.name || 'العميل', requestTitle: row.title, dueDate: row.dueDate });
+          return <div key={row.id} className="audit-intel-request-item">
+            <label className={row.done ? 'is-done' : ''}>
+              <input type="checkbox" checked={row.done} onChange={event => saveRequests(requests.map(item => item.id === row.id ? { ...item, done: event.target.checked } : item))} />
+              <span>{row.title}<small>{row.dueDate ? 'الاستحقاق: ' + row.dueDate : 'لم يُحدد تاريخ استحقاق'}{row.phone ? ' · ' + row.phone : ''}</small></span>
+              <b>{row.done ? 'مستلم للمراجعة' : 'بانتظار المستند'}</b>
+            </label>
+            {row.phone && <a href={reminder.url} target="_blank" rel="noreferrer">فتح تذكير واتساب</a>}
+          </div>;
+        })}</div>
         <button className="audit-secondary" onClick={exportRequests}>تصدير قائمة الطلبات CSV</button>
       </section>
 
@@ -367,6 +395,19 @@ export default function AuditIntelligence(props: Props) {
         <div className="stack-actions"><button className="audit-primary" onClick={onOpenCopilot}>فتح مساعد التدقيق الحالي</button><button className="audit-secondary" onClick={() => downloadFile('ledgerly-next-audit-actions.json', JSON.stringify({ engagement: client?.name, year: engagement?.year, actions: assistantItems }, null, 2), 'application/json;charset=utf-8')}>تصدير خطوات المتابعة المقترحة</button></div>
       </section>
     </>}
+    <AuditOperationsPanels
+      engagementId={engagementId}
+      engagement={engagement}
+      client={client}
+      trialBalance={currentTB}
+      journalRows={importedJournal?.rows || []}
+      journalFileName={importedJournal?.filename || ''}
+      operations={operations}
+      vaultPassphrase={vaultPassphrase}
+      onOperationsChange={onOperationsChange}
+      onAddEvidence={onAddEvidence}
+      onOpenReconciliation={onOpenReconciliation}
+    />
     <p className="audit-intel-disclaimer">حالة التطوير: مركز محلي أولي قابل للاختبار. لا تستخدم بيانات عملاء حقيقية حتى اكتمال مراجعة التشفير، وصلاحيات المستخدمين، وعزل المكاتب، والنسخ الاحتياطي والاستعادة، والتحقق المهني من القواعد.</p>
   </div>;
 }

@@ -56,3 +56,50 @@
 .audit-intel-disclaimer{margin:0;padding:12px 15px;color:#826b45;background:#fffbf3;border:1px solid #ead9b8;border-radius:10px;font-size:12px;line-height:1.8}
 @media(max-width:900px){.audit-intel-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.audit-intel-hero{flex-direction:column}.audit-intel-hero-actions{width:100%;flex-direction:row;flex-wrap:wrap}.audit-intel-issue-list{grid-template-columns:1fr}}
 @media(max-width:620px){.audit-intel-kpis{grid-template-columns:1fr 1fr;gap:8px}.audit-intel-kpi{padding:12px}.audit-intel-kpi>strong{font-size:18px}.audit-intel-tools{grid-template-columns:1fr}.audit-intel-request-add{grid-template-columns:1fr}.audit-intel-request-list>label{grid-template-columns:auto minmax(0,1fr)}.audit-intel-request-list>label b{grid-column:2}.audit-intel-hero{padding:19px}}
+
+
+.audit-operations-panels{display:flex;flex-direction:column;gap:18px;margin-top:18px}
+.audit-operations-section{min-width:0;break-inside:avoid}
+.audit-operations-section h4{margin:18px 0 10px;color:#17324d}
+.audit-operations-section input,.audit-operations-section select,.audit-operations-section textarea{max-width:100%;min-width:0}
+.audit-operations-section .audit-intel-tools{margin:12px 0}
+.audit-operations-section .audit-intel-tools .audit-field{min-width:0}
+.audit-operations-section .audit-table-wrap{margin-top:14px}
+.audit-operations-section .audit-intel-banner{line-height:1.9}
+.audit-operations-section .audit-intel-issue{break-inside:avoid}
+.audit-operations-section .audit-intel-kpi strong{font-variant-numeric:tabular-nums}
+.audit-intel-request-item{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:7px 10px;border:1px solid #e5e9ef;border-radius:11px;background:#fff}
+.audit-intel-request-item>label{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;flex:1;min-width:min(100%,320px);padding:5px;border:0;background:transparent}
+.audit-intel-request-item>label input{accent-color:#245c4c;width:16px;height:16px}
+.audit-intel-request-item>label span{font-size:13px;font-weight:600;line-height:1.5}
+.audit-intel-request-item>label small{display:block;color:#7a8494;font-size:11px;font-weight:400;margin-top:3px}
+.audit-intel-request-item>label b{font-size:11px;color:#826b45;font-weight:600}
+.audit-intel-request-item>a{font-size:12px;color:#245c4c;text-decoration:underline;white-space:nowrap}
+.audit-ops-signature{display:flex;flex-direction:column;gap:7px;margin:10px 0}
+.audit-ops-signature canvas{display:block;width:100%;max-width:720px;height:180px;background:#fff;border:1px solid #cbd5e1;border-radius:10px;touch-action:none}
+.audit-ops-signature>div{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.audit-ops-signature span{font-size:12px;color:#697386}
+.ledgerly-printable-report{background:#fff;border:1px solid #dfe5ed;border-radius:12px;padding:24px;color:#1f2937;line-height:1.9}
+.ledgerly-printable-report header{border-bottom:2px solid #17324d;margin-bottom:15px;padding-bottom:10px}
+.ledgerly-printable-report h1{font-size:22px;color:#17324d;margin:0}
+.ledgerly-printable-report header p{color:#a4231e;font-weight:800;letter-spacing:.08em;margin:3px 0}
+.ledgerly-printable-report h2{font-size:16px;color:#17324d;margin:18px 0 8px}
+.ledgerly-printable-report table{width:100%;border-collapse:collapse;margin:12px 0;font-size:12px}
+.ledgerly-printable-report th,.ledgerly-printable-report td{border:1px solid #cbd5e1;padding:7px;text-align:right;vertical-align:top}
+.ledgerly-printable-report th{background:#e7edf4;color:#17324d}
+@media print{
+  @page{size:A4;margin:14mm}
+  body *{visibility:hidden!important}
+  #ledgerly-printable-report,#ledgerly-printable-report *{visibility:visible!important}
+  #ledgerly-printable-report{display:block!important;position:fixed!important;inset:0!important;width:100%!important;height:auto!important;overflow:visible!important;border:0!important;border-radius:0!important;padding:0!important;margin:0!important;box-shadow:none!important;background:#fff!important;color:#111!important}
+  .ledgerly-printable-report table{break-inside:auto}
+  .ledgerly-printable-report tr{break-inside:avoid;break-after:auto}
+  .ledgerly-printable-report thead{display:table-header-group}
+}
+@media(max-width:760px){
+  .audit-intel-request-item{align-items:flex-start}
+  .audit-intel-request-item>label{grid-template-columns:auto minmax(0,1fr);min-width:100%}
+  .audit-intel-request-item>label b{grid-column:2}
+  .audit-intel-request-item>a{margin-inline-start:26px}
+  .audit-ops-signature canvas{height:150px}
+}
