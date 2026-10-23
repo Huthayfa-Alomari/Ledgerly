@@ -164,6 +164,7 @@ export function runDataTrustChecks(rows: any[], options?: DataTrustOptions): Tri
 export function analyzeJournalEntries(rows: JournalRow[], options?: JournalAnalysisOptions): JournalAnalysis;
 export function fingerprintTrialBalanceRows(rows: any[]): string;
 export function fingerprintAccountMappings(accountMappings: Record<string, any>, engagementId: string): string;
+export function fingerprintReportConfiguration(config?: { firmName?: string; auditorName?: string; periodEnd?: string; opinion?: string }): string;
 export function buildEvidenceLineage(workpapers: any[], evidence: any[], findings?: any[]): EvidenceLineage;
 export function buildQualityShield(input: {
   workpapers?: any[];
