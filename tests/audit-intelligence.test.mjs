@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   analyzeJournalEntries,
+  evaluateEngagementClosure,
   fingerprintTrialBalanceRows,
   buildEvidenceLineage,
   buildPartnerDashboard,
@@ -265,4 +266,64 @@ test('partner portfolio reports overdue client requests, workload and billed inv
   assert.equal(portfolio[0].hoursBudgetVariance, -1);
   assert.equal(portfolio[0].actualLaborCostJod, 160);
   assert.equal(portfolio[0].invoiceValueJod, 100.123);
+});
+
+
+test('journal normalization preserves the original worksheet row number across blank rows', () => {
+  const first = { Date: '2026-10-20', Description: 'First', Account: '5100', Debit: '1', Credit: '0' };
+  const fourth = { Date: '2026-10-23', Description: 'Fourth', Account: '5100', Debit: '2', Credit: '0' };
+  Object.defineProperty(first, '__sourceRowNumber', { value: 2, enumerable: false });
+  Object.defineProperty(fourth, '__sourceRowNumber', { value: 5, enumerable: false });
+  const result = normalizeJournalRows([first, {}, {}, fourth]);
+  assert.deepEqual(result.rows.map(row => row.rowNumber), [2, 5]);
+});
+
+test('finding evidence lineage validates the finding, workpaper and evidence chain', () => {
+  const workpapers = [{ id: 'wp-1', ref: 'WP-1', title: 'Revenue test' }];
+  const evidence = [{ id: 'ev-1', title: 'Invoice', reference: 'INV-1', workpaperRef: 'WP-1' }];
+  const findings = [
+    { id: 'f-1', title: 'Supported finding', workpaperRef: 'WP-1', evidenceIds: ['ev-1'] },
+    { id: 'f-2', title: 'Unlinked finding', workpaperRef: '', evidenceIds: [] },
+  ];
+  const lineage = buildEvidenceLineage(workpapers, evidence, findings);
+  assert.equal(lineage.findingsCount, 2);
+  assert.equal(lineage.fullyLinkedFindings, 1);
+  assert.equal(lineage.findingsWithoutWorkpaper, 1);
+  assert.equal(lineage.findingsWithoutEvidence, 1);
+  assert.equal(lineage.findingLinks[0].linked, true);
+  assert.equal(lineage.findingLinks[1].linked, false);
+});
+
+test('closure gate blocks unresolved finding-to-workpaper/evidence links', () => {
+  const workpapers = [{ id: 'wp-1', engagementId: 'e1', ref: 'WP-1', status: 'معتمد', procedure: 'Procedure', conclusion: 'Conclusion' }];
+  const evidence = [{ id: 'ev-1', engagementId: 'e1', workpaperRef: 'WP-1', title: 'Invoice' }];
+  const findings = [{ id: 'f-1', engagementId: 'e1', status: 'مغلقة', title: 'Finding', workpaperRef: '', evidenceIds: [] }];
+  const balancedTB = [
+    tbRow({ id: 'tb-cash', engagementId: 'e1', code: '1000', name: 'Cash', openingDebit: 100, openingCredit: 0, debit: 50, credit: 20, closingDebit: 130, closingCredit: 0 }),
+    tbRow({ id: 'tb-equity', engagementId: 'e1', code: '3000', name: 'Equity', openingDebit: 0, openingCredit: 100, debit: 20, credit: 50, closingDebit: 0, closingCredit: 130 }),
+  ];
+  const result = evaluateEngagementClosure({
+    engagementId: 'e1', workpapers, evidence, findings, risks: [], trialBalance: balancedTB, operations: {},
+    currentSourceFingerprint: fingerprintTrialBalanceRows(balancedTB),
+  });
+  assert.equal(result.allowed, false);
+  assert.ok(result.blockers.some(item => item.id === 'close-findings-no-workpaper'));
+  assert.ok(result.blockers.some(item => item.id === 'close-findings-no-evidence'));
+});
+
+test('closure gate can pass a complete administrative evidence chain while retaining professional-review caveats', () => {
+  const balancedTB = [
+    tbRow({ id: 'tb-cash', engagementId: 'e1', code: '1000', name: 'Cash', openingDebit: 100, openingCredit: 0, debit: 50, credit: 20, closingDebit: 130, closingCredit: 0 }),
+    tbRow({ id: 'tb-equity', engagementId: 'e1', code: '3000', name: 'Equity', openingDebit: 0, openingCredit: 100, debit: 20, credit: 50, closingDebit: 0, closingCredit: 130 }),
+  ];
+  const currentFingerprint = fingerprintTrialBalanceRows(balancedTB);
+  const workpapers = [{ id: 'wp-1', engagementId: 'e1', ref: 'WP-1', status: 'معتمد', procedure: 'Procedure', conclusion: 'Conclusion', sourceFingerprint: currentFingerprint }];
+  const evidence = [{ id: 'ev-1', engagementId: 'e1', workpaperRef: 'WP-1', title: 'Invoice' }];
+  const findings = [{ id: 'f-1', engagementId: 'e1', status: 'مغلقة', title: 'Finding', criteria: 'Criteria', condition: 'Condition', effect: 'Effect', recommendation: 'Recommendation', workpaperRef: 'WP-1', evidenceIds: ['ev-1'] }];
+  const result = evaluateEngagementClosure({
+    engagementId: 'e1', workpapers, evidence, findings, risks: [], trialBalance: balancedTB, operations: {},
+    currentSourceFingerprint: currentFingerprint,
+  });
+  assert.equal(result.allowed, true);
+  assert.equal(result.blockers.length, 0);
 });
