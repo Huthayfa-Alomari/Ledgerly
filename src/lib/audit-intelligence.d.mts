@@ -11,8 +11,6 @@ export interface AuditIssue {
   examples?: any[];
   clusters?: Array<{ accountCode: string; partyOrDescription: string; totalAmount: number; rowNumbers: number[] }>;
   fields?: string[];
-  clusters?: Array<{ accountCode: string; partyOrDescription: string; totalAmount: number; rowNumbers: number[] }>;
-  fields?: string[];
   state?: 'needs-attention' | 'clear';
 }
 
@@ -105,6 +103,17 @@ export interface PartnerDashboardRow {
   openFindings: number;
   highRisks: number;
   qualityAttention: number;
+  qualityBlockers: number;
+  outstandingRequests: number;
+  overdueRequests: number;
+  loggedHours: number;
+  budgetHours: number | null;
+  hoursBudgetVariance: number | null;
+  actualLaborCostJod: number;
+  contractualFeeJod: number | null;
+  feeLessRecordedLaborCostJod: number | null;
+  invoiceValueJod: number;
+  recordedInvoiceCount: number;
   state: string;
 }
 
@@ -140,5 +149,5 @@ export function buildQualityShield(input: {
   dataTrustOptions?: DataTrustOptions;
   currentSourceFingerprint?: string;
 }): QualityShield;
-export function buildPartnerDashboard(engagements: any[], clients: any[], database: Record<string, any>): PartnerDashboardRow[];
+export function buildPartnerDashboard(engagements: any[], clients: any[], database: Record<string, any>, operations?: Record<string, any>, options?: { asOfDate?: string }): PartnerDashboardRow[];
 export function summarizeFindingsForAssistant(items: any[]): Array<string | AssistantSuggestion>;
