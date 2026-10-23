@@ -8,7 +8,9 @@ export interface AuditIssue {
   detail: string;
   action: string;
   rowNumbers?: number[];
-  examples?: JournalRow[];
+  examples?: any[];
+  clusters?: Array<{ accountCode: string; partyOrDescription: string; totalAmount: number; rowNumbers: number[] }>;
+  fields?: string[];
   state?: 'needs-attention' | 'clear';
 }
 
