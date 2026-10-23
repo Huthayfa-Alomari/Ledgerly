@@ -179,7 +179,7 @@ export function runDataTrustChecks(rows, options = {}) {
   const zeroTotals = { openingDebit: 0, openingCredit: 0, debit: 0, credit: 0, closingDebit: 0, closingCredit: 0 };
   if (!data.length) {
     issues.push(issue('tb-empty', 'high', 'لا يوجد ميزان مراجعة', 1, 'لم يتم العثور على صفوف ميزان مراجعة مرتبطة بالمهمة الحالية.', 'استورد الملف وتحقق من تعيين الأعمدة قبل بدء التحليل.'));
-    return { rowCount: 0, totals: zeroTotals, openingDifference: 0, movementDifference: 0, closingDifference: 0, issues, pass: false };
+    return { rowCount: 0, totals: zeroTotals, availableFields: [], unmappedFields: fields, openingDifference: null, movementDifference: null, closingDifference: null, issues, pass: false };
   }
   const seenCodes = new Map(), duplicateCodes = [], missingIdentity = [], missingFinancial = [], invalidNumeric = [], negativeValues = [], bothClosingSides = [], bridgeVariances = [], duplicateRecords = [], signatureMap = new Map();
   const availableFields = fields.filter(field => data.every(row => !Array.isArray(row.sourceFinancialFields) || row.sourceFinancialFields.includes(field)));
