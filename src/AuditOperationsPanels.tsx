@@ -6,6 +6,7 @@ import {
 } from './lib/audit-operations-engine.mjs';
 import { buildDocxBytes } from './lib/docx-export.mjs';
 import { saveLocalEvidenceFile } from './lib/local-evidence-files';
+import { fingerprintTrialBalanceRows } from './lib/audit-intelligence.mjs';
 
 type Row = Record<string, any>;
 type Operations = {
@@ -169,7 +170,33 @@ export default function AuditOperationsPanels(props: Props) {
       bytes, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
   }
 
+  function createReportExportSnapshot(kind: 'financial-statements' | 'auditor-report') {
+    const generatedAt = new Date().toISOString();
+    return {
+      kind,
+      generatedAt,
+      sourceFingerprint: fingerprintTrialBalanceRows(trialBalance),
+      sourceRowCount: trialBalance.length,
+      statementSnapshot: {
+        current: { ...statement.current },
+        comparative: { ...statement.comparative },
+        lines: statement.lines.map((item: Row) => ({
+          key: String(item.line.key ?? item.line.en ?? item.line.ar ?? ''),
+          current: Number(item.current) || 0,
+          comparative: Number(item.comparative) || 0,
+        })),
+        unmappedAccountCount: statement.unmapped.length,
+      },
+    };
+  }
+
+  function saveReportExportSnapshot(snapshot: Row) {
+    const next = { ...reportDraft, engagementId, lastExportSnapshot: snapshot, updatedAt: snapshot.generatedAt };
+    update({ reportDrafts: [...(operations.reportDrafts || []).filter(row => row.engagementId !== engagementId), next] });
+  }
+
   function exportStatements() {
+    const snapshot = createReportExportSnapshot('financial-statements');
     exportWord('مسودة قوائم مالية / Draft Financial Statements', [
       'العميل / Client: ' + (client?.name || 'غير محدد / Not specified'),
       'السنة المالية / Financial year: ' + (engagement?.year || ''),
@@ -177,10 +204,15 @@ export default function AuditOperationsPanels(props: Props) {
       'مسودة مبنية على ربط يدوي للحسابات. يجب مراجعة التصنيف والعرض والإفصاحات والسياسات المحاسبية قبل الاعتماد.',
       'Draft based on manual account mappings. Classification, presentation, disclosures, and accounting policies require professional review.',
       'حسابات غير مربوطة / Unmapped accounts: ' + statement.unmapped.length,
+      'بصمة بيانات المصدر / Source data fingerprint: ' + (snapshot.sourceFingerprint || 'غير متاحة — تحقق من بيانات المصدر'),
+      'تاريخ التصدير / Export timestamp: ' + snapshot.generatedAt,
+      'هذه البصمة وسيلة لتحديد تغير المصدر وليست ختمًا تشفيريًا أو اعتمادًا مهنيًا.',
     ], [statementRows as unknown[][], summaryRows as unknown[][]]);
+    saveReportExportSnapshot(snapshot);
   }
 
   function exportAuditorReport() {
+    const snapshot = createReportExportSnapshot('auditor-report');
     exportWord('مسودة تقرير مدقق الحسابات / Draft Independent Auditor Report', [
       'مسودة غير صالحة للإصدار أو التوقيع — يلزم استكمالها ومراجعتها من الشريك المسؤول.',
       'DRAFT — NOT FOR ISSUE OR SIGNATURE. Complete and review with the engagement partner.',
@@ -189,6 +221,8 @@ export default function AuditOperationsPanels(props: Props) {
       'مكتب التدقيق / Audit firm: ' + reportFirmName,
       'اسم المدقق / Auditor name: ' + (reportAuditorName || '[يستكمل يدويًا / Complete manually]'),
       'الرأي المختار مبدئيًا / Draft opinion selection: ' + reportOpinionValue,
+      'بصمة بيانات المصدر / Source data fingerprint: ' + (snapshot.sourceFingerprint || 'غير متاحة — تحقق من بيانات المصدر'),
+      'تاريخ التصدير / Export timestamp: ' + snapshot.generatedAt,
       'أساس الرأي / Basis for Opinion: يستكمل الشريك أساس الرأي بعد تقييم الأدلة والإفصاحات والمتطلبات النظامية.',
       'Responsibilities / المسؤوليات: يستكمل النص بحسب المعيار المنطبق والتشريعات الحالية وعقد المهمة.',
       'هذا قالب بنيوي ثنائي اللغة للتجهيز فقط؛ لا يقرر ملاءمة الرأي ولا يضمن الامتثال الكامل لـ ISA 700.',
@@ -201,6 +235,7 @@ export default function AuditOperationsPanels(props: Props) {
       ['Auditor responsibilities / مسؤوليات المدقق', 'Complete and compare against current applicable ISA wording.'],
       ['Date, signature, address / التاريخ والتوقيع والعنوان', 'Manual completion required.'],
     ]]);
+    saveReportExportSnapshot(snapshot);
   }
 
   async function runSample() {
