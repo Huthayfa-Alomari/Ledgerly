@@ -596,11 +596,24 @@ export function buildPartnerDashboard(engagements, clients, database, operations
 export function summarizeFindingsForAssistant(items) {
   const issues = Array.isArray(items) ? items : [];
   if (!issues.length) return ['لم تظهر استثناءات وفق قواعد الفحص الحالية. هذا لا يثبت خلو الملف من الأخطاء؛ راجع إجراءات التدقيق المناسبة.'];
-  return issues.slice(0, 8).map(item => ({
-    id: item.id,
-    priority: item.severity === 'high' ? 'أولوية عالية' : item.severity === 'medium' ? 'أولوية متوسطة' : 'إشارة للمراجعة',
-    title: item.title,
-    action: item.action,
-    source: item.count + ' صف/حالة وفق الفحص المحلي',
-  }));
+  return issues.slice(0, 8).map(item => {
+    const rowNumbers = Array.isArray(item.rowNumbers) ? item.rowNumbers.map(Number).filter(value => Number.isInteger(value) && value > 0) : [];
+    const accountCode = String(item.accountCode ?? item.code ?? '').trim();
+    const sourceFile = String(item.sourceFile ?? '').trim();
+    const sourceSheet = String(item.sourceSheet ?? '').trim();
+    const sourceParts = [
+      item.count + ' صف/حالة وفق الفحص المحلي',
+      sourceFile ? 'الملف: ' + sourceFile : '',
+      sourceSheet ? 'الورقة: ' + sourceSheet : '',
+      accountCode ? 'الحساب: ' + accountCode : '',
+      rowNumbers.length ? 'صفوف المصدر: ' + [...new Set(rowNumbers)].slice(0, 15).join('، ') : '',
+    ].filter(Boolean);
+    return {
+      id: item.id,
+      priority: item.severity === 'high' ? 'أولوية عالية' : item.severity === 'medium' ? 'أولوية متوسطة' : 'إشارة للمراجعة',
+      title: item.title,
+      action: item.action,
+      source: sourceParts.join(' · '),
+    };
+  });
 }
