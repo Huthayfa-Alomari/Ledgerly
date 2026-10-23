@@ -8,3 +8,5 @@ export function calculateOfficeMetrics(engagements?: any[], timeEntries?: any[],
 export function validateLocalWorkpaperTransition(workpaper: any, nextStatus: string, reviewerIdentity?: string): {valid:boolean;reason:string;requiresReview:boolean};
 export function rollForwardWorkpapers(previousPapers: any[], newEngagementId: string, createId?: () => string): any[];
 export function inferBankColumns(headers: string[], savedProfiles?: any[]): any;
+
+export function suggestRiskPbcRequestsFromRisks(risks: any[]): Array<{ title: string; sourceRiskId: string; riskTitle: string; area: string }>;
