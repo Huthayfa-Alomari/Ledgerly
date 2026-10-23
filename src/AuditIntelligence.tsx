@@ -40,7 +40,7 @@ type Props = {
   onOpenCopilot: () => void;
   onOpenReconciliation: () => void;
 };
-type ImportedJournal = { filename: string; rows: ReturnType<typeof normalizeJournalRows>['rows']; warnings: string[]; fieldsDetected: string[] };
+type ImportedJournal = { filename: string; sheetName: string; sheetNames: string[]; rows: ReturnType<typeof normalizeJournalRows>['rows']; warnings: string[]; fieldsDetected: string[] };
 
 const REQUEST_STARTERS = [
   'ميزان المراجعة النهائي للفترة',
@@ -79,6 +79,18 @@ function severityName(value: string) {
 function severityClass(value: string) {
   return value === 'high' ? 'intel-severity-high' : value === 'medium' ? 'intel-severity-medium' : 'intel-severity-low';
 }
+function parseJournalWorksheet(workbook: XLSX.WorkBook, filename: string, sheetNames: string[], sheetName: string): ImportedJournal {
+  const worksheet = workbook.Sheets[sheetName];
+  if (!worksheet || !worksheet['!ref']) throw new Error('الورقة المحددة لا تحتوي نطاق بيانات قابلًا للقراءة.');
+  const range = XLSX.utils.decode_range(worksheet['!ref']);
+  const rowCount = range.e.r - range.s.r;
+  if (rowCount > 250000) throw new Error('الورقة المحددة تتجاوز 250,000 صف بيانات. قسّم الملف لتفادي استهلاك الذاكرة.');
+  const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, { defval: '', raw: false, blankrows: true });
+  rawRows.forEach((row, index) => Object.defineProperty(row, '__sourceRowNumber', { value: range.s.r + index + 2, enumerable: false }));
+  const normalized = normalizeJournalRows(rawRows);
+  if (!normalized.sourceCount) throw new Error('لا توجد صفوف قيود قابلة للقراءة بعد صف العناوين في الورقة المحددة.');
+  return { filename, sheetName, sheetNames, rows: normalized.rows, warnings: normalized.warnings, fieldsDetected: normalized.fieldsDetected };
+}
 function Kpi({ label, value, note }: { label: string; value: string | number; note: string }) {
   return <div className="audit-intel-kpi"><span>{label}</span><strong>{value}</strong><small>{note}</small></div>;
 }
@@ -86,6 +98,7 @@ function Kpi({ label, value, note }: { label: string; value: string | number; no
 export default function AuditIntelligence(props: Props) {
   const { engagementId, engagements, clients, trialBalance, workpapers, evidence, findings, risks, operations, vaultPassphrase, onOperationsChange, onAddEvidence, onOpenCopilot, onOpenReconciliation } = props;
   const [importedJournal, setImportedJournal] = useState<ImportedJournal | null>(null);
+  const [sourceWorkbook, setSourceWorkbook] = useState<{ filename: string; workbook: XLSX.WorkBook; sheetNames: string[] } | null>(null);
   const [approvalThreshold, setApprovalThreshold] = useState('');
   const [splitWindowDays, setSplitWindowDays] = useState('1');
   const [fileBusy, setFileBusy] = useState(false);
@@ -160,20 +173,32 @@ export default function AuditIntelligence(props: Props) {
     try {
       const buffer = await file.arrayBuffer();
       const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
-      const firstSheetName = workbook.SheetNames.find(name => {
-        const sheet = workbook.Sheets[name];
-        return sheet && XLSX.utils.sheet_to_json(sheet, { defval: '' }).length > 0;
+      const sheetNames = workbook.SheetNames.filter(name => {
+        const worksheet = workbook.Sheets[name];
+        if (!worksheet || !worksheet['!ref']) return false;
+        const range = XLSX.utils.decode_range(worksheet['!ref']);
+        return range.e.r > range.s.r;
       });
-      if (!firstSheetName) throw new Error('لم يعثر على ورقة تحتوي بيانات.');
-      const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[firstSheetName], { defval: '', raw: false });
-      if (rawRows.length > 250000) throw new Error('الملف يتجاوز 250,000 صف. قسّم الملف لتفادي استهلاك الذاكرة.');
-      const normalized = normalizeJournalRows(rawRows);
-      if (!normalized.sourceCount) throw new Error('لا توجد صفوف قابلة للقراءة بعد صف العناوين.');
-      setImportedJournal({ filename: file.name, rows: normalized.rows, warnings: normalized.warnings, fieldsDetected: normalized.fieldsDetected });
+      if (!sheetNames.length) throw new Error('لم يعثر على ورقة تحتوي صفوف بيانات بعد العناوين.');
+      const preferred = sheetNames.find(name => /(journal|ledger|transactions|قيود|دفتر|حركات|الأستاذ|الاستاذ)/i.test(name)) || sheetNames[0];
+      setSourceWorkbook({ filename: file.name, workbook, sheetNames });
+      setImportedJournal(parseJournalWorksheet(workbook, file.name, sheetNames, preferred));
     } catch (error) {
+      setSourceWorkbook(null);
+      setImportedJournal(null);
       setFileError(error instanceof Error ? error.message : 'تعذر قراءة الملف. تحقق من سلامته ومن تنسيق الأعمدة.');
     } finally {
       setFileBusy(false);
+    }
+  }
+
+  function selectJournalWorksheet(sheetName: string) {
+    if (!sourceWorkbook || !sourceWorkbook.sheetNames.includes(sheetName)) return;
+    setFileError('');
+    try {
+      setImportedJournal(parseJournalWorksheet(sourceWorkbook.workbook, sourceWorkbook.filename, sourceWorkbook.sheetNames, sheetName));
+    } catch (error) {
+      setFileError(error instanceof Error ? error.message : 'تعذر تحليل الورقة المحددة.');
     }
   }
 
@@ -296,13 +321,14 @@ export default function AuditIntelligence(props: Props) {
 
       <section className="audit-card audit-intel-panel">
         <div className="audit-card-head">
-          <div><h3>2. محرك فحص شامل للقيود — Full-population Screening</h3><p className="muted-copy">استورد نسخة من دفتر الأستاذ أو سجل القيود. سيُفحص كل صف مقروء في المتصفح، دون رفع الملف أو حفظه في قاعدة بيانات Ledgerly.</p></div>
+          <div><h3>2. محرك فحص شامل للقيود — Full-population Screening</h3><p className="muted-copy">استورد دفتر الأستاذ أو سجل القيود، ثم اختر الورقة الصحيحة إذا تعددت الأوراق. يفحص Ledgerly جميع الصفوف المقروءة في الورقة المحددة محليًا، دون رفع ملف المصدر أو حفظه في قاعدة بيانات.</p></div>
           <span className="soft-tag">CSV / XLSX / XLS</span>
         </div>
         <div className="audit-intel-import">
           <label className="audit-secondary audit-intel-file">اختيار ملف القيود<input type="file" accept=".csv,.xlsx,.xls" onChange={event => { void importJournal(event.target.files?.[0]); event.currentTarget.value = ''; }} /></label>
           {fileBusy && <span className="muted-copy">جارٍ قراءة الملف وفحصه محليًا…</span>}
-          {importedJournal && <><span className="audit-intel-file-name">{importedJournal.filename} · {importedJournal.rows.length.toLocaleString('ar-JO')} صف</span><button className="audit-text-button danger-text" onClick={() => { setImportedJournal(null); setFileError(''); }}>إزالة نتائج الملف من الشاشة</button></>}
+          {importedJournal && importedJournal.sheetNames.length > 1 && <label className="audit-field audit-intel-sheet-select"><span>ورقة البيانات التي سيتم فحصها بالكامل</span><select value={importedJournal.sheetName} onChange={event => selectJournalWorksheet(event.target.value)}>{importedJournal.sheetNames.map(name => <option key={name} value={name}>{name}</option>)}</select></label>}
+          {importedJournal && <><span className="audit-intel-file-name">{importedJournal.filename} · الورقة: {importedJournal.sheetName} · {importedJournal.rows.length.toLocaleString('ar-JO')} صف</span><button className="audit-text-button danger-text" onClick={() => { setImportedJournal(null); setSourceWorkbook(null); setFileError(''); }}>إزالة نتائج الملف من الشاشة</button></>}
         </div>
         <div className="audit-intel-screening-options">
           <label className="audit-field"><span>حد الموافقة للمبالغ المجمعة (د.أ.) — اختياري</span><input type="number" min="0" step="0.001" inputMode="decimal" value={approvalThreshold} onChange={event => setApprovalThreshold(event.target.value)} placeholder="اتركه فارغًا لتعطيل فحص التجزئة" /></label>
@@ -324,10 +350,10 @@ export default function AuditIntelligence(props: Props) {
             {item.clusters?.slice(0, 10).map((cluster, index) => <small className="audit-intel-rowlist" key={`${item.id}-cluster-${index}`}>مجموعة محتملة {index + 1}: الصفوف {cluster.rowNumbers.join('، ')} · الإجمالي {formatMoney(cluster.totalAmount)} · {cluster.partyOrDescription}</small>)}
           </article>)}</div> : <div className="audit-intel-clear">✓ لم تظهر مؤشرات وفق القواعد الحالية. راجع صلاحية الاختبارات وملاءمتها للمهمة.</div>}
           <div className="stack-actions">
-            <button className="audit-primary" onClick={() => downloadFile('ledgerly-journal-screening.json', JSON.stringify({ filename: importedJournal.filename, warnings: importedJournal.warnings, screeningParameters: { approvalThreshold: Number(approvalThreshold) > 0 ? Number(approvalThreshold) : null, splitWindowDays: Number(splitWindowDays) }, scannedCount: journalAnalysis.scannedCount, results: journalAnalysis }, null, 2), 'application/json;charset=utf-8')}>تصدير نتائج الفحص</button>
+            <button className="audit-primary" onClick={() => downloadFile('ledgerly-journal-screening.json', JSON.stringify({ filename: importedJournal.filename, sourceSheet: importedJournal.sheetName, warnings: importedJournal.warnings, screeningParameters: { approvalThreshold: Number(approvalThreshold) > 0 ? Number(approvalThreshold) : null, splitWindowDays: Number(splitWindowDays) }, scannedCount: journalAnalysis.scannedCount, results: journalAnalysis }, null, 2), 'application/json;charset=utf-8')}>تصدير نتائج الفحص</button>
             <button className="audit-secondary" onClick={() => downloadCsv('ledgerly-journal-exceptions.csv', [
-              ['rule_id', 'title', 'severity', 'count', 'row_numbers', 'detail', 'recommended_action'],
-              ...journalAnalysis.issues.map(row => [row.id, row.title, severityName(row.severity), row.count, (row.rowNumbers ?? []).join(';'), row.detail, row.action]),
+              ['source_file', 'source_sheet', 'rule_id', 'title', 'severity', 'count', 'row_numbers', 'detail', 'recommended_action'],
+              ...journalAnalysis.issues.map(row => [importedJournal.filename, importedJournal.sheetName, row.id, row.title, severityName(row.severity), row.count, (row.rowNumbers ?? []).join(';'), row.detail, row.action]),
             ])}>تنزيل مؤشرات الفحص CSV</button>
           </div>
         </>}
