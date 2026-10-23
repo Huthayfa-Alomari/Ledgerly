@@ -224,3 +224,33 @@ test('source column mapping metadata prevents a missing column from passing as z
   })]);
   assert.ok(result.issues.some(item => item.id === 'tb-missing-financial-fields'));
 });
+
+
+test('partner portfolio reports overdue client requests, workload and billed invoice values', () => {
+  const portfolio = buildPartnerDashboard(
+    [{ id: 'e1', clientId: 'c1', budgetHours: '6', feeJod: '1000', status: 'العمل الميداني' }],
+    [{ id: 'c1', name: 'Client One' }],
+    { workpapers: [], evidence: [], findings: [], risks: [], trialBalance: [] },
+    {
+      clientRequests: [
+        { id: 'r1', engagementId: 'e1', done: false, dueDate: '2026-10-20' },
+        { id: 'r2', engagementId: 'e1', done: false, dueDate: '2026-10-30' },
+        { id: 'r3', engagementId: 'e1', done: true, dueDate: '2026-10-10' },
+      ],
+      timeEntries: [
+        { engagementId: 'e1', hours: '5', hourlyRateJod: '20' },
+        { engagementId: 'e1', hours: '2', hourlyRateJod: '30' },
+      ],
+      officeInvoices: [{ engagementId: 'e1', totalJod: '100.123' }],
+    },
+    { asOfDate: '2026-10-23' },
+  );
+  assert.equal(portfolio.length, 1);
+  assert.equal(portfolio[0].outstandingRequests, 2);
+  assert.equal(portfolio[0].overdueRequests, 1);
+  assert.equal(portfolio[0].loggedHours, 7);
+  assert.equal(portfolio[0].budgetHours, 6);
+  assert.equal(portfolio[0].hoursBudgetVariance, -1);
+  assert.equal(portfolio[0].actualLaborCostJod, 160);
+  assert.equal(portfolio[0].invoiceValueJod, 100.123);
+});
