@@ -327,3 +327,22 @@ test('closure gate can pass a complete administrative evidence chain while retai
   assert.equal(result.allowed, true);
   assert.equal(result.blockers.length, 0);
 });
+
+
+test('quality shield flags exported reports based on a prior trial-balance snapshot', () => {
+  const trialBalance = [tbRow({ source: 'current.csv' })];
+  const currentFingerprint = fingerprintTrialBalanceRows(trialBalance);
+  const quality = buildQualityShield({
+    workpapers: [], evidence: [], findings: [], risks: [], trialBalance, currentSourceFingerprint: currentFingerprint,
+    reportDrafts: [{ engagementId: 'e1', firmName: 'Example Firm', lastExportSnapshot: { kind: 'financial-statements', sourceFingerprint: 'tb-fnv1a64:old', generatedAt: '2026-01-01T00:00:00.000Z' } }],
+  });
+  assert.equal(quality.checks.find(item => item.id === 'quality-report-stale-source')?.count, 1);
+});
+
+test('quality shield flags report configuration that has not been exported', () => {
+  const quality = buildQualityShield({
+    workpapers: [], evidence: [], findings: [], risks: [], trialBalance: [tbRow()],
+    reportDrafts: [{ engagementId: 'e1', firmName: 'Example Firm', opinion: 'مسودة' }],
+  });
+  assert.equal(quality.checks.find(item => item.id === 'quality-report-not-exported')?.count, 1);
+});
