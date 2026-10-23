@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   analyzeJournalEntries,
+  fingerprintTrialBalanceRows,
   buildEvidenceLineage,
   buildPartnerDashboard,
   buildQualityShield,
@@ -128,4 +129,98 @@ test('quality shield and partner dashboard report review gaps without claiming a
   assert.equal(dashboard[0].client.name, 'Demo Client');
   assert.equal(dashboard[0].pendingWorkpapers, 1);
   assert.equal(dashboard[0].openFindings, 1);
+});
+
+
+test('date normalization preserves DMY dates with a time suffix without timezone-day drift', () => {
+  const result = normalizeJournalRows([
+    { 'Posting Date': '23/10/2026 15:30:00', Description: 'Phone bill', Account: '6100', Debit: '12.345', Credit: '0' },
+  ]);
+  assert.equal(result.rows[0].date, '2026-10-23');
+  assert.equal(result.rows[0].debit, 12.345);
+});
+
+test('invalid non-empty numeric cells are retained as explicit journal exceptions', () => {
+  const result = normalizeJournalRows([
+    { Date: '2026-10-23', Description: 'Invalid debit', Account: '5100', Debit: 'not-a-number', Credit: '0' },
+  ]);
+  assert.deepEqual(result.rows[0].invalidAmountFields, ['debit']);
+  assert.equal(result.rows[0].classification, 'invalid-amount');
+  assert.ok(analyzeJournalEntries(result.rows).issues.some(item => item.id === 'journal-invalid-amount'));
+});
+
+test('trial balance trust gate checks opening, movement and closing totals at three-decimal JOD precision', () => {
+  const rows = [
+    tbRow({ code: '1000', name: 'Cash', openingDebit: 1.234, openingCredit: 0, debit: 0.001, credit: 0, closingDebit: 1.235, closingCredit: 0 }),
+    tbRow({ id: 'tb-2', code: '3000', name: 'Equity', openingDebit: 0, openingCredit: 1.234, debit: 0, credit: 0.001, closingDebit: 0, closingCredit: 1.235 }),
+  ];
+  const result = runDataTrustChecks(rows);
+  assert.equal(result.openingDifference, 0);
+  assert.equal(result.movementDifference, 0);
+  assert.equal(result.closingDifference, 0);
+  assert.equal(result.totals.closingDebit, 1.235);
+  assert.equal(result.totals.closingCredit, 1.235);
+  assert.equal(result.pass, true);
+});
+
+test('trial balance gate never treats a missing financial field as a verified zero', () => {
+  const result = runDataTrustChecks([tbRow({ debit: null })]);
+  const missing = result.issues.find(item => item.id === 'tb-missing-financial-fields');
+  assert.ok(missing);
+  assert.ok(missing.rowNumbers.includes(2));
+});
+
+test('optional approval threshold screening identifies grouped below-threshold transactions', () => {
+  const normalized = normalizeJournalRows([
+    { Date: '2026-10-20', Description: 'Supplier expense', Account: '5100', Supplier: 'Acme Ltd', Debit: '400', Credit: '0', Reference: 'A' },
+    { Date: '2026-10-21', Description: 'Supplier expense', Account: '5100', Supplier: 'Acme Ltd', Debit: '400', Credit: '0', Reference: 'B' },
+    { Date: '2026-10-21', Description: 'Supplier expense', Account: '5100', Supplier: 'Acme Ltd', Debit: '400', Credit: '0', Reference: 'C' },
+  ]);
+  const withoutThreshold = analyzeJournalEntries(normalized.rows);
+  assert.ok(!withoutThreshold.issues.some(item => item.id === 'journal-possible-split-transactions'));
+  const result = analyzeJournalEntries(normalized.rows, { approvalThreshold: 1000, splitWindowDays: 1 });
+  const split = result.issues.find(item => item.id === 'journal-possible-split-transactions');
+  assert.ok(split);
+  assert.ok(split.rowNumbers.includes(2) && split.rowNumbers.includes(3) && split.rowNumbers.includes(4));
+});
+
+test('evidence lineage does not arbitrarily attach evidence to duplicate workpaper references', () => {
+  const lineage = buildEvidenceLineage(
+    [{ id: 'wp-a', ref: 'WP-100' }, { id: 'wp-b', ref: ' wp-100 ' }],
+    [{ id: 'evidence-1', workpaperRef: 'WP-100' }],
+  );
+  assert.equal(lineage.duplicateWorkpaperReferences.length, 1);
+  assert.equal(lineage.ambiguousReferenceCount, 1);
+  assert.equal(lineage.links[0].reason, 'ambiguous-reference');
+  assert.equal(lineage.links[0].linked, false);
+  assert.equal(lineage.linkedEvidenceCount, 0);
+});
+
+test('quality shield flags stale workpaper source snapshots after trial balance changes', () => {
+  const sourceRows = [tbRow({ code: '1000', name: 'Cash' })];
+  const currentFingerprint = fingerprintTrialBalanceRows(sourceRows);
+  assert.ok(currentFingerprint);
+  assert.equal(fingerprintTrialBalanceRows([...sourceRows]), currentFingerprint);
+  assert.notEqual(fingerprintTrialBalanceRows([tbRow({ code: '1000', name: 'Cash', debit: 999 })]), currentFingerprint);
+  const quality = buildQualityShield({
+    workpapers: [{ id: 'wp-1', ref: 'WP-1', status: 'معتمد', procedure: 'إجراء', conclusion: 'نتيجة', sourceFingerprint: 'tb-fnv1a64:stale' }],
+    evidence: [], findings: [], risks: [], trialBalance: sourceRows, currentSourceFingerprint: currentFingerprint,
+  });
+  assert.equal(quality.checks.find(item => item.id === 'quality-stale-workpaper')?.count, 1);
+});
+
+test('source import row-count and control-total mismatches are explicit high-severity checks', () => {
+  const result = runDataTrustChecks([
+    tbRow({ openingDebit: 0, openingCredit: 0, debit: 100, credit: 100, closingDebit: 0, closingCredit: 0 }),
+  ], { expectedRowCount: 2, sourceTotals: { debit: 99 } });
+  assert.ok(result.issues.some(item => item.id === 'tb-source-row-count'));
+  assert.ok(result.issues.some(item => item.id === 'tb-source-totals-mismatch'));
+});
+
+
+test('source column mapping metadata prevents a missing column from passing as zero', () => {
+  const result = runDataTrustChecks([tbRow({
+    sourceFinancialFields: ['openingDebit', 'openingCredit', 'credit', 'closingDebit', 'closingCredit'],
+  })]);
+  assert.ok(result.issues.some(item => item.id === 'tb-missing-financial-fields'));
 });
