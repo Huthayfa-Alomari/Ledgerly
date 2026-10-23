@@ -136,7 +136,7 @@ export function normalizeJournalRows(records) {
     }
     if (invalidAmountFields.length) classification = 'invalid-amount';
     return {
-      rowNumber: index + 2,
+      rowNumber: Number.isFinite(Number(raw.__sourceRowNumber)) ? Number(raw.__sourceRowNumber) : index + 2,
       date: parseDate(get(dateH)),
       dateRaw: String(get(dateH) ?? ''),
       description: String(get(descriptionH) ?? '').trim(),
