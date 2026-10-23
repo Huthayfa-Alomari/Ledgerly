@@ -125,6 +125,9 @@ export interface PartnerDashboardRow {
   highRisks: number;
   qualityAttention: number;
   qualityBlockers: number;
+  closureBlockerCount: number;
+  closureWarningCount: number;
+  closureBlockers: EngagementClosureBlocker[];
   outstandingRequests: number;
   overdueRequests: number;
   loggedHours: number;
