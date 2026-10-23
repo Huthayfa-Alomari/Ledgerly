@@ -3,7 +3,7 @@ import type { SupabaseConfigResult } from './lib/supabase-config';
 
 type CloudUser = { id: string; email?: string };
 export type CloudSession = { access_token: string; refresh_token: string; expires_at?: number; expires_in?: number; user?: CloudUser };
-type Props = { config: SupabaseConfigResult; onSessionChange?: (session: CloudSession | null) => void };
+type Props = { config: SupabaseConfigResult; onSessionChange?: (session: CloudSession | null) => void; onFirmProvisioned?: () => void };
 
 const SESSION_KEY = 'ledgerly.auth.session.v1';
 
@@ -22,7 +22,7 @@ async function authRequest(config: Extract<SupabaseConfigResult, { configured: t
   return data;
 }
 
-export default function CloudAuthPanel({ config, onSessionChange }: Props) {
+export default function CloudAuthPanel({ config, onSessionChange, onFirmProvisioned }: Props) {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -39,6 +39,7 @@ export default function CloudAuthPanel({ config, onSessionChange }: Props) {
   const [inviteError, setInviteError] = useState('');
   const configUrl = config.configured ? config.config.url : '';
   const anonKey = config.configured ? config.config.anonKey : '';
+  const inviteUIEnabled = import.meta.env.VITE_LEDGERLY_ENABLE_MEMBER_INVITES === 'true';
 
   const saveSession = (next: CloudSession | null) => {
     setSession(next);
@@ -118,7 +119,7 @@ export default function CloudAuthPanel({ config, onSessionChange }: Props) {
   };
 
   const bootstrapFirm = async () => {
-    if (!config.configured || !session?.access_token) return;
+    if (!inviteUIEnabled || !config.configured || !session?.access_token) return;
     if (firmName.trim().length < 2 || displayName.trim().length < 2) {
       setError('أدخل اسم المكتب واسم المستخدم قبل التهيئة.');
       return;
@@ -144,6 +145,7 @@ export default function CloudAuthPanel({ config, onSessionChange }: Props) {
         throw new Error(message);
       }
       setNotice('تم إنشاء مكتب التدقيق وربط حسابك بدور مدير المكتب. البيانات المهنية ما زالت محلية ولم تُزامن بعد.');
+      onFirmProvisioned?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'تعذرت تهيئة المكتب.');
     } finally {
@@ -195,7 +197,7 @@ export default function CloudAuthPanel({ config, onSessionChange }: Props) {
     <div className="audit-card-head"><div><h3>حساب Ledgerly السحابي</h3><p className="muted-copy">مصادقة Supabase منفصلة عن البيانات المحلية. لا يتم رفع العملاء أو أوراق العمل تلقائيًا.</p></div><span className={session ? 'audit-pill' : 'audit-pill risk-pill'}>{session ? 'مسجّل الدخول' : 'غير مسجّل'}</span></div>
     {!config.configured ? <p className="cloud-auth-note">اضبط VITE_SUPABASE_URL وVITE_SUPABASE_ANON_KEY بمفتاح publishable/anon فقط لتفعيل المصادقة.</p> : <>
       {session ? <div className="summary-lines"><div><strong>الحساب</strong><span>{session.user?.email || email || 'حساب موثّق'}</span></div><div><strong>حالة البيانات</strong><span>محلية؛ لم تُفعّل المزامنة</span></div></div> : null}
-      {session ? <div className="cloud-invite-panel">
+      {session && inviteUIEnabled ? <div className="cloud-invite-panel">
         <h4>دعوة عضو إلى مكتب التدقيق</h4>
         <p className="cloud-auth-note">متاحة لمدير المكتب أو الشريك الإداري. يلزم إعداد رابط عودة HTTPS وبريد الدعوات في Supabase.</p>
         <div className="cloud-auth-fields">
@@ -206,7 +208,7 @@ export default function CloudAuthPanel({ config, onSessionChange }: Props) {
         {inviteError ? <p className="cloud-auth-error" role="alert">{inviteError}</p> : null}
         {inviteNotice ? <p className="cloud-auth-success" role="status">{inviteNotice}</p> : null}
         <button type="button" className="audit-secondary" disabled={busy} onClick={() => void sendInvitation()}>{busy ? 'جارٍ التنفيذ…' : 'إرسال دعوة عضو'}</button>
-      </div> : null}
+      </div> : session ? <div className="cloud-invite-panel"><h4>دعوات أعضاء المكاتب معطّلة مؤقتًا</h4><p className="cloud-auth-note">لن تظهر الدعوات حتى يفعّل المسؤول الإعداد بعد اجتياز اختبارات عزل المكاتب والصلاحيات الحية. يبقى الخادم رافضًا للدعوات ما لم يُضبط LEDGERLY_INVITATIONS_ENABLED صراحةً.</p></div> : null}
       <div className="cloud-auth-mode"><button type="button" className={mode === 'login' ? 'audit-primary' : 'audit-secondary'} onClick={() => { setMode('login'); setError(''); }}>تسجيل الدخول</button><button type="button" className={mode === 'signup' ? 'audit-primary' : 'audit-secondary'} onClick={() => { setMode('signup'); setError(''); }}>إنشاء حساب</button></div>
       <div className="cloud-auth-fields">
         <label className="audit-field"><span>اسم المستخدم</span><input value={displayName} onChange={e => setDisplayName(e.target.value)} autoComplete="name" placeholder="الاسم الكامل" /></label>

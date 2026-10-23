@@ -4,19 +4,22 @@ import { readFileSync } from 'node:fs';
 
 const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 
-test('invalid local JSON blocks persistence during initial load', () => {
+test('local workspace waits for encrypted-vault unlock before persisting data', () => {
   assert.match(app, /const loaded=loadLocalData\(\(\)=>localStorage,KEY,emptyDB\)/);
   assert.match(app, /if\(loaded\.error==='invalid-json'\)/);
-  assert.match(app, /useState\(!initialData\.error\)/);
-  assert.match(app, /useEffect\(\(\)=>\{ if\(!storagePersistenceEnabled\)return;/);
+  assert.match(app, /useState\(false\)/);
+  assert.match(app, /مخزن Ledgerly المحلي المشفّر/);
+  assert.match(app, /unlockOrInitializeLocalVault/);
+  assert.match(app, /if\(!storagePersistenceEnabled\|\|!vaultUnlocked\)return/);
+  assert.match(app, /persistEncryptedLocalVault\(vaultPassphrase,db\)/);
 });
 
-test('recovery UI offers a raw export and requires it before local reinitialization', () => {
-  assert.match(app, /function downloadUnreadableLocalData\(\)/);
-  assert.match(app, /ledgerly-local-recovery\.txt/);
-  assert.match(app, /if\(!rawBackupDownloaded\)/);
+test('recovery UI offers a raw export before reinitializing unreadable legacy data', () => {
+  assert.match(app, /ledgerly-legacy-recovery-plaintext\.json/);
+  
+  
   assert.match(app, /setStorageLoadError\(''\);setStoragePersistenceEnabled\(true\)/);
-  assert.match(app, /aria-modal="true" aria-labelledby="ledgerly-recovery-title"/);
+  assert.match(app, /disabled=\{!vaultRawBackupDownloaded\}/);
 });
 
 test('backup restore validates JSON collections and only then re-enables persistence', () => {

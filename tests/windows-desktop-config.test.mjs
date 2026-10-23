@@ -40,7 +40,7 @@ test('version tags publish the built installer as a permanent GitHub Release ass
   assert.match(workflow, /tags:\s*\n\s*- "ledgerly-v\*"/);
   assert.match(workflow, /permissions:\s*\n\s*contents: write/);
   assert.match(workflow, /if: startsWith\(github\.ref, 'refs\/tags\/ledgerly-v'\)/);
-  assert.match(workflow, /uses: softprops\/action-gh-release@v2/);
+  assert.match(workflow, /uses: softprops\/action-gh-release@v3/);
   assert.match(workflow, /files: desktop\/release\/\*\.exe/);
 });
 
@@ -49,4 +49,21 @@ test('Windows release uses explicit public cloud variables and fails on high-sev
   assert.match(workflow, /VITE_SUPABASE_URL: \$\{\{ vars\.VITE_SUPABASE_URL \}\}/);
   assert.match(workflow, /VITE_SUPABASE_ANON_KEY: \$\{\{ vars\.VITE_SUPABASE_ANON_KEY \}\}/);
   assert.match(workflow, /npm audit --audit-level=high/);
+});
+
+
+test('GitHub Actions use Node 24-compatible action majors and pinned runner images', () => {
+  const ci = read('../.github/workflows/ci.yml');
+  const release = read('../.github/workflows/windows-release.yml');
+  assert.ok(ci.includes('runs-on: ubuntu-24.04'));
+  assert.ok(ci.includes('uses: actions/checkout@v7'));
+  assert.ok(ci.includes('uses: actions/setup-node@v7'));
+  assert.ok(!ci.includes('ubuntu-latest'));
+  assert.ok(!ci.includes('actions/checkout@v4'));
+  assert.ok(!ci.includes('actions/setup-node@v4'));
+  assert.ok(release.includes('runs-on: windows-2025'));
+  assert.ok(release.includes('uses: actions/checkout@v7'));
+  assert.ok(release.includes('uses: actions/setup-node@v7'));
+  assert.ok(release.includes('uses: actions/upload-artifact@v7'));
+  assert.ok(release.includes('uses: softprops/action-gh-release@v3'));
 });

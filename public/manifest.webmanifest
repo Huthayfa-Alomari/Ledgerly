@@ -1,0 +1,23 @@
+{
+  "id": "./",
+  "name": "Ledgerly — Audit Practice Platform",
+  "short_name": "Ledgerly",
+  "description": "Secure local-first audit practice workspace.",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f6f4ef",
+  "theme_color": "#172c4d",
+  "categories": ["business", "productivity", "finance"],
+  "icons": [
+    {
+      "src": "./favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

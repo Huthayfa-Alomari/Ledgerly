@@ -12,13 +12,13 @@ permissions:
 
 jobs:
   build-windows:
-    runs-on: windows-latest
+    runs-on: windows-2025
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -39,17 +39,51 @@ jobs:
         run: npm audit --audit-level=high
       - name: Build Windows installer
         working-directory: desktop
-        run: npm run dist
+        shell: pwsh
+        run: |
+          if ($env:WIN_CSC_LINK -and $env:WIN_CSC_KEY_PASSWORD) {
+            Write-Host "Code-signing credentials found; requiring a signed installer."
+            npm run dist -- --config.forceCodeSigning=true
+          } else {
+            Write-Warning "No Windows code-signing certificate configured. This unsigned development build may be blocked by browser or operating-system reputation checks."
+            npm run dist
+          }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+      - name: Verify installer signature and write SHA-256 manifest
+        working-directory: desktop
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem -Path "release/*.exe" -File | Select-Object -First 1
+          if (-not $installer) { throw "No Windows installer was produced." }
+          $signature = Get-AuthenticodeSignature -FilePath $installer.FullName
+          if ($env:WIN_CSC_LINK -and $signature.Status -ne "Valid") {
+            throw "A signing certificate was configured, but the installer signature status is $($signature.Status)."
+          }
+          if ($signature.Status -eq "Valid") {
+            Write-Host "Valid Authenticode signature: $($signature.SignerCertificate.Subject)"
+          } else {
+            Write-Warning "Installer is unsigned. SHA-256 verifies file integrity only; it does not establish safety or publisher identity."
+          }
+          $hash = Get-FileHash -Algorithm SHA256 -Path $installer.FullName
+          "$($hash.Hash.ToLowerInvariant())  $($installer.Name)" | Set-Content -Path "release/SHA256SUMS.txt" -Encoding ascii
+          Write-Host "SHA-256: $($hash.Hash)"
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
       - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Ledgerly-Windows-Installer
-          path: desktop/release/*.exe
+          path: |
+            desktop/release/*.exe
+            desktop/release/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 30
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/ledgerly-v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: Ledgerly ${{ github.ref_name }}
           generate_release_notes: true

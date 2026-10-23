@@ -35,4 +35,6 @@ test('invite endpoint validates the caller and limits invite roles', () => {
   const panel = readFileSync(new URL('../src/CloudAuthPanel.tsx', import.meta.url), 'utf8');
   assert.match(panel, /ledgerly-invite-member/);
   assert.match(panel, /إرسال دعوة عضو/);
+  assert.match(panel, /VITE_LEDGERLY_ENABLE_MEMBER_INVITES/);
+  assert.match(panel, /دعوات أعضاء المكاتب معطّلة مؤقتًا/);
 });
