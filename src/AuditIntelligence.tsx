@@ -128,9 +128,20 @@ export default function AuditIntelligence(props: Props) {
   } as DBShape, operations), [engagements, clients, workpapers, evidence, findings, risks, trialBalance, operations]);
   const assistantItems = useMemo(() => {
     const checks = quality.checks.filter(row => row.count > 0);
-    const journalChecks = (journalAnalysis?.issues || []).map(row => ({ ...row, severity: row.severity, count: row.count }));
-    return summarizeFindingsForAssistant([...checks, ...journalChecks]);
-  }, [quality, journalAnalysis]);
+    const sourceTBChecks = quality.tb.issues.filter(row => row.count > 0).map(row => ({
+      ...row,
+      accountCode: (row.examples?.[0] as any)?.code || '',
+      sourceFile: currentTB.find(tb => tb.source)?.source || '',
+    }));
+    const journalChecks = (journalAnalysis?.issues || []).map(row => ({
+      ...row,
+      severity: row.severity,
+      count: row.count,
+      sourceFile: importedJournal?.filename || '',
+      sourceSheet: importedJournal?.sheetName || '',
+    }));
+    return summarizeFindingsForAssistant([...checks, ...sourceTBChecks, ...journalChecks]);
+  }, [quality, journalAnalysis, importedJournal, currentTB]);
   const outstandingRequests = requests.filter(row => !row.done).length;
 
   async function importJournal(file?: File) {
