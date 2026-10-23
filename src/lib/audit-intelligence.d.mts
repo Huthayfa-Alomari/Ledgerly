@@ -160,6 +160,7 @@ export interface JournalAnalysisOptions {
 export function runDataTrustChecks(rows: any[], options?: DataTrustOptions): TrialBalanceCheck;
 export function analyzeJournalEntries(rows: JournalRow[], options?: JournalAnalysisOptions): JournalAnalysis;
 export function fingerprintTrialBalanceRows(rows: any[]): string;
+export function fingerprintAccountMappings(accountMappings: Record<string, any>, engagementId: string): string;
 export function buildEvidenceLineage(workpapers: any[], evidence: any[], findings?: any[]): EvidenceLineage;
 export function buildQualityShield(input: {
   workpapers?: any[];
