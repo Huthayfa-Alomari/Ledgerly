@@ -106,3 +106,5 @@
 
 .audit-intel-screening-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:14px 0;align-items:end}
 .audit-intel-screening-options .audit-field{max-width:100%;}
+
+.audit-intel-required-request{display:flex;align-items:center;gap:8px;margin-top:8px;color:var(--audit-muted,#666);font-size:.82rem}.audit-intel-required-request input{accent-color:var(--audit-accent,#8a6a3b)}
