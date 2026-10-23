@@ -447,6 +447,83 @@ export function buildQualityShield(input) {
  * @param {Array<Record<string, any>>} clients
  * @param {Record<string, any>} database
  */
+
+/**
+ * Evaluate administrative close readiness using an explicit policy.
+ * This is a workflow gate, not a professional audit opinion or regulatory-compliance certification.
+ */
+export function evaluateEngagementClosure(input = {}, policy = {}) {
+  const workpapers = Array.isArray(input.workpapers) ? input.workpapers : [];
+  const evidence = Array.isArray(input.evidence) ? input.evidence : [];
+  const findings = Array.isArray(input.findings) ? input.findings : [];
+  const risks = Array.isArray(input.risks) ? input.risks : [];
+  const trialBalance = Array.isArray(input.trialBalance) ? input.trialBalance : [];
+  const operations = input.operations && typeof input.operations === 'object' ? input.operations : {};
+  const quality = buildQualityShield({
+    workpapers, evidence, findings, risks, trialBalance,
+    currentSourceFingerprint: input.currentSourceFingerprint || fingerprintTrialBalanceRows(trialBalance),
+    dataTrustOptions: input.dataTrustOptions || {},
+  });
+  const blockers = [];
+  const warnings = [];
+  const addBlocker = (id, title, count, detail) => {
+    if (count > 0) blockers.push({ id, title, count, detail });
+  };
+
+  if (policy.requireTrialBalance !== false && trialBalance.length === 0) {
+    addBlocker('close-missing-trial-balance', 'لا يوجد ميزان مراجعة', 1, 'استورد ميزان المراجعة وتحقق من نطاق الفترة قبل إقفال الملف.');
+  }
+
+  if (policy.blockCriticalDataIssues !== false) {
+    const critical = quality.tb.issues.filter(row => row.severity === 'high');
+    addBlocker('close-critical-data-quality', 'فحوص جودة بيانات عالية الأهمية', critical.length, critical.map(row => row.title).join('، '));
+  }
+
+  if (policy.requireApprovedWorkpapers !== false) {
+    const pending = workpapers.filter(row => row.status !== 'معتمد');
+    addBlocker('close-workpapers-pending', 'أوراق عمل غير معتمدة', pending.length, 'يجب إكمال مراجعة أوراق العمل واعتمادها بواسطة المراجع المحدد في سير العمل.');
+    if (!workpapers.length) addBlocker('close-no-workpapers', 'لا توجد أوراق عمل', 1, 'أضف أوراق العمل اللازمة للمهمة قبل الإقفال.');
+  }
+
+  if (policy.requireEvidenceLinked !== false) {
+    addBlocker('close-evidence-unlinked', 'أدلة بلا ربط فريد', quality.lineage.unlinkedEvidenceCount, 'اربط الأدلة بورقة عمل ذات مرجع فريد. لا يختار النظام بين مراجع مكررة.');
+    addBlocker('close-duplicate-workpaper-refs', 'مراجع أوراق عمل مكررة', quality.lineage.duplicateWorkpaperReferences.length, 'صحّح المراجع المكررة قبل الإقفال.');
+  }
+
+  if (policy.requireReviewNotesResolved !== false) {
+    const openNotes = workpapers.filter(row =>
+      String(row.reviewNotes ?? '').trim() &&
+      !['مغلق', 'مغلقة', 'تمت المعالجة', 'resolved'].includes(cleanText(row.reviewNotesStatus))
+    );
+    addBlocker('close-review-notes', 'ملاحظات مراجعة غير محسومة', openNotes.length, 'عالج ملاحظات المراجع وسجّل حالتها؛ لا تمسح أثر المراجعة لمجرد إخفاء التنبيه.');
+  }
+
+  if (policy.requireFindingsResolved !== false) {
+    const open = findings.filter(row => !['مغلقة', 'مغلق', 'مكتمل', 'resolved'].includes(cleanText(row.status)));
+    addBlocker('close-findings-open', 'ملاحظات تدقيق غير مغلقة إداريًا', open.length, 'وثّق الرد والمعالجة وحالة الملاحظة وفق سياسة المكتب قبل الإقفال.');
+  }
+
+  if (policy.blockStaleWorkpapers !== false) {
+    const stale = quality.checks.find(row => row.id === 'quality-stale-workpaper');
+    const missing = quality.checks.find(row => row.id === 'quality-source-snapshot-missing');
+    addBlocker('close-stale-workpapers', 'أوراق عمل تحتاج إعادة مراجعة المصدر', (stale?.count || 0) + (missing?.count || 0), 'أعد فحص البيانات التي استندت إليها الورقة ثم حدّث لقطة المصدر من خلال مراجعة صريحة.');
+  }
+
+  const requests = Array.isArray(operations.clientRequests) ? operations.clientRequests : [];
+  const requiredRequests = requests.filter(row => row.engagementId === input.engagementId && row.requiredForClosure && !row.done);
+  addBlocker('close-required-client-documents', 'مستندات إلزامية للإقفال لم تُستلم', requiredRequests.length, 'استلم المستندات المحددة كإلزامية أو عدّل سياسة الطلب وفق موافقة موثقة.');
+  const overdue = requests.filter(row => row.engagementId === input.engagementId && !row.done && /^\d{4}-\d{2}-\d{2}$/.test(String(row.dueDate ?? '')) && String(row.dueDate) < (input.asOfDate || new Date().toISOString().slice(0, 10)));
+  if (overdue.length) warnings.push({ id: 'close-overdue-client-documents', title: 'طلبات مستندات متأخرة', count: overdue.length, detail: 'طلبات متأخرة لم تُعلّم كإلزامية للإقفال؛ راجع أثرها قبل الإغلاق.' });
+
+  const highRisks = risks.filter(row =>
+    (['مرتفع', 'عالي', 'high'].includes(cleanText(row.impact)) || ['مرتفع', 'عالي', 'high'].includes(cleanText(row.likelihood))) &&
+    !['مغلق', 'مغلقة', 'مكتمل', 'resolved'].includes(cleanText(row.status))
+  );
+  if (highRisks.length) warnings.push({ id: 'close-high-risks', title: 'مخاطر عالية تحتاج تأكيد الاستجابة', count: highRisks.length, detail: 'الخطر العالي ليس منعًا آليًا للإقفال إذا كانت الاستجابة المهنية موثقة ومقبولة.' });
+
+  return { allowed: blockers.length === 0, blockers, warnings, quality };
+}
+
 export function buildPartnerDashboard(engagements, clients, database, operations = {}, options = {}) {
   const operationRows = key => Array.isArray(operations?.[key]) ? operations[key] : [];
   const asOfDate = /^\d{4}-\d{2}-\d{2}$/.test(String(options?.asOfDate ?? ''))
