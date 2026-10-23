@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import AuditOperationsPanels from './AuditOperationsPanels';
-import { buildWhatsappReminder } from './lib/audit-operations-engine.mjs';
+import { buildWhatsappReminder, suggestRiskPbcRequestsFromRisks } from './lib/audit-operations-engine.mjs';
 import * as XLSX from 'xlsx';
 import {
   analyzeJournalEntries,
@@ -223,6 +223,21 @@ export default function AuditIntelligence(props: Props) {
     downloadFile('ledgerly-audit-intelligence-report.json', JSON.stringify(report, null, 2), 'application/json;charset=utf-8');
   }
 
+  function suggestRequestsFromRisks() {
+    const suggestions = suggestRiskPbcRequestsFromRisks(currentRisks);
+    if (!suggestions.length) { setRequestNotice('لا توجد مخاطر مفتوحة كافية لإنشاء اقتراحات. سجّل المخاطر أولًا، ثم أعد المحاولة.'); return; }
+    const existingTitles = new Set(requests.map(row => String(row.title ?? '').trim().toLocaleLowerCase()));
+    const additions = suggestions.filter(item => !existingTitles.has(item.title.trim().toLocaleLowerCase())).map((item, index) => ({
+      id: 'risk-request-' + Date.now().toString(36) + '-' + index,
+      title: item.title, dueDate: '', done: false, requiredForClosure: false,
+      engagementId, clientName: client?.name || '', phone: '', sourceRiskId: item.sourceRiskId,
+      generatedFromRisk: true, createdAt: new Date().toISOString(),
+    }));
+    if (!additions.length) { setRequestNotice('الطلبات المقترحة لهذه المخاطر موجودة بالفعل في القائمة.'); return; }
+    saveRequests([...requests, ...additions]);
+    setRequestNotice('أُضيف ' + additions.length + ' اقتراحًا مبنيًا على المخاطر. راجع نطاق كل طلب وحدد الاستحقاق وما إذا كان إلزاميًا للإقفال.');
+  }
+
   function addRequest() {
     const title = customRequest.trim();
     if (!title) { setRequestNotice('اكتب اسم المستند المطلوب أولًا.'); return; }
@@ -430,7 +445,7 @@ export default function AuditIntelligence(props: Props) {
           <label className="audit-field"><span>تاريخ الاستحقاق</span><input type="date" value={customDueDate} onChange={event => setCustomDueDate(event.target.value)} /></label>
           <label className="audit-field"><span>اسم المستلم (اختياري)</span><input value={customClientName} onChange={event => setCustomClientName(event.target.value)} placeholder={client?.name || 'اسم جهة الاتصال'} /></label>
           <label className="audit-field"><span>رقم واتساب الدولي (اختياري)</span><input value={customPhone} onChange={event => setCustomPhone(event.target.value)} placeholder="+9627..." /></label>
-          <button className="audit-primary" onClick={addRequest}>إضافة إلى القائمة</button>
+          <button className="audit-primary" onClick={addRequest}>إضافة إلى القائمة</button><button className="audit-secondary" onClick={suggestRequestsFromRisks} disabled={!currentRisks.length}>اقتراح طلبات حسب المخاطر</button>
         </div>
         {requestNotice && <p className="muted-copy" role="status">{requestNotice}</p>}
         <div className="audit-intel-request-list">{requests.map(row => {
