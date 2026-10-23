@@ -260,3 +260,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .ledgerly-recovery-actions{display:flex;flex-wrap:wrap;gap:10px;margin:20px 0}
 .ledgerly-recovery-actions>*{flex:1 1 190px;text-align:center}
 .ledgerly-recovery-actions button:disabled{opacity:.5;cursor:not-allowed}
+
+
+/* Bank reconciliation report export action. */
+.match-export-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:-4px 0 16px}.match-export-actions .muted{font-size:11px;line-height:1.6}
