@@ -488,6 +488,21 @@ export function fingerprintAccountMappings(accountMappings, engagementId) {
   return 'account-map-fnv1a64:' + hash.toString(16).padStart(16, '0');
 }
 
+/** Non-cryptographic fingerprint of report metadata used to detect edits after export. */
+export function fingerprintReportConfiguration(config = {}) {
+  const canonical = {
+    firmName: String(config.firmName ?? '').trim(),
+    auditorName: String(config.auditorName ?? '').trim(),
+    periodEnd: String(config.periodEnd ?? '').trim(),
+    opinion: String(config.opinion ?? '').trim(),
+  };
+  const bytes = new TextEncoder().encode(JSON.stringify(canonical));
+  let hash = 14695981039346656037n;
+  const mask = (1n << 64n) - 1n;
+  for (const byte of bytes) { hash ^= BigInt(byte); hash = (hash * 1099511628211n) & mask; }
+  return 'report-meta-fnv1a64:' + hash.toString(16).padStart(16, '0');
+}
+
 export function buildQualityShield(input) {
   const workpapers = input.workpapers || [];
   const evidence = input.evidence || [];
@@ -513,11 +528,12 @@ export function buildQualityShield(input) {
   const currentAccountMappingFingerprint = fingerprintAccountMappings(accountMappings, engagementId);
   const staleReportSnapshots = currentSourceFingerprint ? exportedReportDrafts.filter(row =>
     (row.lastExportSnapshot.sourceFingerprint && row.lastExportSnapshot.sourceFingerprint !== currentSourceFingerprint) ||
-    (row.lastExportSnapshot.accountMappingFingerprint && row.lastExportSnapshot.accountMappingFingerprint !== currentAccountMappingFingerprint)
+    (row.lastExportSnapshot.accountMappingFingerprint && row.lastExportSnapshot.accountMappingFingerprint !== currentAccountMappingFingerprint) ||
+    (row.lastExportSnapshot.reportConfigurationFingerprint && row.lastExportSnapshot.reportConfigurationFingerprint !== fingerprintReportConfiguration(row))
   ) : [];
   const reportDraftsWithoutExport = configuredReportDrafts.filter(row => !row.lastExportSnapshot);
   const reportSnapshotsWithoutSource = currentSourceFingerprint ? exportedReportDrafts.filter(row =>
-    !row.lastExportSnapshot.sourceFingerprint || !row.lastExportSnapshot.accountMappingFingerprint
+    !row.lastExportSnapshot.sourceFingerprint || !row.lastExportSnapshot.accountMappingFingerprint || !row.lastExportSnapshot.reportConfigurationFingerprint
   ) : [];
   const checks = [];
   const add = (id, severity, title, count, detail, action) => {
