@@ -63,7 +63,7 @@ export default function App() {
         const noDataRow: Array<string | number | null> = [t('لا توجد بيانات', 'No data'), ...Array(Math.max(0, headers.length - 1)).fill('')];
         const sheet = XLSX.utils.aoa_to_sheet([headers, ...(rows.length ? rows : [noDataRow])]);
         sheet['!cols'] = widths.map(wch => ({ wch }));
-        sheet['!autofilter'] = { ref: \`A1:\${XLSX.utils.encode_col(headers.length - 1)}\${Math.max(2, rows.length + 1)}\` };
+        sheet['!autofilter'] = { ref: `A1:${XLSX.utils.encode_col(headers.length - 1)}${Math.max(2, rows.length + 1)}` };
         return sheet;
       };
 
@@ -141,7 +141,7 @@ export default function App() {
       XLSX.utils.book_append_sheet(workbook, makeSheet(ambiguousHeaders, ambiguousRows, [12, 14, 32, 14, 14, 26, 20, 42]), t('حالات ملتبسة', 'Ambiguous'));
 
       const stamp = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-');
-      XLSX.writeFile(workbook, \`Ledgerly_Reconciliation_\${stamp}.xlsx\`);
+      XLSX.writeFile(workbook, `Ledgerly_Reconciliation_${stamp}.xlsx`);
     } catch {
       setError(t('تعذر إنشاء ملف Excel. أعد المحاولة، وإذا استمرت المشكلة راجع سجل التطبيق.', 'Could not create the Excel report. Try again; if the problem persists, review the application log.'));
     }
