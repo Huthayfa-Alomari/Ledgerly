@@ -188,7 +188,7 @@ export function runDataTrustChecks(rows, options = {}) {
   const totals = { ...zeroTotals };
   data.forEach((row, index) => {
     const code = String(row.code ?? '').trim(), name = String(row.name ?? '').trim();
-    const rowNumber = Number.isFinite(Number(row.rowNumber)) ? Number(row.rowNumber) : index + 2;
+    const rowNumber = Number.isFinite(Number(row.rowNumber)) ? Number(row.rowNumber) : Number.isFinite(Number(row.sourceRowNumber)) ? Number(row.sourceRowNumber) : index + 2;
     if (!code || !name) missingIdentity.push({ code, name, rowNumber });
     if (code) { if (seenCodes.has(code)) duplicateCodes.push({ code, rowNumber }); else seenCodes.set(code, rowNumber); }
     for (const field of fields) {
