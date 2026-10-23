@@ -6,7 +6,7 @@ import {
 } from './lib/audit-operations-engine.mjs';
 import { buildDocxBytes } from './lib/docx-export.mjs';
 import { saveLocalEvidenceFile } from './lib/local-evidence-files';
-import { fingerprintAccountMappings, fingerprintTrialBalanceRows } from './lib/audit-intelligence.mjs';
+import { fingerprintAccountMappings, fingerprintReportConfiguration, fingerprintTrialBalanceRows } from './lib/audit-intelligence.mjs';
 
 type Row = Record<string, any>;
 type Operations = {
@@ -177,6 +177,7 @@ export default function AuditOperationsPanels(props: Props) {
       generatedAt,
       sourceFingerprint: fingerprintTrialBalanceRows(trialBalance),
       accountMappingFingerprint: fingerprintAccountMappings(operations.accountMappings || {}, engagementId || ''),
+      reportConfigurationFingerprint: fingerprintReportConfiguration({ firmName: reportFirmName, auditorName: reportAuditorName, periodEnd: reportEnd, opinion: reportOpinionValue }),
       sourceRowCount: trialBalance.length,
       statementSnapshot: {
         current: { ...statement.current },
@@ -192,7 +193,7 @@ export default function AuditOperationsPanels(props: Props) {
   }
 
   function saveReportExportSnapshot(snapshot: Row) {
-    const next = { ...reportDraft, engagementId, lastExportSnapshot: snapshot, updatedAt: snapshot.generatedAt };
+    const next = { ...reportDraft, engagementId, firmName: reportFirmName, auditorName: reportAuditorName, periodEnd: reportEnd, opinion: reportOpinionValue, lastExportSnapshot: snapshot, updatedAt: snapshot.generatedAt };
     update({ reportDrafts: [...(operations.reportDrafts || []).filter(row => row.engagementId !== engagementId), next] });
   }
 
