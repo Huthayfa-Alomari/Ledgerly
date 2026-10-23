@@ -25,7 +25,7 @@ type WorkpaperVersion = { version: number; at: string; actor: string; action: st
 type Workpaper = { id: string; engagementId: string; ref: string; title: string; area: string; preparer: string; reviewer: string; status: string; conclusion: string; updatedAt: string; procedure?: string; tickmarks?: string; reviewNotes?: string; reviewNotesStatus?: string; version?: number; history?: WorkpaperVersion[]; sourceFingerprint?: string; sourceSnapshotAt?: string; sourceSnapshotReviewedBy?: string };
 type Finding = { id: string; engagementId: string; title: string; criteria: string; condition: string; effect: string; recommendation: string; severity: string; status: string };
 type Evidence = { id: string; engagementId: string; title: string; type: string; reference: string; workpaperRef: string; notes: string; addedAt: string; attachmentId?: string; fileName?: string; fileType?: string; fileSize?: number };
-type TBRow = { id: string; engagementId: string; code: string; name: string; openingDebit: number; openingCredit: number; debit: number; credit: number; closingDebit: number; closingCredit: number; source: string; sourceFinancialFields?: string[] };
+type TBRow = { id: string; engagementId: string; code: string; name: string; openingDebit: number; openingCredit: number; debit: number; credit: number; closingDebit: number; closingCredit: number; source: string; sourceRowNumber?: number; sourceFinancialFields?: string[] };
 type AuditEvent = { id: string; at: string; action: string; entity: string; details: string; engagementId?: string; actorId?: string; prevHash?: string; hash?: string }; 
 type Module = 'dashboard'|'clients'|'engagements'|'planning'|'trial-balance'|'workpapers'|'evidence'|'findings'|'reports'|'reconciliation'|'ai-assistant'|'intelligence'|'settings';
 type AuditOperations = {
@@ -272,7 +272,9 @@ function App() {
     severity:issue.severity,
     category:issue.category,
     title:issue.title,
-    amount:issue.amount
+    amount:issue.amount,
+    accountCode:typeof issue.code==='string'?issue.code:'',
+    sourceRowNumber:db.trialBalance.find(row=>row.id===issue.rowId)?.sourceRowNumber??null
    }))
   }
  }),[db,activeEngagement,tbAnalytics,evidenceTraceability]);
@@ -341,7 +343,7 @@ function App() {
    const find=(terms:string[])=>{const exact=headers.findIndex(h=>h&&terms.includes(h));if(exact>=0)return exact;return headers.findIndex(h=>h&&terms.some(t=>h.includes(t))&&!((h.includes('opening')||h.includes('افتتاح'))&&(terms.includes('debit')||terms.includes('credit')||terms.includes('مدين')||terms.includes('دائن')))&&!((h.includes('closing')||h.includes('ending')||h.includes('ختامي')||h.includes('نهائي'))&&(terms.includes('debit')||terms.includes('credit')||terms.includes('مدين')||terms.includes('دائن'))));};
    const ix={code:find(['accountcode','code','رقمالحساب','كودالحساب','رمزالحساب']),name:find(['accountname','account','name','اسمالحساب','الحساب','اسم']),od:find(['openingdebit','debitopening','مديناول','مدينافتتاحي']),oc:find(['openingcredit','creditopening','دائناول','دائن افتتاحي'.replace(/\\s/g,'')]),debit:find(['debit','مدين','مدينالحركة']),credit:find(['credit','دائن','دائنالحركة']),cd:find(['closingdebit','debitclosing','مديناخر','مدينختامي']),cc:find(['closingcredit','creditclosing','دائناخر','دائنختامي'])};
    if(ix.code<0&&ix.name<0)throw new Error('لم أتعرف على عمود رقم الحساب أو اسم الحساب. عدّل عناوين الملف إلى: رقم الحساب، اسم الحساب، مدين، دائن.');
-   const rows:TBRow[]=matrix.slice(1).filter(r=>r.some(v=>String(v??'').trim())).map(r=>({id:uid(),engagementId:activeEngagement.id,code:ix.code>=0?String(r[ix.code]??'').trim():'',name:ix.name>=0?String(r[ix.name]??'').trim():(ix.code>=0?String(r[ix.code]??'').trim():''),openingDebit:ix.od>=0?amountValue(r[ix.od]):0,openingCredit:ix.oc>=0?amountValue(r[ix.oc]):0,debit:ix.debit>=0?amountValue(r[ix.debit]):0,credit:ix.credit>=0?amountValue(r[ix.credit]):0,closingDebit:ix.cd>=0?amountValue(r[ix.cd]):0,closingCredit:ix.cc>=0?amountValue(r[ix.cc]):0,source:file.name,sourceFinancialFields:[...(ix.od>=0?['openingDebit']:[]),...(ix.oc>=0?['openingCredit']:[]),...(ix.debit>=0?['debit']:[]),...(ix.credit>=0?['credit']:[]),...(ix.cd>=0?['closingDebit']:[]),...(ix.cc>=0?['closingCredit']:[])]})).filter(r=>r.code||r.name);
+   const rows:TBRow[]=matrix.slice(1).map((r,sourceIndex)=>({id:uid(),engagementId:activeEngagement.id,sourceRowNumber:sourceIndex+2,code:ix.code>=0?String(r[ix.code]??'').trim():'',name:ix.name>=0?String(r[ix.name]??'').trim():(ix.code>=0?String(r[ix.code]??'').trim():''),openingDebit:ix.od>=0?amountValue(r[ix.od]):0,openingCredit:ix.oc>=0?amountValue(r[ix.oc]):0,debit:ix.debit>=0?amountValue(r[ix.debit]):0,credit:ix.credit>=0?amountValue(r[ix.credit]):0,closingDebit:ix.cd>=0?amountValue(r[ix.cd]):0,closingCredit:ix.cc>=0?amountValue(r[ix.cc]):0,source:file.name,sourceFinancialFields:[...(ix.od>=0?['openingDebit']:[]),...(ix.oc>=0?['openingCredit']:[]),...(ix.debit>=0?['debit']:[]),...(ix.credit>=0?['credit']:[]),...(ix.cd>=0?['closingDebit']:[]),...(ix.cc>=0?['closingCredit']:[])]})).filter(r=>r.code||r.name);
    if(!rows.length)throw new Error('لم يتم العثور على حسابات قابلة للاستيراد.');
    const seenCodes=new Set<string>();const duplicateCodes=new Set<string>();let duplicateRows=0;for(const row of rows){if(!row.code)continue;if(seenCodes.has(row.code)){duplicateRows++;duplicateCodes.add(row.code);}else seenCodes.add(row.code);}if(duplicateRows){const unique=[...duplicateCodes].slice(0,5).join('، ');throw new Error(`يوجد ${duplicateRows} تكرارًا في أرقام الحسابات (مثل: ${unique}). راجع الملف قبل الاستيراد؛ لم تُستبدل البيانات الحالية.`);}
    const imbalance=fromFils(rows.reduce((a,r)=>a+toFils(r.debit)-toFils(r.credit),0));
