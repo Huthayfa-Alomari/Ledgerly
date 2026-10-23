@@ -6,7 +6,7 @@ import {
 } from './lib/audit-operations-engine.mjs';
 import { buildDocxBytes } from './lib/docx-export.mjs';
 import { saveLocalEvidenceFile } from './lib/local-evidence-files';
-import { fingerprintTrialBalanceRows } from './lib/audit-intelligence.mjs';
+import { fingerprintAccountMappings, fingerprintTrialBalanceRows } from './lib/audit-intelligence.mjs';
 
 type Row = Record<string, any>;
 type Operations = {
@@ -176,6 +176,7 @@ export default function AuditOperationsPanels(props: Props) {
       kind,
       generatedAt,
       sourceFingerprint: fingerprintTrialBalanceRows(trialBalance),
+      accountMappingFingerprint: fingerprintAccountMappings(operations.accountMappings || {}, engagementId),
       sourceRowCount: trialBalance.length,
       statementSnapshot: {
         current: { ...statement.current },
