@@ -182,6 +182,8 @@ export function runDataTrustChecks(rows, options = {}) {
     return { rowCount: 0, totals: zeroTotals, openingDifference: 0, movementDifference: 0, closingDifference: 0, issues, pass: false };
   }
   const seenCodes = new Map(), duplicateCodes = [], missingIdentity = [], missingFinancial = [], invalidNumeric = [], negativeValues = [], bothClosingSides = [], bridgeVariances = [], duplicateRecords = [], signatureMap = new Map();
+  const availableFields = fields.filter(field => data.every(row => !Array.isArray(row.sourceFinancialFields) || row.sourceFinancialFields.includes(field)));
+  const unmappedFields = fields.filter(field => !availableFields.includes(field));
   const totals = { ...zeroTotals };
   data.forEach((row, index) => {
     const code = String(row.code ?? '').trim(), name = String(row.name ?? '').trim();
@@ -191,7 +193,8 @@ export function runDataTrustChecks(rows, options = {}) {
     for (const field of fields) {
       const raw = row[field];
       const mapped = !Array.isArray(row.sourceFinancialFields) || row.sourceFinancialFields.includes(field);
-      const present = mapped && raw !== undefined && raw !== null && String(raw).trim() !== '';
+      if (!mapped) continue; // Outside this source export's schema; disclose coverage separately.
+      const present = raw !== undefined && raw !== null && String(raw).trim() !== '';
       if (!present) { missingFinancial.push({ code: code || name || '(بدون حساب)', field, rowNumber }); continue; }
       const value = Number(raw);
       if (!Number.isFinite(value)) { invalidNumeric.push({ code: code || name || '(بدون حساب)', field, value: raw, rowNumber }); continue; }
@@ -212,9 +215,9 @@ export function runDataTrustChecks(rows, options = {}) {
   });
   for (const rowNumbers of signatureMap.values()) if (rowNumbers.length > 1) duplicateRecords.push(...rowNumbers.slice(1).map(rowNumber => ({ rowNumber, firstRowNumber: rowNumbers[0] })));
   for (const key of Object.keys(totals)) totals[key] = roundMoney(totals[key]);
-  const openingDifference = roundMoney(totals.openingDebit - totals.openingCredit);
-  const movementDifference = roundMoney(totals.debit - totals.credit);
-  const closingDifference = roundMoney(totals.closingDebit - totals.closingCredit);
+  const openingDifference = availableFields.includes('openingDebit') && availableFields.includes('openingCredit') ? roundMoney(totals.openingDebit - totals.openingCredit) : null;
+  const movementDifference = availableFields.includes('debit') && availableFields.includes('credit') ? roundMoney(totals.debit - totals.credit) : null;
+  const closingDifference = availableFields.includes('closingDebit') && availableFields.includes('closingCredit') ? roundMoney(totals.closingDebit - totals.closingCredit) : null;
   if (missingIdentity.length) issues.push({ ...issue('tb-identity', 'medium', 'حسابات ناقصة التعريف', missingIdentity.length, 'بعض الصفوف تفتقد رمز الحساب أو اسمه؛ قد تتأثر المطابقة والتجميع.', 'صحّح الأعمدة أو بيانات المصدر، ثم أعد تشغيل الفحص.'), rowNumbers: missingIdentity.map(row => row.rowNumber) });
   if (missingFinancial.length) issues.push({ ...issue('tb-missing-financial-fields', 'high', 'حقول مالية ناقصة', missingFinancial.length, 'هناك حقول افتتاحية أو حركة أو ختامية فارغة. لا تُعامل الفراغات كصفر قبل التحقق من تنسيق ملف المصدر.', 'راجع تعيين الأعمدة؛ ميّز الصفر الصريح عن الخانة الفارغة، ثم أعد الاستيراد.'), rowNumbers: [...new Set(missingFinancial.map(row => row.rowNumber))], examples: missingFinancial.slice(0, 10) });
   if (invalidNumeric.length) issues.push({ ...issue('tb-invalid-numeric', 'high', 'قيم مالية غير رقمية', invalidNumeric.length, 'تعذر تفسير بعض القيم المالية كأرقام؛ استبعادها من الإجماليات قد يجعل نتائج الاتزان مضللة.', 'صحّح القيم أو إعدادات الفواصل العشرية في المصدر وأعد الاستيراد.'), rowNumbers: [...new Set(invalidNumeric.map(row => row.rowNumber))], examples: invalidNumeric.slice(0, 10) });
@@ -222,9 +225,10 @@ export function runDataTrustChecks(rows, options = {}) {
   if (duplicateCodes.length) issues.push({ ...issue('tb-duplicate-code', 'medium', 'رموز حسابات مكررة', duplicateCodes.length, 'وجدت رموز حساب متكررة. قد يكون ذلك صحيحًا عند وجود أبعاد أو مراكز تكلفة؛ راجع مفتاح الحساب قبل الدمج.', 'تحقق من رمز الحساب ومركز التكلفة والفترة قبل اعتبارها سجلات مكررة.'), rowNumbers: duplicateCodes.map(row => row.rowNumber), examples: duplicateCodes.slice(0, 10) });
   if (duplicateRecords.length) issues.push({ ...issue('tb-duplicate-row', 'medium', 'صفوف ميزان مكررة بالكامل', duplicateRecords.length, 'توجد صفوف متطابقة في الحساب والاسم وجميع القيم المالية؛ قد يؤدي تكرار الاستيراد أو الصف إلى تضخيم الإجماليات.', 'قارنها بالمصدر وحدد إن كانت تكرارًا غير مقصود؛ لا تحذف صفًا تلقائيًا.'), rowNumbers: duplicateRecords.map(row => row.rowNumber), examples: duplicateRecords.slice(0, 10) });
   if (bothClosingSides.length) issues.push({ ...issue('tb-both-sides', 'low', 'حسابات لها مدين ودائن ختامي معًا', bothClosingSides.length, 'رُصدت أرصدة مدين ودائن معًا في الصف نفسه؛ قد يكون ذلك مسموحًا في المصدر لكنه يحتاج تفسيرًا.', 'افحص تصميم الميزان وسياسة عرض الأرصدة قبل إعادة التصنيف.'), rowNumbers: bothClosingSides.map(row => row.rowNumber) });
-  if (Math.abs(openingDifference) >= TOLERANCE) issues.push(issue('tb-opening-unbalanced', 'high', 'إجمالي الأرصدة الافتتاحية غير متوازن', 1, 'فرق المدين والدائن الافتتاحي: ' + openingDifference.toFixed(3) + ' د.أ.', 'تحقق من اكتمال أرصدة أول المدة ومن تعيين أعمدة المدين والدائن.'));
-  if (Math.abs(movementDifference) >= TOLERANCE) issues.push(issue('tb-movement-unbalanced', 'high', 'إجمالي حركة الفترة غير متوازن', 1, 'فرق المدين والدائن لحركة الفترة: ' + movementDifference.toFixed(3) + ' د.أ.', 'تأكد أن دفتر الأستاذ كامل للفترة وأن الأعمدة تمثل الحركة المدينة والدائنة الصحيحة.'));
-  if (Math.abs(closingDifference) >= TOLERANCE) issues.push(issue('tb-unbalanced', 'high', 'إجمالي الميزان الختامي غير متوازن', 1, 'فرق المدين والدائن الختامي: ' + closingDifference.toFixed(3) + ' د.أ.', 'تأكد من اكتمال الحسابات، وتعيين الأعمدة، والفترة المحاسبية.'));
+  if (openingDifference !== null && Math.abs(openingDifference) > TOLERANCE) issues.push(issue('tb-opening-unbalanced', 'high', 'إجمالي الأرصدة الافتتاحية غير متوازن', 1, 'فرق المدين والدائن الافتتاحي: ' + openingDifference.toFixed(3) + ' د.أ.', 'تحقق من اكتمال أرصدة أول المدة ومن تعيين أعمدة المدين والدائن.'));
+  if (movementDifference !== null && Math.abs(movementDifference) > TOLERANCE) issues.push(issue('tb-movement-unbalanced', 'high', 'إجمالي حركة الفترة غير متوازن', 1, 'فرق المدين والدائن لحركة الفترة: ' + movementDifference.toFixed(3) + ' د.أ.', 'تأكد أن دفتر الأستاذ كامل للفترة وأن الأعمدة تمثل الحركة المدينة والدائنة الصحيحة.'));
+  if (closingDifference !== null && Math.abs(closingDifference) > TOLERANCE) issues.push(issue('tb-unbalanced', 'high', 'إجمالي الميزان الختامي غير متوازن', 1, 'فرق المدين والدائن الختامي: ' + closingDifference.toFixed(3) + ' د.أ.', 'تأكد من اكتمال الحسابات، وتعيين الأعمدة، والفترة المحاسبية.'));
+  if (unmappedFields.length) issues.push(issue('tb-source-field-coverage', 'low', 'حقول خارج نطاق ملف المصدر', unmappedFields.length, 'هذه الحقول غير موجودة في صيغة التصدير الحالية ولذلك تخطّى Ledgerly اختبارات الرصيد أو الحركة التي تحتاجها: ' + unmappedFields.join('، ') + '.', 'إذا كانت هذه الاختبارات مطلوبة للمهمة، أعد التصدير متضمنًا الحقول الناقصة أو وثّق سبب عدم انطباقها.'));
   if (bridgeVariances.length) issues.push({ ...issue('tb-rollforward', 'medium', 'اختلاف بين حركة الفترة والرصيد الختامي', bridgeVariances.length, 'الرصيد الختامي لبعض الحسابات لا يساوي الرصيد الافتتاحي مضافًا إليه الحركة الصافية؛ قد يكون نطاق البيانات جزئيًا أو أن الأعمدة لا تمثل حركة الفترة كاملة.', 'تأكد أن الأعمدة تغطي الفترة نفسها وأن الرصيد الختامي مبني على الحركة المستوردة.'), rowNumbers: bridgeVariances.map(row => row.rowNumber), examples: bridgeVariances.slice(0, 10) });
   const expectedRowCount = Number(options?.expectedRowCount);
   if (Number.isFinite(expectedRowCount) && expectedRowCount >= 0 && expectedRowCount !== data.length) issues.push(issue('tb-source-row-count', 'high', 'عدد الصفوف لا يطابق المصدر', 1, 'المستورد ' + data.length + ' صفًا بينما يتوقع المصدر ' + expectedRowCount + '.', 'تحقق من الفلاتر والصفوف المخفية والورقة الصحيحة قبل الاعتماد.'));
@@ -235,7 +239,7 @@ export function runDataTrustChecks(rows, options = {}) {
   }
   const unmappedCodes = Array.isArray(options?.unmappedAccountCodes) ? options.unmappedAccountCodes.map(value => String(value).trim()).filter(Boolean) : [];
   if (unmappedCodes.length) issues.push(issue('tb-unmapped-accounts', 'medium', 'حسابات لم يتم تصنيفها', unmappedCodes.length, 'توجد حسابات لم يؤكد المدقق ربطها ببنود أو تصنيفات التقارير.', 'راجع خريطة الحسابات وصادق على التصنيف يدويًا قبل إعداد القوائم.'));
-  return { rowCount: data.length, totals, openingDifference, movementDifference, closingDifference, issues, pass: issues.length === 0 };
+  return { rowCount: data.length, totals, availableFields, unmappedFields, openingDifference, movementDifference, closingDifference, issues, pass: issues.length === 0 };
 }
 
 /**
