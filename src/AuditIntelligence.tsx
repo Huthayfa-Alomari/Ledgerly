@@ -125,7 +125,8 @@ export default function AuditIntelligence(props: Props) {
   const currentFindings = scoped(findings);
   const currentRisks = scoped(risks);
   const currentSourceFingerprint = useMemo(() => fingerprintTrialBalanceRows(currentTB), [currentTB]);
-  const dataTrust = useMemo(() => runDataTrustChecks(currentTB), [currentTB]);
+  const unmappedAccountCodes = useMemo(() => currentTB.filter(row => !String(operations.accountMappings?.[`${engagementId}::${row.code}`]?.lineKey ?? '').trim()).map(row => String(row.code ?? '').trim()).filter(Boolean), [currentTB, operations.accountMappings, engagementId]);
+  const dataTrust = useMemo(() => runDataTrustChecks(currentTB, { unmappedAccountCodes }), [currentTB, unmappedAccountCodes]);
   const lineage = useMemo(() => buildEvidenceLineage(currentWorkpapers, currentEvidence, currentFindings), [currentWorkpapers, currentEvidence, currentFindings]);
   const currentReportDrafts = (operations.reportDrafts || []).filter(row => row.engagementId === engagementId);
   const quality = useMemo(() => buildQualityShield({
@@ -135,8 +136,10 @@ export default function AuditIntelligence(props: Props) {
     risks: currentRisks,
     trialBalance: currentTB,
     reportDrafts: currentReportDrafts,
+    accountMappings: operations.accountMappings,
+    engagementId,
     currentSourceFingerprint,
-  }), [currentWorkpapers, currentEvidence, currentFindings, currentRisks, currentTB, currentReportDrafts, currentSourceFingerprint]);
+  }), [currentWorkpapers, currentEvidence, currentFindings, currentRisks, currentTB, currentReportDrafts, operations.accountMappings, engagementId, currentSourceFingerprint]);
   const journalAnalysis = useMemo(() => importedJournal ? analyzeJournalEntries(importedJournal.rows, { approvalThreshold: Number(approvalThreshold), splitWindowDays: Number(splitWindowDays) }) : null, [importedJournal, approvalThreshold, splitWindowDays]);
   const portfolio = useMemo(() => buildPartnerDashboard(engagements, clients, {
     workpapers, evidence, findings, risks, trialBalance,
