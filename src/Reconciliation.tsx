@@ -46,6 +46,107 @@ export default function App() {
     if (credit != null) return `${t('دائن', 'Credit')} ${formatMoney(credit)}`;
     return '—';
   };
+  function exportReconciliationReport() {
+    if (!bankData || !ledgerData || !matchResult) return;
+    try {
+      const now = new Date();
+      const exportedAt = now.toLocaleString(lang === 'ar' ? 'ar-JO' : 'en-US');
+      const signedMovement = (row: ReturnType<typeof normalizeRows>[number] | undefined): number | string =>
+        !row || (row.debit == null && row.credit == null)
+          ? ''
+          : Number(((row.credit ?? 0) - (row.debit ?? 0)).toFixed(3));
+      const makeSheet = (
+        headers: string[],
+        rows: Array<Array<string | number | null>>,
+        widths: number[],
+      ) => {
+        const noDataRow: Array<string | number | null> = [t('لا توجد بيانات', 'No data'), ...Array(Math.max(0, headers.length - 1)).fill('')];
+        const sheet = XLSX.utils.aoa_to_sheet([headers, ...(rows.length ? rows : [noDataRow])]);
+        sheet['!cols'] = widths.map(wch => ({ wch }));
+        sheet['!autofilter'] = { ref: \`A1:\${XLSX.utils.encode_col(headers.length - 1)}\${Math.max(2, rows.length + 1)}\` };
+        return sheet;
+      };
+
+      const workbook = XLSX.utils.book_new();
+      const summary = XLSX.utils.aoa_to_sheet([
+        [t('تقرير المطابقة البنكية', 'Bank reconciliation report')],
+        [t('تاريخ التصدير', 'Exported at'), exportedAt],
+        [t('نافذة فرق التاريخ (أيام)', 'Date difference window (days)'), dateWindowDays],
+        [t('صفوف كشف البنك المستوردة', 'Imported bank statement rows'), bankData.length],
+        [t('صفوف دفتر الأستاذ المستوردة', 'Imported ledger rows'), ledgerData.length],
+        [t('المطابقات المقترحة', 'Suggested matches'), matchResult.summary.matchedCount],
+        [t('غير مطابق — البنك', 'Unmatched — bank'), matchResult.summary.unmatchedBankCount],
+        [t('غير مطابق — الأستاذ', 'Unmatched — ledger'), matchResult.summary.unmatchedLedgerCount],
+        [t('الحالات الملتبسة', 'Ambiguous cases'), matchResult.summary.ambiguousCount],
+        [t('تنبيه', 'Important note'), t('النتائج اقتراحات آلية أولية وليست اعتماداً محاسبياً. راجع الحركات واتجاه المدين والدائن قبل اعتماد التسوية.', 'These are preliminary automated suggestions, not accounting approval. Review transactions and debit/credit conventions before approving the reconciliation.')],
+      ]);
+      summary['!cols'] = [{ wch: 34 }, { wch: 92 }];
+      XLSX.utils.book_append_sheet(workbook, summary, t('الملخص', 'Summary'));
+
+      const matchedRows = matchResult.matches.map(m => {
+        const bankRow = bankData[m.bankIndex];
+        const ledgerRow = ledgerData[m.ledgerIndex];
+        return [
+          m.bankIndex + 2, bankRow?.date ?? '', bankRow?.description ?? '',
+          bankRow?.debit ?? '', bankRow?.credit ?? '', signedMovement(bankRow), bankRow?.balance ?? '',
+          m.ledgerIndex + 2, ledgerRow?.date ?? '', ledgerRow?.description ?? '',
+          ledgerRow?.debit ?? '', ledgerRow?.credit ?? '', signedMovement(ledgerRow), ledgerRow?.balance ?? '',
+          m.confidence === 'exact' ? t('مبلغ + تاريخ + بيان', 'Amount + date + description') : t('مبلغ + تاريخ فقط', 'Amount + date only'),
+          m.amountDifference, m.dateDifferenceDays ?? '',
+        ] as Array<string | number | null>;
+      });
+      const matchedHeaders = [
+        t('صف البنك', 'Bank row'), t('تاريخ البنك', 'Bank date'), t('بيان البنك', 'Bank description'),
+        t('مدين البنك', 'Bank debit'), t('دائن البنك', 'Bank credit'), t('صافي حركة البنك', 'Signed bank movement'), t('رصيد البنك', 'Bank balance'),
+        t('صف الأستاذ', 'Ledger row'), t('تاريخ الأستاذ', 'Ledger date'), t('بيان الأستاذ', 'Ledger description'),
+        t('مدين الأستاذ', 'Ledger debit'), t('دائن الأستاذ', 'Ledger credit'), t('صافي حركة الأستاذ', 'Signed ledger movement'), t('رصيد الأستاذ', 'Ledger balance'),
+        t('أساس المطابقة', 'Match basis'), t('فرق المبلغ', 'Amount difference'), t('فرق التاريخ (أيام)', 'Date difference (days)'),
+      ];
+      const matchedSheet = makeSheet(matchedHeaders, matchedRows, [10, 13, 28, 14, 14, 20, 16, 10, 13, 28, 14, 14, 20, 16, 28, 16, 16]);
+      XLSX.utils.book_append_sheet(workbook, matchedSheet, t('المطابقات', 'Matched'));
+
+      const unmatchedHeaders = [
+        t('رقم الصف', 'Source row'), t('التاريخ', 'Date'), t('البيان', 'Description'),
+        t('المدين', 'Debit'), t('الدائن', 'Credit'), t('صافي الحركة', 'Signed movement'), t('الرصيد', 'Balance'),
+      ];
+      const toUnmatchedRows = (indices: number[], source: ReturnType<typeof normalizeRows>) =>
+        indices.map(index => {
+          const row = source[index];
+          return [row?.sourceRow ?? index + 2, row?.date ?? '', row?.description ?? '',
+            row?.debit ?? '', row?.credit ?? '', signedMovement(row), row?.balance ?? ''] as Array<string | number | null>;
+        });
+      XLSX.utils.book_append_sheet(workbook, makeSheet(unmatchedHeaders, toUnmatchedRows(matchResult.unmatchedBank, bankData), [12, 14, 38, 14, 14, 18, 16]), t('غير مطابق - البنك', 'Unmatched bank'));
+      XLSX.utils.book_append_sheet(workbook, makeSheet(unmatchedHeaders, toUnmatchedRows(matchResult.unmatchedLedger, ledgerData), [12, 14, 38, 14, 14, 18, 16]), t('غير مطابق - الأستاذ', 'Unmatched ledger'));
+
+      const ambiguousRows = matchResult.ambiguous.map(item => {
+        const row = bankData[item.bankIndex];
+        const reason = item.reason === 'multiple_exact_candidates'
+          ? t('أكثر من مرشح بنفس المبلغ والتاريخ والبيان', 'Multiple candidates with same amount, date and description')
+          : item.reason === 'non_unique_amount_date'
+            ? t('المبلغ والتاريخ لا ينتجان تطابقاً فريداً', 'Amount and date do not produce a unique match')
+            : t('أكثر من مرشح للمبلغ والتاريخ', 'Multiple amount/date candidates');
+        return [
+          item.bankIndex + 2, row?.date ?? '', row?.description ?? '',
+          row?.debit ?? '', row?.credit ?? '',
+          item.ledgerIndices.map(index => index + 2).join(', '),
+          item.ledgerIndicesTruncated ? t('نعم', 'Yes') : t('لا', 'No'),
+          reason,
+        ] as Array<string | number | null>;
+      });
+      const ambiguousHeaders = [
+        t('صف البنك', 'Bank row'), t('التاريخ', 'Date'), t('البيان', 'Description'),
+        t('المدين', 'Debit'), t('الدائن', 'Credit'), t('صفوف الأستاذ المرشحة', 'Candidate ledger rows'),
+        t('قائمة المرشحين مختصرة', 'Candidates truncated'), t('سبب الالتباس', 'Ambiguity reason'),
+      ];
+      XLSX.utils.book_append_sheet(workbook, makeSheet(ambiguousHeaders, ambiguousRows, [12, 14, 32, 14, 14, 26, 20, 42]), t('حالات ملتبسة', 'Ambiguous'));
+
+      const stamp = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-');
+      XLSX.writeFile(workbook, \`Ledgerly_Reconciliation_\${stamp}.xlsx\`);
+    } catch {
+      setError(t('تعذر إنشاء ملف Excel. أعد المحاولة، وإذا استمرت المشكلة راجع سجل التطبيق.', 'Could not create the Excel report. Try again; if the problem persists, review the application log.'));
+    }
+  }
+
   const normalized = useMemo(() => file ? normalizeRows(file.rows, file.mapping) : [], [file]);
   const warnings = useMemo(() => validateRows(normalized), [normalized]);
 
@@ -257,7 +358,7 @@ export default function App() {
       <div className="section-title"><div><span className="step">04</span><h2>{t('المطابقة البنكية', 'Bank reconciliation')}</h2></div><span className="muted">{t('مطابقة أولية محافظة', 'Conservative first-pass matching')}</span></div>
       <div className="source-status"><span className={bankData ? 'ok-pill' : 'warning-pill'}>{bankData ? t(`كشف البنك: ${bankData.length} صف`, `Bank: ${bankData.length} rows`) : t('كشف البنك غير محدد', 'Bank statement not assigned')}</span><span className={ledgerData ? 'ok-pill' : 'warning-pill'}>{ledgerData ? t(`دفتر الأستاذ: ${ledgerData.length} صف`, `Ledger: ${ledgerData.length} rows`) : t('دفتر الأستاذ غير محدد', 'Ledger not assigned')}</span></div>
       <div className="match-controls"><label>{t('نافذة فرق التاريخ (أيام)', 'Date window (days)')}<select value={dateWindowDays} onChange={e => setDateWindowDays(Number(e.target.value))}><option value={0}>0</option><option value={1}>1</option><option value={2}>2</option><option value={3}>3</option></select></label><button className="primary" disabled={!bankData || !ledgerData} onClick={() => setMatchResult(matchTransactions(bankData!, ledgerData!, { dateWindowDays }))}>{t('تشغيل المطابقة', 'Run matching')}</button></div>
-      {matchResult && <><div className="match-summary"><div><strong>{matchResult.summary.matchedCount}</strong><span>{t('مطابقة مقترحة', 'Suggested matches')}</span></div><div><strong>{matchResult.summary.unmatchedBankCount}</strong><span>{t('غير مطابق — البنك', 'Unmatched — bank')}</span></div><div><strong>{matchResult.summary.unmatchedLedgerCount}</strong><span>{t('غير مطابق — الأستاذ', 'Unmatched — ledger')}</span></div><div><strong>{matchResult.summary.ambiguousCount}</strong><span>{t('حالات ملتبسة', 'Ambiguous cases')}</span></div></div><div className="alert">{t('هذه اقتراحات آلية أولية وليست اعتماداً محاسبياً. تأكد من اتفاق اتجاه المدين/الدائن في الملفين، وراجع كل نتيجة قبل اعتمادها.', 'These are preliminary automated suggestions, not accounting approval. Confirm debit/credit sign conventions match across both files and review every result before acceptance.')}</div><h3 className="subheading">{t('تفاصيل المطابقات المقترحة', 'Suggested match details')}</h3><p className="helper">{t('قارن التاريخ والبيان واتجاه المبلغ لكل طرف. فرق المبلغ محسوب بإشارة الدائن ناقص المدين وفق الأعمدة المستوردة.', 'Compare dates, descriptions and amount direction for both sources. Amount difference is calculated as credit minus debit using imported columns.')}</p><div className="table-wrap"><table><thead><tr><th>{t('صف البنك', 'Bank row')}</th><th>{t('تاريخ وبيان البنك', 'Bank date & description')}</th><th>{t('حركة البنك', 'Bank movement')}</th><th>{t('رصيد البنك', 'Bank balance')}</th><th>{t('صف الأستاذ', 'Ledger row')}</th><th>{t('تاريخ وبيان الأستاذ', 'Ledger date & description')}</th><th>{t('حركة الأستاذ', 'Ledger movement')}</th><th>{t('رصيد الأستاذ', 'Ledger balance')}</th><th>{t('أساس المطابقة', 'Match basis')}</th><th>{t('فرق المبلغ', 'Amount difference')}</th><th>{t('فرق التاريخ (أيام)', 'Date difference (days)')}</th></tr></thead><tbody>{matchResult.matches.map(m => { const bankRow = bankData?.[m.bankIndex]; const ledgerRow = ledgerData?.[m.ledgerIndex]; return <tr key={`${m.bankIndex}-${m.ledgerIndex}`}><td>{m.bankIndex + 2}</td><td><strong>{bankRow?.date || '—'}</strong><span className="table-sub">{bankRow?.description || t('لا يوجد بيان', 'No description')}</span></td><td>{formatMovement(bankRow)}</td><td>{bankRow?.balance == null ? '—' : formatMoney(bankRow.balance)}</td><td>{m.ledgerIndex + 2}</td><td><strong>{ledgerRow?.date || '—'}</strong><span className="table-sub">{ledgerRow?.description || t('لا يوجد بيان', 'No description')}</span></td><td>{formatMovement(ledgerRow)}</td><td>{ledgerRow?.balance == null ? '—' : formatMoney(ledgerRow.balance)}</td><td>{m.confidence === 'exact' ? t('مبلغ + تاريخ + بيان', 'Amount + date + description') : t('مبلغ + تاريخ فقط', 'Amount + date only')}</td><td>{formatMoney(m.amountDifference)}</td><td>{m.dateDifferenceDays ?? '—'}</td></tr>; })}{matchResult.matches.length === 0 && <tr><td colSpan={11}>{t('لا توجد مطابقات مقترحة. راجع إشارات المبالغ وتعيين الأعمدة.', 'No suggested matches. Check amount signs and column mapping.')}</td></tr>}</tbody></table></div>{matchResult.unmatchedBank.length > 0 && <><h3 className="subheading">{t('حركات غير مطابقة — كشف البنك', 'Unmatched transactions — bank statement')}</h3><div className="table-wrap"><table><thead><tr><th>{t('صف البنك', 'Bank row')}</th><th>{t('التاريخ', 'Date')}</th><th>{t('البيان', 'Description')}</th><th>{t('المدين', 'Debit')}</th><th>{t('الدائن', 'Credit')}</th><th>{t('الرصيد', 'Balance')}</th></tr></thead><tbody>{matchResult.unmatchedBank.map(index => { const row = bankData?.[index]; return <tr key={`bank-${index}`}><td>{index + 2}</td><td>{row?.date || '—'}</td><td>{row?.description || '—'}</td><td>{row?.debit == null ? '—' : formatMoney(row.debit)}</td><td>{row?.credit == null ? '—' : formatMoney(row.credit)}</td><td>{row?.balance == null ? '—' : formatMoney(row.balance)}</td></tr>; })}</tbody></table></div></>}{matchResult.unmatchedLedger.length > 0 && <><h3 className="subheading">{t('حركات غير مطابقة — دفتر الأستاذ', 'Unmatched transactions — ledger')}</h3><div className="table-wrap"><table><thead><tr><th>{t('صف الأستاذ', 'Ledger row')}</th><th>{t('التاريخ', 'Date')}</th><th>{t('البيان', 'Description')}</th><th>{t('المدين', 'Debit')}</th><th>{t('الدائن', 'Credit')}</th><th>{t('الرصيد', 'Balance')}</th></tr></thead><tbody>{matchResult.unmatchedLedger.map(index => { const row = ledgerData?.[index]; return <tr key={`ledger-${index}`}><td>{index + 2}</td><td>{row?.date || '—'}</td><td>{row?.description || '—'}</td><td>{row?.debit == null ? '—' : formatMoney(row.debit)}</td><td>{row?.credit == null ? '—' : formatMoney(row.credit)}</td><td>{row?.balance == null ? '—' : formatMoney(row.balance)}</td></tr>; })}</tbody></table></div></>}{matchResult.ambiguous.length > 0 && <><h3 className="subheading">{t('حالات تحتاج مراجعة', 'Cases needing review')}</h3><ul className="ambiguous-list">{matchResult.ambiguous.map((a, i) => <li key={`${a.bankIndex}-${i}`}>{t('صف البنك', 'Bank row')} {a.bankIndex + 2}: {t('يوجد أكثر من احتمال؛ لم تتم المطابقة تلقائياً.', 'multiple candidates exist; no automatic match was made.')}</li>)}</ul></>}</>}
+      {matchResult && <><div className="match-summary"><div><strong>{matchResult.summary.matchedCount}</strong><span>{t('مطابقة مقترحة', 'Suggested matches')}</span></div><div><strong>{matchResult.summary.unmatchedBankCount}</strong><span>{t('غير مطابق — البنك', 'Unmatched — bank')}</span></div><div><strong>{matchResult.summary.unmatchedLedgerCount}</strong><span>{t('غير مطابق — الأستاذ', 'Unmatched — ledger')}</span></div><div><strong>{matchResult.summary.ambiguousCount}</strong><span>{t('حالات ملتبسة', 'Ambiguous cases')}</span></div></div><div className="match-export-actions"><button className="secondary" type="button" onClick={exportReconciliationReport}>{t('تصدير التقرير إلى Excel', 'Export report to Excel')}</button><span className="muted">{t('يشمل الملخص والمطابقات وجميع الحركات غير المطابقة والحالات الملتبسة.', 'Includes summary, matched items, unmatched transactions, and ambiguous cases.')}</span></div><div className="alert">{t('هذه اقتراحات آلية أولية وليست اعتماداً محاسبياً. تأكد من اتفاق اتجاه المدين/الدائن في الملفين، وراجع كل نتيجة قبل اعتمادها.', 'These are preliminary automated suggestions, not accounting approval. Confirm debit/credit sign conventions match across both files and review every result before acceptance.')}</div><h3 className="subheading">{t('تفاصيل المطابقات المقترحة', 'Suggested match details')}</h3><p className="helper">{t('قارن التاريخ والبيان واتجاه المبلغ لكل طرف. فرق المبلغ محسوب بإشارة الدائن ناقص المدين وفق الأعمدة المستوردة.', 'Compare dates, descriptions and amount direction for both sources. Amount difference is calculated as credit minus debit using imported columns.')}</p><div className="table-wrap"><table><thead><tr><th>{t('صف البنك', 'Bank row')}</th><th>{t('تاريخ وبيان البنك', 'Bank date & description')}</th><th>{t('حركة البنك', 'Bank movement')}</th><th>{t('رصيد البنك', 'Bank balance')}</th><th>{t('صف الأستاذ', 'Ledger row')}</th><th>{t('تاريخ وبيان الأستاذ', 'Ledger date & description')}</th><th>{t('حركة الأستاذ', 'Ledger movement')}</th><th>{t('رصيد الأستاذ', 'Ledger balance')}</th><th>{t('أساس المطابقة', 'Match basis')}</th><th>{t('فرق المبلغ', 'Amount difference')}</th><th>{t('فرق التاريخ (أيام)', 'Date difference (days)')}</th></tr></thead><tbody>{matchResult.matches.map(m => { const bankRow = bankData?.[m.bankIndex]; const ledgerRow = ledgerData?.[m.ledgerIndex]; return <tr key={`${m.bankIndex}-${m.ledgerIndex}`}><td>{m.bankIndex + 2}</td><td><strong>{bankRow?.date || '—'}</strong><span className="table-sub">{bankRow?.description || t('لا يوجد بيان', 'No description')}</span></td><td>{formatMovement(bankRow)}</td><td>{bankRow?.balance == null ? '—' : formatMoney(bankRow.balance)}</td><td>{m.ledgerIndex + 2}</td><td><strong>{ledgerRow?.date || '—'}</strong><span className="table-sub">{ledgerRow?.description || t('لا يوجد بيان', 'No description')}</span></td><td>{formatMovement(ledgerRow)}</td><td>{ledgerRow?.balance == null ? '—' : formatMoney(ledgerRow.balance)}</td><td>{m.confidence === 'exact' ? t('مبلغ + تاريخ + بيان', 'Amount + date + description') : t('مبلغ + تاريخ فقط', 'Amount + date only')}</td><td>{formatMoney(m.amountDifference)}</td><td>{m.dateDifferenceDays ?? '—'}</td></tr>; })}{matchResult.matches.length === 0 && <tr><td colSpan={11}>{t('لا توجد مطابقات مقترحة. راجع إشارات المبالغ وتعيين الأعمدة.', 'No suggested matches. Check amount signs and column mapping.')}</td></tr>}</tbody></table></div>{matchResult.unmatchedBank.length > 0 && <><h3 className="subheading">{t('حركات غير مطابقة — كشف البنك', 'Unmatched transactions — bank statement')}</h3><div className="table-wrap"><table><thead><tr><th>{t('صف البنك', 'Bank row')}</th><th>{t('التاريخ', 'Date')}</th><th>{t('البيان', 'Description')}</th><th>{t('المدين', 'Debit')}</th><th>{t('الدائن', 'Credit')}</th><th>{t('الرصيد', 'Balance')}</th></tr></thead><tbody>{matchResult.unmatchedBank.map(index => { const row = bankData?.[index]; return <tr key={`bank-${index}`}><td>{index + 2}</td><td>{row?.date || '—'}</td><td>{row?.description || '—'}</td><td>{row?.debit == null ? '—' : formatMoney(row.debit)}</td><td>{row?.credit == null ? '—' : formatMoney(row.credit)}</td><td>{row?.balance == null ? '—' : formatMoney(row.balance)}</td></tr>; })}</tbody></table></div></>}{matchResult.unmatchedLedger.length > 0 && <><h3 className="subheading">{t('حركات غير مطابقة — دفتر الأستاذ', 'Unmatched transactions — ledger')}</h3><div className="table-wrap"><table><thead><tr><th>{t('صف الأستاذ', 'Ledger row')}</th><th>{t('التاريخ', 'Date')}</th><th>{t('البيان', 'Description')}</th><th>{t('المدين', 'Debit')}</th><th>{t('الدائن', 'Credit')}</th><th>{t('الرصيد', 'Balance')}</th></tr></thead><tbody>{matchResult.unmatchedLedger.map(index => { const row = ledgerData?.[index]; return <tr key={`ledger-${index}`}><td>{index + 2}</td><td>{row?.date || '—'}</td><td>{row?.description || '—'}</td><td>{row?.debit == null ? '—' : formatMoney(row.debit)}</td><td>{row?.credit == null ? '—' : formatMoney(row.credit)}</td><td>{row?.balance == null ? '—' : formatMoney(row.balance)}</td></tr>; })}</tbody></table></div></>}{matchResult.ambiguous.length > 0 && <><h3 className="subheading">{t('حالات تحتاج مراجعة', 'Cases needing review')}</h3><ul className="ambiguous-list">{matchResult.ambiguous.map((a, i) => <li key={`${a.bankIndex}-${i}`}>{t('صف البنك', 'Bank row')} {a.bankIndex + 2}: {t('يوجد أكثر من احتمال؛ لم تتم المطابقة تلقائياً.', 'multiple candidates exist; no automatic match was made.')}</li>)}</ul></>}</>}
     </section>
     <footer>{t('إصدار تجريبي 0.2 · مطابقة أولية للمراجعة', 'Prototype 0.2 · Preliminary matching for review')} <span>•</span> {t('لا تنفذ قيوداً محاسبية', 'Does not post journal entries')}</footer>
   </main>;
