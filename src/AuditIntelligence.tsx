@@ -270,11 +270,11 @@ export default function AuditIntelligence(props: Props) {
         </div>
         <div className="audit-intel-kpis audit-intel-kpis-small">
           <Kpi label="صفوف الميزان" value={dataTrust.rowCount} note="الحسابات المستوردة" />
-          <Kpi label="إجمالي المدين الختامي" value={formatMoney(dataTrust.totals.closingDebit)} note="من البيانات المحلية" />
-          <Kpi label="إجمالي الدائن الختامي" value={formatMoney(dataTrust.totals.closingCredit)} note="من البيانات المحلية" />
-          <Kpi label="فرق الأرصدة الافتتاحية" value={formatMoney(dataTrust.openingDifference)} note="صافي المدين ناقص الدائن أول المدة" />
-          <Kpi label="فرق حركة الفترة" value={formatMoney(dataTrust.movementDifference)} note="صافي المدين ناقص الدائن للحركة" />
-          <Kpi label="فرق المدين والدائن" value={formatMoney(dataTrust.closingDifference)} note="المتوقع أن يقترب من الصفر" />
+          <Kpi label="إجمالي المدين الختامي" value={dataTrust.availableFields.includes("closingDebit") ? formatMoney(dataTrust.totals.closingDebit) : "—"} note={dataTrust.availableFields.includes("closingDebit") ? "من البيانات المحلية" : "غير متاح في ملف المصدر"} />
+          <Kpi label="إجمالي الدائن الختامي" value={dataTrust.availableFields.includes("closingCredit") ? formatMoney(dataTrust.totals.closingCredit) : "—"} note={dataTrust.availableFields.includes("closingCredit") ? "من البيانات المحلية" : "غير متاح في ملف المصدر"} />
+          <Kpi label="فرق الأرصدة الافتتاحية" value={dataTrust.openingDifference === null ? "—" : formatMoney(dataTrust.openingDifference)} note={dataTrust.openingDifference === null ? "غير متاح في ملف المصدر" : "صافي المدين ناقص الدائن أول المدة"} />
+          <Kpi label="فرق حركة الفترة" value={dataTrust.movementDifference === null ? "—" : formatMoney(dataTrust.movementDifference)} note={dataTrust.movementDifference === null ? "غير متاح في ملف المصدر" : "صافي المدين ناقص الدائن للحركة"} />
+          <Kpi label="فرق المدين والدائن" value={dataTrust.closingDifference === null ? "—" : formatMoney(dataTrust.closingDifference)} note={dataTrust.closingDifference === null ? "غير متاح في ملف المصدر" : "المتوقع أن يقترب من الصفر"} />
         </div>
         {dataTrust.issues.length ? <div className="audit-intel-issue-list">{dataTrust.issues.map(item => <article className="audit-intel-issue" key={item.id}>
           <div className="audit-intel-issue-top"><strong>{item.title}</strong><span className={'audit-pill ' + severityClass(item.severity)}>{severityName(item.severity)} · {item.count}</span></div>
