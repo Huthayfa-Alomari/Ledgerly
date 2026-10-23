@@ -669,7 +669,9 @@ export function buildPartnerDashboard(engagements, clients, database, operations
     const risks = scoped(database.risks);
     const tbRows = scoped(database.trialBalance);
     const reportDrafts = operationRows('reportDrafts').filter(row => row.engagementId === id);
-    const quality = buildQualityShield({ workpapers: papers, evidence, findings, risks, trialBalance: tbRows, reportDrafts, accountMappings: operations.accountMappings || {}, engagementId: id, currentSourceFingerprint: fingerprintTrialBalanceRows(tbRows) });
+    const currentSourceFingerprint = fingerprintTrialBalanceRows(tbRows);
+    const quality = buildQualityShield({ workpapers: papers, evidence, findings, risks, trialBalance: tbRows, reportDrafts, accountMappings: operations.accountMappings || {}, engagementId: id, currentSourceFingerprint });
+    const closure = evaluateEngagementClosure({ engagementId: id, workpapers: papers, evidence, findings, risks, trialBalance: tbRows, operations, currentSourceFingerprint });
     const requests = scoped(operationRows('clientRequests'));
     const outstandingRequests = requests.filter(row => !row.done && !['مستلم للمراجعة', 'مكتمل', 'مغلقة', 'مغلق'].includes(String(row.status ?? '')));
     const overdueRequests = outstandingRequests.filter(row => /^\d{4}-\d{2}-\d{2}$/.test(String(row.dueDate ?? '')) && String(row.dueDate) < asOfDate);
@@ -695,6 +697,9 @@ export function buildPartnerDashboard(engagements, clients, database, operations
       highRisks: risks.filter(r => ['مرتفع', 'عالي', 'high'].includes(cleanText(r.impact)) || ['مرتفع', 'عالي', 'high'].includes(cleanText(r.likelihood))).length,
       qualityAttention: quality.attentionCount,
       qualityBlockers: quality.blockers,
+      closureBlockerCount: closure.blockers.length,
+      closureWarningCount: closure.warnings.length,
+      closureBlockers: closure.blockers,
       outstandingRequests: outstandingRequests.length,
       overdueRequests: overdueRequests.length,
       loggedHours,
