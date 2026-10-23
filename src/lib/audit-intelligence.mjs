@@ -359,15 +359,23 @@ export function analyzeJournalEntries(rows, options = {}) {
  * @param {Array<Record<string, any>>} workpapers
  * @param {Array<Record<string, any>>} evidence
  */
-export function buildEvidenceLineage(workpapers, evidence) {
-  const papers = Array.isArray(workpapers) ? workpapers : [], items = Array.isArray(evidence) ? evidence : [];
+export function buildEvidenceLineage(workpapers, evidence, findings = []) {
+  const papers = Array.isArray(workpapers) ? workpapers : [];
+  const items = Array.isArray(evidence) ? evidence : [];
+  const findingRows = Array.isArray(findings) ? findings : [];
   const byRef = new Map();
+  const evidenceById = new Map(items.map(item => [String(item.id ?? ''), item]).filter(([id]) => Boolean(id)));
   for (const paper of papers) {
     const key = cleanText(paper.ref);
     if (!key) continue;
-    const list = byRef.get(key) || []; list.push(paper); byRef.set(key, list);
+    const list = byRef.get(key) || [];
+    list.push(paper);
+    byRef.set(key, list);
   }
-  const duplicateWorkpaperReferences = [...byRef.entries()].filter(([, list]) => list.length > 1).map(([reference, list]) => ({ reference, count: list.length, workpaperIds: list.map(paper => paper.id) }));
+  const duplicateWorkpaperReferences = [...byRef.entries()]
+    .filter(([, list]) => list.length > 1)
+    .map(([reference, list]) => ({ reference, count: list.length, workpaperIds: list.map(paper => paper.id) }));
+
   const links = items.map(item => {
     const ref = cleanText(item.workpaperRef), candidates = ref ? (byRef.get(ref) || []) : [];
     const workpaper = candidates.length === 1 ? candidates[0] : undefined;
@@ -379,7 +387,50 @@ export function buildEvidenceLineage(workpapers, evidence) {
     const linkedEvidence = candidates.length === 1 ? items.filter(item => cleanText(item.workpaperRef) === ref) : [];
     return { workpaper, evidenceCount: linkedEvidence.length, evidence: linkedEvidence };
   });
-  return { workpaperCount: papers.length, evidenceCount: items.length, linkedEvidenceCount: links.filter(link => link.linked).length, unlinkedEvidenceCount: links.filter(link => !link.linked).length, workpapersWithoutEvidence: workpaperRows.filter(row => row.evidenceCount === 0).length, duplicateWorkpaperReferences, ambiguousReferenceCount: links.filter(link => link.reason === 'ambiguous-reference').length, links, workpapers: workpaperRows };
+  const findingLinks = findingRows.map(finding => {
+    const workpaperRef = cleanText(finding.workpaperRef);
+    const candidates = workpaperRef ? (byRef.get(workpaperRef) || []) : [];
+    const workpaper = candidates.length === 1 ? candidates[0] : undefined;
+    const rawIds = Array.isArray(finding.evidenceIds) ? finding.evidenceIds : finding.evidenceId ? [finding.evidenceId] : [];
+    const evidenceIds = [...new Set(rawIds.map(value => String(value ?? '').trim()).filter(Boolean))];
+    const linkedEvidence = evidenceIds.map(id => evidenceById.get(id)).filter(Boolean);
+    const missingEvidenceIds = evidenceIds.filter(id => !evidenceById.has(id));
+    const evidenceMatchesWorkpaper = Boolean(workpaper) && linkedEvidence.length > 0 &&
+      linkedEvidence.every(item => cleanText(item.workpaperRef) === workpaperRef);
+    const workpaperReason = !workpaperRef ? 'missing-workpaper-reference' : candidates.length === 0 ? 'unknown-workpaper-reference' : candidates.length > 1 ? 'ambiguous-workpaper-reference' : 'linked';
+    const evidenceReason = !evidenceIds.length ? 'missing-evidence-reference' : missingEvidenceIds.length ? 'unknown-evidence-reference' : !evidenceMatchesWorkpaper ? 'evidence-workpaper-mismatch' : 'linked';
+    return {
+      finding,
+      workpaper,
+      linkedEvidence,
+      evidenceIds,
+      missingEvidenceIds,
+      workpaperLinked: Boolean(workpaper),
+      evidenceLinked: evidenceIds.length > 0 && missingEvidenceIds.length === 0 && linkedEvidence.length === evidenceIds.length,
+      evidenceMatchesWorkpaper,
+      linked: Boolean(workpaper) && evidenceIds.length > 0 && missingEvidenceIds.length === 0 && evidenceMatchesWorkpaper,
+      workpaperReason,
+      evidenceReason,
+    };
+  });
+
+  return {
+    workpaperCount: papers.length,
+    evidenceCount: items.length,
+    linkedEvidenceCount: links.filter(link => link.linked).length,
+    unlinkedEvidenceCount: links.filter(link => !link.linked).length,
+    workpapersWithoutEvidence: workpaperRows.filter(row => row.evidenceCount === 0).length,
+    duplicateWorkpaperReferences,
+    ambiguousReferenceCount: links.filter(link => link.reason === 'ambiguous-reference').length,
+    findingsCount: findingRows.length,
+    findingLinks,
+    findingsWithoutWorkpaper: findingLinks.filter(link => !link.workpaperLinked).length,
+    findingsWithoutEvidence: findingLinks.filter(link => !link.evidenceLinked).length,
+    findingEvidenceMismatches: findingLinks.filter(link => link.workpaperLinked && link.evidenceLinked && !link.evidenceMatchesWorkpaper).length,
+    fullyLinkedFindings: findingLinks.filter(link => link.linked).length,
+    links,
+    workpapers: workpaperRows,
+  };
 }
 
 /**
@@ -418,7 +469,7 @@ export function buildQualityShield(input) {
   const findings = input.findings || [];
   const risks = input.risks || [];
   const tb = runDataTrustChecks(input.trialBalance || [], input.dataTrustOptions || {});
-  const lineage = buildEvidenceLineage(workpapers, evidence);
+  const lineage = buildEvidenceLineage(workpapers, evidence, findings);
   const currentSourceFingerprint = String(input.currentSourceFingerprint || '');
   const staleWorkpapers = currentSourceFingerprint ? workpapers.filter(row => row.sourceFingerprint && row.sourceFingerprint !== currentSourceFingerprint) : [];
   const workpapersWithoutSnapshot = currentSourceFingerprint ? workpapers.filter(row => !row.sourceFingerprint) : [];
@@ -432,6 +483,9 @@ export function buildQualityShield(input) {
   add('quality-workpaper-procedure', 'medium', 'أوراق بلا إجراء موثق', workpapers.filter(row => !String(row.procedure ?? '').trim()).length, 'بعض أوراق العمل لا تحتوي نصًا في حقل الإجراء.', 'وثّق طبيعة الإجراء ونطاقه وتنفيذه؛ لا تملأ الحقل شكليًا دون تنفيذ.');
   add('quality-workpaper-conclusion', 'medium', 'أوراق بلا استنتاج موثق', workpapers.filter(row => !String(row.conclusion ?? '').trim()).length, 'بعض أوراق العمل لا تحتوي استنتاجًا مسجلًا.', 'سجّل استنتاج المدقق المدعوم بالأدلة المناسبة.');
   add('quality-evidence-link', 'medium', 'أدلة بلا ربط بورقة عمل', lineage.unlinkedEvidenceCount, 'الارتباط المرجعي وحده لا يثبت كفاية الدليل أو ملاءمته.', 'اربط كل دليل بورقة العمل المقصودة وتحقق من محتواه وصلاحيته.');
+  add('quality-finding-workpaper-link', 'medium', 'ملاحظات بلا ورقة عمل مرتبطة', lineage.findingsWithoutWorkpaper, 'لا يمكن تتبّع بعض ملاحظات التدقيق إلى إجراء موثق أو مرجع ورقة عمل فريد.', 'اربط الملاحظة بورقة العمل التي أدت إليها؛ صحّح المراجع غير المعروفة أو المكررة.');
+  add('quality-finding-evidence-link', 'medium', 'ملاحظات بلا دليل مرتبط', lineage.findingsWithoutEvidence, 'بعض الملاحظات لا تتضمن مرجعًا إلى دليل مفهرس في الملف الحالي.', 'اربط الملاحظة بالمستند أو السجل الذي يدعمها، ثم راجع كفاية الدليل بصورة مهنية.');
+  add('quality-finding-evidence-mismatch', 'high', 'الدليل لا يتبع ورقة العمل المرتبطة بالملاحظة', lineage.findingEvidenceMismatches, 'الدليل المرتبط بالملاحظة يشير إلى ورقة عمل مختلفة عن المرجع المختار للملاحظة.', 'تحقق من سلسلة التوثيق وحدد ورقة العمل الصحيحة قبل الإقفال.');
   add('quality-workpaper-duplicate-ref', 'high', 'مراجع أوراق عمل مكررة', lineage.duplicateWorkpaperReferences.length, 'مراجع غير فريدة تمنع ربط الأدلة بثقة؛ لا يختار النظام إحدى الأوراق بصمت.', 'اجعل مرجع كل ورقة فريدًا داخل ملف التدقيق ثم أعد فحص الروابط.');
   add('quality-ambiguous-evidence-link', 'high', 'أدلة مرتبطة بمرجع ملتبس', lineage.ambiguousReferenceCount, 'بعض الأدلة تشير إلى مرجع تستخدمه أكثر من ورقة عمل.', 'صحّح مرجع الدليل بعد تحديد ورقة العمل المقصودة.');
   add('quality-stale-workpaper', 'high', 'أوراق عمل تعتمد على نسخة أقدم من البيانات', staleWorkpapers.length, 'تغيّرت بصمة مجموعة البيانات المصدرية منذ حفظ لقطة ورقة العمل. هذا لا يؤكد وقوع خطأ، لكنه يعني أن نتائجها تحتاج مراجعة.', 'أعد تنفيذ الإجراءات المتأثرة وقارن الاستنتاجات بالمصدر الحالي، ثم حدّث لقطة البيانات بعد المراجعة.');
@@ -493,6 +547,12 @@ export function evaluateEngagementClosure(input = {}, policy = {}) {
   if (policy.requireEvidenceLinked !== false) {
     addBlocker('close-evidence-unlinked', 'أدلة بلا ربط فريد', quality.lineage.unlinkedEvidenceCount, 'اربط الأدلة بورقة عمل ذات مرجع فريد. لا يختار النظام بين مراجع مكررة.');
     addBlocker('close-duplicate-workpaper-refs', 'مراجع أوراق عمل مكررة', quality.lineage.duplicateWorkpaperReferences.length, 'صحّح المراجع المكررة قبل الإقفال.');
+  }
+
+  if (policy.requireFindingLineage !== false) {
+    addBlocker('close-findings-no-workpaper', 'ملاحظات بلا ورقة عمل', quality.lineage.findingsWithoutWorkpaper, 'اربط كل ملاحظة بورقة عمل ذات مرجع فريد قبل الإقفال.');
+    addBlocker('close-findings-no-evidence', 'ملاحظات بلا دليل مفهرس', quality.lineage.findingsWithoutEvidence, 'اربط كل ملاحظة بالدليل ذي الصلة قبل الإقفال.');
+    addBlocker('close-findings-evidence-mismatch', 'تعارض في سلسلة دليل الملاحظة', quality.lineage.findingEvidenceMismatches, 'صحّح اختلاف المرجع بين الدليل وورقة العمل المرتبطة بالملاحظة.');
   }
 
   if (policy.requireReviewNotesResolved !== false) {
