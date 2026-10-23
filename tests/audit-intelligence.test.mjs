@@ -4,6 +4,7 @@ import {
   analyzeJournalEntries,
   evaluateEngagementClosure,
   fingerprintTrialBalanceRows,
+  fingerprintAccountMappings,
   buildEvidenceLineage,
   buildPartnerDashboard,
   buildQualityShield,
@@ -374,4 +375,39 @@ test('closure gate blocks unclassified accounts by default and supports explicit
   assert.ok(blocked.blockers.some(item => item.id === 'close-unmapped-accounts'));
   const allowed = evaluateEngagementClosure(input, { requireAccountClassification: false });
   assert.ok(!allowed.blockers.some(item => item.id === 'close-unmapped-accounts'));
+});
+
+
+test('account mapping fingerprints change when classification or comparative values change', () => {
+  const mappings = {
+    'e1::1000': { lineKey: 'assets.cash', comparativeJod: '125.000' },
+    'e1::2000': { lineKey: 'liabilities.payables', comparativeJod: '30.000' },
+    'e2::1000': { lineKey: 'unrelated.scope', comparativeJod: '999.000' },
+  };
+  const original = fingerprintAccountMappings(mappings, 'e1');
+  assert.equal(fingerprintAccountMappings({ ...mappings, 'e1::2000': { comparativeJod: '30.000', lineKey: 'liabilities.payables' } }, 'e1'), original);
+  assert.notEqual(fingerprintAccountMappings({ ...mappings, 'e1::2000': { ...mappings['e1::2000'], lineKey: 'assets.cash' } }, 'e1'), original);
+  assert.notEqual(fingerprintAccountMappings({ ...mappings, 'e1::2000': { ...mappings['e1::2000'], comparativeJod: '31.000' } }, 'e1'), original);
+  assert.notEqual(fingerprintAccountMappings(mappings, 'e2'), original);
+});
+
+test('quality shield marks report stale if account classifications change even when trial balance is unchanged', () => {
+  const trialBalance = [
+    tbRow({ id: 'tb-1', engagementId: 'e1', code: '1000', name: 'Cash' }),
+  ];
+  const currentMap = { 'e1::1000': { lineKey: 'assets.cash', comparativeJod: '10.000' } };
+  const reportDrafts = [{
+    engagementId: 'e1', firmName: 'Firm',
+    lastExportSnapshot: {
+      sourceFingerprint: fingerprintTrialBalanceRows(trialBalance),
+      accountMappingFingerprint: fingerprintAccountMappings({ 'e1::1000': { lineKey: 'assets.cash', comparativeJod: '9.000' } }, 'e1'),
+      generatedAt: '2026-10-23T10:00:00.000Z',
+    },
+  }];
+  const quality = buildQualityShield({
+    workpapers: [], evidence: [], findings: [], risks: [], trialBalance,
+    currentSourceFingerprint: fingerprintTrialBalanceRows(trialBalance),
+    reportDrafts, accountMappings: currentMap, engagementId: 'e1',
+  });
+  assert.equal(quality.checks.find(item => item.id === 'quality-report-stale-source')?.count, 1);
 });
