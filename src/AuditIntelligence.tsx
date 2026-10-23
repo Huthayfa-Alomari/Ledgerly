@@ -252,6 +252,7 @@ export default function AuditIntelligence(props: Props) {
   const portfolioAttention = portfolio.reduce((sum, row) => sum + row.qualityAttention, 0);
   const portfolioOpenFindings = portfolio.reduce((sum, row) => sum + row.openFindings, 0);
   const portfolioPendingPapers = portfolio.reduce((sum, row) => sum + row.pendingWorkpapers, 0);
+  const portfolioClosureBlockers = portfolio.reduce((sum, row) => sum + row.closureBlockerCount, 0);
   const portfolioOverdueRequests = portfolio.reduce((sum, row) => sum + row.overdueRequests, 0);
   const portfolioLoggedHours = portfolio.reduce((sum, row) => sum + row.loggedHours, 0);
   const jsonFriendlyLineage = lineage.workpapers.map(row => ({
@@ -281,6 +282,7 @@ export default function AuditIntelligence(props: Props) {
       <Kpi label="أوراق تنتظر الاعتماد" value={portfolioPendingPapers} note="وفق حالة الاعتماد المسجلة" />
       <Kpi label="ملاحظات غير مغلقة" value={portfolioOpenFindings} note="حالة إدارية تحتاج متابعة" />
       <Kpi label="تنبيهات جودة بالمحفظة" value={portfolioAttention} note="أنواع الفحوص التي تحتاج مراجعة" />
+      <Kpi label="عوائق إقفال الملفات" value={portfolioClosureBlockers} note="نواقص يجب معالجتها قبل الإغلاق الإداري" />
       <Kpi label="طلبات مستندات متأخرة" value={portfolioOverdueRequests} note="طلبات غير مستلمة تجاوزت تاريخ الاستحقاق" />
       <Kpi label="ساعات عمل مسجلة" value={portfolioLoggedHours.toLocaleString("ar-JO", { maximumFractionDigits: 1 })} note="مجموع الساعات المسجلة في الارتباطات" />
     </section>
@@ -291,10 +293,11 @@ export default function AuditIntelligence(props: Props) {
         <span className="soft-tag">Portfolio Monitor</span>
       </div>
       {portfolio.length ? <div className="audit-table-wrap"><table className="audit-table">
-        <thead><tr><th>العميل / السنة</th><th>حالة الملف</th><th>أوراق غير معتمدة</th><th>أدلة بلا ربط</th><th>ملاحظات مفتوحة</th><th>مخاطر عالية</th><th>طلبات مفتوحة</th><th>طلبات متأخرة</th><th>ساعات مسجلة / مخططة</th><th>تكلفة الوقت (د.أ)</th><th>قيمة الفواتير المسجلة (د.أ)</th><th>فحوص تحتاج مراجعة</th></tr></thead>
+        <thead><tr><th>العميل / السنة</th><th>حالة الملف</th><th>أوراق غير معتمدة</th><th>أدلة بلا ربط</th><th>ملاحظات مفتوحة</th><th>مخاطر عالية</th><th>عوائق الإقفال</th><th>طلبات مفتوحة</th><th>طلبات متأخرة</th><th>ساعات مسجلة / مخططة</th><th>تكلفة الوقت (د.أ)</th><th>قيمة الفواتير المسجلة (د.أ)</th><th>فحوص تحتاج مراجعة</th></tr></thead>
         <tbody>{portfolio.map(row => <tr key={row.engagement.id}>
           <td className="cell-strong">{row.client?.name || 'عميل غير محدد'}<small className="table-sub">{row.engagement.year} · {row.engagement.type}</small></td>
           <td>{row.state || 'غير محدد'}</td><td>{row.pendingWorkpapers}</td><td>{row.unlinkedEvidence}</td><td>{row.openFindings}</td><td>{row.highRisks}</td>
+          <td><span className={'audit-pill ' + (row.closureBlockerCount ? 'risk-pill' : '')}>{row.closureBlockerCount}</span>{row.closureBlockerCount > 0 && <small className="table-sub">{row.closureBlockers.slice(0, 2).map(item => item.title).join('، ')}</small>}</td>
           <td>{row.outstandingRequests}</td><td><span className={'audit-pill ' + (row.overdueRequests ? 'risk-pill' : '')}>{row.overdueRequests}</span></td>
           <td>{row.loggedHours.toLocaleString("ar-JO", { maximumFractionDigits: 1 })} / {row.budgetHours === null ? '—' : row.budgetHours.toLocaleString("ar-JO", { maximumFractionDigits: 1 })}</td>
           <td>{formatMoney(row.actualLaborCostJod)}</td><td>{row.recordedInvoiceCount ? formatMoney(row.invoiceValueJod) : '—'}</td>
