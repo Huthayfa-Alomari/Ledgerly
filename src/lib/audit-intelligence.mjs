@@ -447,7 +447,14 @@ export function buildQualityShield(input) {
  * @param {Array<Record<string, any>>} clients
  * @param {Record<string, any>} database
  */
-export function buildPartnerDashboard(engagements, clients, database) {
+export function buildPartnerDashboard(engagements, clients, database, operations = {}, options = {}) {
+  const operationRows = key => Array.isArray(operations?.[key]) ? operations[key] : [];
+  const asOfDate = /^\d{4}-\d{2}-\d{2}$/.test(String(options?.asOfDate ?? ''))
+    ? String(options.asOfDate)
+    : new Date().toISOString().slice(0, 10);
+  const numeric = value => value !== null && value !== undefined && String(value).trim() !== '' && Number.isFinite(Number(value)) ? Number(value) : null;
+  const sum = values => roundMoney(values.reduce((total, value) => total + value, 0));
+
   return (engagements || []).map(engagement => {
     const id = engagement.id;
     const scoped = rows => (rows || []).filter(row => row.engagementId === id);
@@ -457,6 +464,21 @@ export function buildPartnerDashboard(engagements, clients, database) {
     const risks = scoped(database.risks);
     const tbRows = scoped(database.trialBalance);
     const quality = buildQualityShield({ workpapers: papers, evidence, findings, risks, trialBalance: tbRows, currentSourceFingerprint: fingerprintTrialBalanceRows(tbRows) });
+    const requests = scoped(operationRows('clientRequests'));
+    const outstandingRequests = requests.filter(row => !row.done && !['مستلم للمراجعة', 'مكتمل', 'مغلقة', 'مغلق'].includes(String(row.status ?? '')));
+    const overdueRequests = outstandingRequests.filter(row => /^\d{4}-\d{2}-\d{2}$/.test(String(row.dueDate ?? '')) && String(row.dueDate) < asOfDate);
+    const entries = scoped(operationRows('timeEntries'));
+    const loggedHours = sum(entries.map(row => Math.max(0, numeric(row.hours) ?? 0)));
+    const ratedEntries = entries.filter(row => numeric(row.hours) !== null && numeric(row.hourlyRateJod) !== null);
+    const actualLaborCostJod = sum(ratedEntries.map(row => Math.max(0, Number(row.hours)) * Math.max(0, Number(row.hourlyRateJod))));
+    const budgetHours = numeric(engagement.budgetHours ?? engagement.plannedHours);
+    const hoursBudgetVariance = budgetHours === null ? null : roundMoney(budgetHours - loggedHours);
+    const contractualFeeJod = numeric(engagement.feeJod);
+    const feeLessRecordedLaborCostJod = contractualFeeJod === null ? null : roundMoney(contractualFeeJod - actualLaborCostJod);
+    const invoices = scoped(operationRows('officeInvoices'));
+    const invoiceValueJod = sum(invoices.map(row => Math.max(0, numeric(row.totalJod) ?? 0)));
+    const recordedInvoiceCount = invoices.length;
+
     return {
       engagement,
       client: (clients || []).find(client => client.id === engagement.clientId),
@@ -466,9 +488,26 @@ export function buildPartnerDashboard(engagements, clients, database) {
       openFindings: findings.filter(f => !['مغلقة', 'مغلق', 'مكتمل'].includes(String(f.status ?? ''))).length,
       highRisks: risks.filter(r => ['مرتفع', 'عالي', 'high'].includes(cleanText(r.impact)) || ['مرتفع', 'عالي', 'high'].includes(cleanText(r.likelihood))).length,
       qualityAttention: quality.attentionCount,
+      qualityBlockers: quality.blockers,
+      outstandingRequests: outstandingRequests.length,
+      overdueRequests: overdueRequests.length,
+      loggedHours,
+      budgetHours,
+      hoursBudgetVariance,
+      actualLaborCostJod,
+      contractualFeeJod,
+      feeLessRecordedLaborCostJod,
+      invoiceValueJod,
+      recordedInvoiceCount,
       state: String(engagement.status ?? ''),
     };
-  }).sort((a, b) => (b.qualityAttention - a.qualityAttention) || (b.openFindings - a.openFindings) || String(a.client?.name ?? '').localeCompare(String(b.client?.name ?? '')));
+  }).sort((a, b) =>
+    (b.overdueRequests - a.overdueRequests) ||
+    (b.qualityBlockers - a.qualityBlockers) ||
+    (b.qualityAttention - a.qualityAttention) ||
+    (b.openFindings - a.openFindings) ||
+    String(a.client?.name ?? '').localeCompare(String(b.client?.name ?? ''))
+  );
 }
 
 /** @param {Array<Record<string, any>>} items */
