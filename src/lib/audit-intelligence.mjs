@@ -163,6 +163,7 @@ function amountOf(value) {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 function roundMoney(value) { return Math.round((value + Number.EPSILON) * 1000) / 1000; }
+function localIsoDate(date = new Date()) { return String(date.getFullYear()).padStart(4, '0') + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0'); }
 function issue(id, severity, title, count, detail, action) {
   return { id, severity, title, count, detail, action };
 }
@@ -516,7 +517,7 @@ export function evaluateEngagementClosure(input = {}, policy = {}) {
   const requests = Array.isArray(operations.clientRequests) ? operations.clientRequests : [];
   const requiredRequests = requests.filter(row => row.engagementId === input.engagementId && row.requiredForClosure && !row.done);
   addBlocker('close-required-client-documents', 'مستندات إلزامية للإقفال لم تُستلم', requiredRequests.length, 'استلم المستندات المحددة كإلزامية أو عدّل سياسة الطلب وفق موافقة موثقة.');
-  const overdue = requests.filter(row => row.engagementId === input.engagementId && !row.done && /^\d{4}-\d{2}-\d{2}$/.test(String(row.dueDate ?? '')) && String(row.dueDate) < (input.asOfDate || new Date().toISOString().slice(0, 10)));
+  const overdue = requests.filter(row => row.engagementId === input.engagementId && !row.done && /^\d{4}-\d{2}-\d{2}$/.test(String(row.dueDate ?? '')) && String(row.dueDate) < (input.asOfDate || localIsoDate()));
   if (overdue.length) warnings.push({ id: 'close-overdue-client-documents', title: 'طلبات مستندات متأخرة', count: overdue.length, detail: 'طلبات متأخرة لم تُعلّم كإلزامية للإقفال؛ راجع أثرها قبل الإغلاق.' });
 
   const highRisks = risks.filter(row =>
@@ -532,7 +533,7 @@ export function buildPartnerDashboard(engagements, clients, database, operations
   const operationRows = key => Array.isArray(operations?.[key]) ? operations[key] : [];
   const asOfDate = /^\d{4}-\d{2}-\d{2}$/.test(String(options?.asOfDate ?? ''))
     ? String(options.asOfDate)
-    : new Date().toISOString().slice(0, 10);
+    : localIsoDate();
   const numeric = value => value !== null && value !== undefined && String(value).trim() !== '' && Number.isFinite(Number(value)) ? Number(value) : null;
   const sum = values => roundMoney(values.reduce((total, value) => total + value, 0));
 
