@@ -50,7 +50,7 @@ function sanitize(input: unknown) {
       category,
       title: allowedIssueTitles[category],
       amount: typeof q.amount === "number" && Number.isFinite(q.amount) ? number(q.amount) : null,
-      accountCode: typeof q.accountCode === "string" && /^[\\p{L}\\p{N}\\s._/-]{1,40}$/u.test(q.accountCode.trim()) ? q.accountCode.trim() : "",
+      accountCode: typeof q.accountCode === "string" && /^[\p{L}\p{N}\s._/-]{1,40}$/u.test(q.accountCode.trim()) ? q.accountCode.trim() : "",
       sourceRowNumber: typeof q.sourceRowNumber === "number" && Number.isInteger(q.sourceRowNumber) && q.sourceRowNumber >= 2 && q.sourceRowNumber <= 250000 ? q.sourceRowNumber : null,
     };
   });
