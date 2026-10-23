@@ -401,11 +401,6 @@ export default function AuditIntelligence(props: Props) {
           </div>;
         })}</div>
         <button className="audit-secondary" onClick={exportRequests}>تصدير قائمة الطلبات CSV</button>
-            </label>
-            {row.phone && <a href={reminder.url} target="_blank" rel="noreferrer">فتح تذكير واتساب</a>}
-          </div>;
-        })}</div>
-        <button className="audit-secondary" onClick={exportRequests}>تصدير قائمة الطلبات CSV</button>
       </section>
 
       <section className="audit-card audit-intel-panel">
