@@ -411,3 +411,14 @@ test('quality shield marks report stale if account classifications change even w
   });
   assert.equal(quality.checks.find(item => item.id === 'quality-report-stale-source')?.count, 1);
 });
+
+
+test('external control totals are not compared against source columns that were not imported', () => {
+  const result = runDataTrustChecks([tbRow({
+    sourceFinancialFields: ['debit', 'credit'],
+  })], { sourceTotals: { openingDebit: 500, closingCredit: 250, debit: 50 } });
+  const mismatch = result.issues.find(item => item.id === 'tb-source-totals-mismatch');
+  assert.ok(!mismatch);
+  assert.equal(result.openingDifference, null);
+  assert.equal(result.closingDifference, null);
+});
