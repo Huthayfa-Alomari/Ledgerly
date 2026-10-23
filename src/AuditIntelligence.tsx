@@ -9,14 +9,15 @@ import {
   buildQualityShield,
   normalizeJournalRows,
   runDataTrustChecks,
+  fingerprintTrialBalanceRows,
   summarizeFindingsForAssistant,
 } from './lib/audit-intelligence.mjs';
 import './AuditIntelligence.css';
 
 type Engagement = { id: string; clientId: string; year: string; type: string; status: string; partner?: string; framework?: string };
 type Client = { id: string; name: string };
-type TBRow = { id: string; engagementId: string; code: string; name: string; openingDebit: number; openingCredit: number; debit: number; credit: number; closingDebit: number; closingCredit: number; source?: string };
-type Workpaper = { id: string; engagementId: string; ref: string; title: string; status: string; procedure?: string; conclusion: string; reviewNotes?: string; updatedAt?: string; preparer?: string; reviewer?: string };
+type TBRow = { id: string; engagementId: string; code: string; name: string; openingDebit: number; openingCredit: number; debit: number; credit: number; closingDebit: number; closingCredit: number; source?: string; sourceFinancialFields?: string[] };
+type Workpaper = { id: string; engagementId: string; ref: string; title: string; status: string; procedure?: string; conclusion: string; reviewNotes?: string; updatedAt?: string; preparer?: string; reviewer?: string; sourceFingerprint?: string };
 type Evidence = { id: string; engagementId: string; title: string; type: string; reference: string; workpaperRef: string; notes?: string; addedAt?: string; fileName?: string };
 type Finding = { id: string; engagementId: string; title: string; criteria: string; condition: string; effect: string; recommendation: string; severity: string; status: string };
 type Risk = { id: string; engagementId: string; title: string; area?: string; likelihood: string; impact: string; response: string; status: string };
@@ -53,7 +54,7 @@ const REQUEST_STARTERS = [
 ];
 
 function formatMoney(value: number) {
-  return new Intl.NumberFormat('ar-JO', { style: 'currency', currency: 'JOD', maximumFractionDigits: 2 }).format(value || 0);
+  return new Intl.NumberFormat('ar-JO', { style: 'currency', currency: 'JOD', minimumFractionDigits: 3, maximumFractionDigits: 3 }).format(value || 0);
 }
 function downloadFile(name: string, content: string, mime = 'text/plain;charset=utf-8') {
   const blob = new Blob([content], { type: mime });
@@ -85,6 +86,8 @@ function Kpi({ label, value, note }: { label: string; value: string | number; no
 export default function AuditIntelligence(props: Props) {
   const { engagementId, engagements, clients, trialBalance, workpapers, evidence, findings, risks, operations, vaultPassphrase, onOperationsChange, onAddEvidence, onOpenCopilot, onOpenReconciliation } = props;
   const [importedJournal, setImportedJournal] = useState<ImportedJournal | null>(null);
+  const [approvalThreshold, setApprovalThreshold] = useState('');
+  const [splitWindowDays, setSplitWindowDays] = useState('1');
   const [fileBusy, setFileBusy] = useState(false);
   const [fileError, setFileError] = useState('');
   const [customRequest, setCustomRequest] = useState('');
@@ -108,6 +111,7 @@ export default function AuditIntelligence(props: Props) {
   const currentEvidence = scoped(evidence);
   const currentFindings = scoped(findings);
   const currentRisks = scoped(risks);
+  const currentSourceFingerprint = useMemo(() => fingerprintTrialBalanceRows(currentTB), [currentTB]);
   const dataTrust = useMemo(() => runDataTrustChecks(currentTB), [currentTB]);
   const lineage = useMemo(() => buildEvidenceLineage(currentWorkpapers, currentEvidence), [currentWorkpapers, currentEvidence]);
   const quality = useMemo(() => buildQualityShield({
@@ -116,8 +120,9 @@ export default function AuditIntelligence(props: Props) {
     findings: currentFindings,
     risks: currentRisks,
     trialBalance: currentTB,
-  }), [currentWorkpapers, currentEvidence, currentFindings, currentRisks, currentTB]);
-  const journalAnalysis = useMemo(() => importedJournal ? analyzeJournalEntries(importedJournal.rows) : null, [importedJournal]);
+    currentSourceFingerprint,
+  }), [currentWorkpapers, currentEvidence, currentFindings, currentRisks, currentTB, currentSourceFingerprint]);
+  const journalAnalysis = useMemo(() => importedJournal ? analyzeJournalEntries(importedJournal.rows, { approvalThreshold: Number(approvalThreshold), splitWindowDays: Number(splitWindowDays) }) : null, [importedJournal, approvalThreshold, splitWindowDays]);
   const portfolio = useMemo(() => buildPartnerDashboard(engagements, clients, {
     workpapers, evidence, findings, risks, trialBalance,
   } as DBShape), [engagements, clients, workpapers, evidence, findings, risks, trialBalance]);
@@ -264,9 +269,9 @@ export default function AuditIntelligence(props: Props) {
         </div>
         {dataTrust.issues.length ? <div className="audit-intel-issue-list">{dataTrust.issues.map(item => <article className="audit-intel-issue" key={item.id}>
           <div className="audit-intel-issue-top"><strong>{item.title}</strong><span className={'audit-pill ' + severityClass(item.severity)}>{severityName(item.severity)} · {item.count}</span></div>
-          <p>{item.detail}</p><small><b>الخطوة المقترحة:</b> {item.action}</small>
+          <p>{item.detail}</p><small><b>الخطوة المقترحة:</b> {item.action}</small>{(item.rowNumbers ?? []).length > 0 && <small className="audit-intel-rowlist">صفوف المصدر: {(item.rowNumbers ?? []).slice(0, 15).join('، ')}{(item.rowNumbers ?? []).length > 15 ? ' …' : ''}</small>}
         </article>)}</div> : <div className="audit-intel-clear">✓ لم تُطلق الفحوص الأساسية الحالية تنبيهات على ميزان المراجعة. هذا لا يثبت صحته بالكامل.</div>}
-        <p className="audit-intel-footnote">تشمل القواعد اتزان إجمالي الأرصدة الختامية، تعريف الحسابات، الرموز المكررة، الحقول السالبة، والاختلاف بين الحركة والرصيد الختامي. يجب تفسير التنبيهات بحسب اصطلاحات ملف المصدر.</p>
+        <p className="audit-intel-footnote">تشمل القواعد اتزان الأرصدة الافتتاحية وحركة الفترة والختامية، الحقول الناقصة أو غير الرقمية، الصفوف المتطابقة، الرموز المكررة، وفحص حركة كل حساب. تُعرض المبالغ بالدينار الأردني إلى ثلاث منازل عشرية، ويجب تفسير التنبيهات بحسب اصطلاحات ملف المصدر.</p>
       </section>
 
       <section className="audit-card audit-intel-panel">
@@ -278,6 +283,10 @@ export default function AuditIntelligence(props: Props) {
           <label className="audit-secondary audit-intel-file">اختيار ملف القيود<input type="file" accept=".csv,.xlsx,.xls" onChange={event => { void importJournal(event.target.files?.[0]); event.currentTarget.value = ''; }} /></label>
           {fileBusy && <span className="muted-copy">جارٍ قراءة الملف وفحصه محليًا…</span>}
           {importedJournal && <><span className="audit-intel-file-name">{importedJournal.filename} · {importedJournal.rows.length.toLocaleString('ar-JO')} صف</span><button className="audit-text-button danger-text" onClick={() => { setImportedJournal(null); setFileError(''); }}>إزالة نتائج الملف من الشاشة</button></>}
+        </div>
+        <div className="audit-intel-screening-options">
+          <label className="audit-field"><span>حد الموافقة للمبالغ المجمعة (د.أ.) — اختياري</span><input type="number" min="0" step="0.001" inputMode="decimal" value={approvalThreshold} onChange={event => setApprovalThreshold(event.target.value)} placeholder="اتركه فارغًا لتعطيل فحص التجزئة" /></label>
+          <label className="audit-field"><span>نافذة تجميع المعاملات</span><select value={splitWindowDays} onChange={event => setSplitWindowDays(event.target.value)}><option value="0">نفس اليوم</option><option value="1">يوم واحد</option><option value="3">3 أيام</option><option value="7">7 أيام</option><option value="30">30 يومًا</option></select></label>
         </div>
         {fileError && <p className="audit-warning" role="alert">{fileError}</p>}
         {importedJournal && journalAnalysis && <>
@@ -292,9 +301,10 @@ export default function AuditIntelligence(props: Props) {
             <div className="audit-intel-issue-top"><strong>{item.title}</strong><span className={'audit-pill ' + severityClass(item.severity)}>{severityName(item.severity)} · {item.count} صف</span></div>
             <p>{item.detail}</p><small><b>الخطوة المقترحة:</b> {item.action}</small>
             {(item.rowNumbers ?? []).length > 0 && <small className="audit-intel-rowlist">أمثلة الصفوف: {(item.rowNumbers ?? []).slice(0, 15).join('، ')}{(item.rowNumbers ?? []).length > 15 ? ' …' : ''}</small>}
+            {item.clusters?.slice(0, 10).map((cluster, index) => <small className="audit-intel-rowlist" key={`${item.id}-cluster-${index}`}>مجموعة محتملة {index + 1}: الصفوف {cluster.rowNumbers.join('، ')} · الإجمالي {formatMoney(cluster.totalAmount)} · {cluster.partyOrDescription}</small>)}
           </article>)}</div> : <div className="audit-intel-clear">✓ لم تظهر مؤشرات وفق القواعد الحالية. راجع صلاحية الاختبارات وملاءمتها للمهمة.</div>}
           <div className="stack-actions">
-            <button className="audit-primary" onClick={() => downloadFile('ledgerly-journal-screening.json', JSON.stringify({ filename: importedJournal.filename, warnings: importedJournal.warnings, scannedCount: journalAnalysis.scannedCount, results: journalAnalysis }, null, 2), 'application/json;charset=utf-8')}>تصدير نتائج الفحص</button>
+            <button className="audit-primary" onClick={() => downloadFile('ledgerly-journal-screening.json', JSON.stringify({ filename: importedJournal.filename, warnings: importedJournal.warnings, screeningParameters: { approvalThreshold: Number(approvalThreshold) > 0 ? Number(approvalThreshold) : null, splitWindowDays: Number(splitWindowDays) }, scannedCount: journalAnalysis.scannedCount, results: journalAnalysis }, null, 2), 'application/json;charset=utf-8')}>تصدير نتائج الفحص</button>
             <button className="audit-secondary" onClick={() => downloadCsv('ledgerly-journal-exceptions.csv', [
               ['rule_id', 'title', 'severity', 'count', 'row_numbers', 'detail', 'recommended_action'],
               ...journalAnalysis.issues.map(row => [row.id, row.title, severityName(row.severity), row.count, (row.rowNumbers ?? []).join(';'), row.detail, row.action]),
@@ -320,7 +330,7 @@ export default function AuditIntelligence(props: Props) {
         </tr>)}</tbody></table></div> : <p className="muted-copy">لا توجد أوراق عمل في هذا الملف بعد.</p>}
         {lineage.unlinkedEvidenceCount > 0 && <div className="audit-intel-issue-list">{lineage.links.filter(row => !row.linked).map(row => <article key={row.evidence.id} className="audit-intel-issue">
           <strong>{row.evidence.title || row.evidence.fileName || 'دليل بلا عنوان'}</strong>
-          <p>{row.reason === 'missing-reference' ? 'لم يُسجل مرجع ورقة عمل لهذا الدليل.' : 'مرجع ورقة العمل لا يطابق ورقة موجودة في الملف الحالي: ' + row.evidence.workpaperRef}</p>
+          <p>{row.reason === 'missing-reference' ? 'لم يُسجل مرجع ورقة عمل لهذا الدليل.' : row.reason === 'ambiguous-reference' ? 'مرجع ورقة العمل مستخدم لأكثر من ورقة؛ أوقف النظام الربط التلقائي كي لا يختار ورقة خطأ: ' + row.evidence.workpaperRef : 'مرجع ورقة العمل لا يطابق ورقة موجودة في الملف الحالي: ' + row.evidence.workpaperRef}</p>
         </article>)}</div>}
         <button className="audit-secondary" onClick={() => downloadCsv('ledgerly-evidence-lineage.csv', [
           ['evidence_title', 'evidence_type', 'reference', 'workpaper_reference', 'workpaper_title', 'workpaper_status', 'link_status'],
