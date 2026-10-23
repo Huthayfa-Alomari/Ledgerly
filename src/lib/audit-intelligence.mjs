@@ -468,12 +468,18 @@ export function buildQualityShield(input) {
   const evidence = input.evidence || [];
   const findings = input.findings || [];
   const risks = input.risks || [];
+  const reportDrafts = Array.isArray(input.reportDrafts) ? input.reportDrafts : [];
   const tb = runDataTrustChecks(input.trialBalance || [], input.dataTrustOptions || {});
   const lineage = buildEvidenceLineage(workpapers, evidence, findings);
-  const currentSourceFingerprint = String(input.currentSourceFingerprint || '');
+  const currentSourceFingerprint = String(input.currentSourceFingerprint || fingerprintTrialBalanceRows(input.trialBalance || []));
   const staleWorkpapers = currentSourceFingerprint ? workpapers.filter(row => row.sourceFingerprint && row.sourceFingerprint !== currentSourceFingerprint) : [];
   const workpapersWithoutSnapshot = currentSourceFingerprint ? workpapers.filter(row => !row.sourceFingerprint) : [];
   const reviewNotesOpen = workpapers.filter(row => String(row.reviewNotes ?? '').trim() && !['مغلق', 'مغلقة', 'تمت المعالجة', 'resolved'].includes(cleanText(row.reviewNotesStatus)));
+  const configuredReportDrafts = reportDrafts.filter(row => ['firmName', 'auditorName', 'periodEnd', 'opinion'].some(field => String(row[field] ?? '').trim()));
+  const exportedReportDrafts = configuredReportDrafts.filter(row => row.lastExportSnapshot && typeof row.lastExportSnapshot === 'object');
+  const staleReportSnapshots = currentSourceFingerprint ? exportedReportDrafts.filter(row => row.lastExportSnapshot.sourceFingerprint && row.lastExportSnapshot.sourceFingerprint !== currentSourceFingerprint) : [];
+  const reportDraftsWithoutExport = configuredReportDrafts.filter(row => !row.lastExportSnapshot);
+  const reportSnapshotsWithoutSource = currentSourceFingerprint ? exportedReportDrafts.filter(row => !row.lastExportSnapshot.sourceFingerprint) : [];
   const checks = [];
   const add = (id, severity, title, count, detail, action) => {
     checks.push({ id, severity, title, count, detail, action, state: count > 0 ? 'needs-attention' : 'clear' });
@@ -490,6 +496,9 @@ export function buildQualityShield(input) {
   add('quality-ambiguous-evidence-link', 'high', 'أدلة مرتبطة بمرجع ملتبس', lineage.ambiguousReferenceCount, 'بعض الأدلة تشير إلى مرجع تستخدمه أكثر من ورقة عمل.', 'صحّح مرجع الدليل بعد تحديد ورقة العمل المقصودة.');
   add('quality-stale-workpaper', 'high', 'أوراق عمل تعتمد على نسخة أقدم من البيانات', staleWorkpapers.length, 'تغيّرت بصمة مجموعة البيانات المصدرية منذ حفظ لقطة ورقة العمل. هذا لا يؤكد وقوع خطأ، لكنه يعني أن نتائجها تحتاج مراجعة.', 'أعد تنفيذ الإجراءات المتأثرة وقارن الاستنتاجات بالمصدر الحالي، ثم حدّث لقطة البيانات بعد المراجعة.');
   add('quality-source-snapshot-missing', 'medium', 'أوراق عمل بلا لقطة بيانات مصدرية', workpapersWithoutSnapshot.length, 'لا تحمل بعض أوراق العمل بصمة للميزان الذي استندت إليه؛ لا يمكن للنظام تحديد ما إذا تغير المصدر منذ إعدادها.', 'راجع الورقة على ضوء البيانات الحالية، ثم أكّد المراجعة المستقلة لتسجيل لقطة المصدر الحالية.');
+  add('quality-report-stale-source', 'high', 'مخرجات تقرير تعتمد على نسخة أقدم من البيانات', staleReportSnapshots.length, 'بصمة المصدر المسجلة وقت تصدير التقرير لا تطابق بصمة ميزان المراجعة الحالي. قد تكون أرقام النسخة التي تم تنزيلها قديمة.', 'أعد تصدير المسودة بعد مراجعة القوائم والربط المحاسبي، ثم احتفظ ببصمة وتاريخ النسخة الجديدة.');
+  add('quality-report-not-exported', 'medium', 'مسودة تقرير لم تُنشأ لها نسخة تصدير مسجلة', reportDraftsWithoutExport.length, 'توجد إعدادات مسودة تقرير ولكن لا توجد لقطة تصدير محلية مسجلة لها.', 'ولّد المسودة بعد تحديث المصدر وافحصها مهنيًا قبل إصدارها.');
+  add('quality-report-source-missing', 'medium', 'نسخة التقرير لا تحمل بصمة مصدر', reportSnapshotsWithoutSource.length, 'لا يمكن التحقق من حداثة بعض نسخ التصدير لعدم توفر بصمة ميزان المراجعة وقت إنشائها.', 'أعد تصدير النسخة من بيانات حالية واحفظ سجل المصدر.');
   add('quality-review-notes', 'medium', 'أوراق تحمل ملاحظات مراجعة غير محسومة', reviewNotesOpen.length, 'تحتوي بعض أوراق العمل على ملاحظات مراجعة لا تحمل حالة معالجة صريحة.', 'تحقق من كل ملاحظة؛ بعد معالجتها سجّل حالتها بوضوح بدل حذف أثر المراجعة.');
   add('quality-paper-no-evidence', 'low', 'أوراق بلا أدلة مفهرسة', lineage.workpapersWithoutEvidence, 'قد لا تحتاج كل ورقة إلى مرفق مستقل بحسب طبيعة الإجراء، لذلك هذه إشارة وليست قاعدة منع مطلقة.', 'راجع ما إذا كان الدليل محفوظًا أو إذا كان الإجراء لا يتطلب مرفقًا.');
   add('quality-finding-documentation', 'medium', 'ملاحظات ناقصة عناصر التوثيق', findings.filter(row => ['criteria', 'condition', 'effect', 'recommendation'].some(field => !String(row[field] ?? '').trim())).length, 'تفتقد بعض الملاحظات معيارًا أو حالة أو أثرًا أو توصية.', 'أكمل العناصر ذات الصلة وفق منهجية المكتب قبل اعتماد الملاحظة.');
@@ -518,8 +527,9 @@ export function evaluateEngagementClosure(input = {}, policy = {}) {
   const risks = Array.isArray(input.risks) ? input.risks : [];
   const trialBalance = Array.isArray(input.trialBalance) ? input.trialBalance : [];
   const operations = input.operations && typeof input.operations === 'object' ? input.operations : {};
+  const scopedReportDrafts = (Array.isArray(operations.reportDrafts) ? operations.reportDrafts : []).filter(row => row.engagementId === input.engagementId);
   const quality = buildQualityShield({
-    workpapers, evidence, findings, risks, trialBalance,
+    workpapers, evidence, findings, risks, trialBalance, reportDrafts: scopedReportDrafts,
     currentSourceFingerprint: input.currentSourceFingerprint || fingerprintTrialBalanceRows(trialBalance),
     dataTrustOptions: input.dataTrustOptions || {},
   });
@@ -574,6 +584,12 @@ export function evaluateEngagementClosure(input = {}, policy = {}) {
     addBlocker('close-stale-workpapers', 'أوراق عمل تحتاج إعادة مراجعة المصدر', (stale?.count || 0) + (missing?.count || 0), 'أعد فحص البيانات التي استندت إليها الورقة ثم حدّث لقطة المصدر من خلال مراجعة صريحة.');
   }
 
+  if (policy.blockStaleReports !== false) {
+    const stale = quality.checks.find(row => row.id === 'quality-report-stale-source');
+    const missingSource = quality.checks.find(row => row.id === 'quality-report-source-missing');
+    addBlocker('close-stale-report-snapshot', 'نسخة تقرير قديمة أو بلا مصدر قابل للتحقق', (stale?.count || 0) + (missingSource?.count || 0), 'أعد تصدير مسودة التقرير بعد تحديث بيانات المصدر، أو تحقق من البصمة المسجلة.');
+  }
+
   const requests = Array.isArray(operations.clientRequests) ? operations.clientRequests : [];
   const requiredRequests = requests.filter(row => row.engagementId === input.engagementId && row.requiredForClosure && !row.done);
   addBlocker('close-required-client-documents', 'مستندات إلزامية للإقفال لم تُستلم', requiredRequests.length, 'استلم المستندات المحددة كإلزامية أو عدّل سياسة الطلب وفق موافقة موثقة.');
@@ -605,7 +621,8 @@ export function buildPartnerDashboard(engagements, clients, database, operations
     const findings = scoped(database.findings);
     const risks = scoped(database.risks);
     const tbRows = scoped(database.trialBalance);
-    const quality = buildQualityShield({ workpapers: papers, evidence, findings, risks, trialBalance: tbRows, currentSourceFingerprint: fingerprintTrialBalanceRows(tbRows) });
+    const reportDrafts = operationRows('reportDrafts').filter(row => row.engagementId === id);
+    const quality = buildQualityShield({ workpapers: papers, evidence, findings, risks, trialBalance: tbRows, reportDrafts, currentSourceFingerprint: fingerprintTrialBalanceRows(tbRows) });
     const requests = scoped(operationRows('clientRequests'));
     const outstandingRequests = requests.filter(row => !row.done && !['مستلم للمراجعة', 'مكتمل', 'مغلقة', 'مغلق'].includes(String(row.status ?? '')));
     const overdueRequests = outstandingRequests.filter(row => /^\d{4}-\d{2}-\d{2}$/.test(String(row.dueDate ?? '')) && String(row.dueDate) < asOfDate);
