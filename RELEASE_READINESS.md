@@ -30,3 +30,11 @@ Journal tests, duplicate indicators, rounded-amount flags, weekend/out-of-hours 
 ## Test status
 
 The CI pipeline should run unit tests, TypeScript/production build, and disposable-PostgreSQL migration/firm-isolation tests on each PR change. The current latest code must pass that run before producing a new Windows installer. A prior installer artifact does not contain these latest changes.
+
+
+## Additional controls in the current development branch
+
+- Trial-balance trust checks distinguish blank or unmapped fields from verified zeroes, test opening, movement and closing totals, verify per-account roll-forward, expose source row numbers, and compare imported row counts/control totals when supplied. JOD comparisons use three decimal places.
+- Journal screening flags unparseable numeric cells, counterparty/reference conflicts, reversal wording, and possible below-limit transaction groupings only when an auditor explicitly provides the approval threshold and time window. These are investigation signals, not fraud determinations.
+- Evidence lineage refuses to choose arbitrarily when multiple workpapers share a normalized reference. Quality Shield reports duplicate references, missing source snapshots and stale source snapshots.
+- Workpaper source fingerprints are local change-detection aids, not cryptographic seals. A snapshot is refreshed only on the existing explicit reviewer approval transition; local reviewer names do not verify identity.
