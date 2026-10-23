@@ -466,6 +466,28 @@ export function fingerprintTrialBalanceRows(rows) {
   return 'tb-fnv1a64:' + hash.toString(16).padStart(16, '0');
 }
 
+/**
+ * Fingerprints account-to-statement mappings used to render draft statements.
+ * Change detection only; not a cryptographic integrity seal.
+ */
+export function fingerprintAccountMappings(accountMappings, engagementId) {
+  const mappings = accountMappings && typeof accountMappings === 'object' ? accountMappings : {};
+  const prefix = String(engagementId ?? '') + '::';
+  const canonical = Object.entries(mappings)
+    .filter(([key, value]) => key.startsWith(prefix) && value && typeof value === 'object')
+    .map(([key, value]) => ({
+      accountCode: key.slice(prefix.length),
+      lineKey: String(value.lineKey ?? '').trim(),
+      comparativeJod: value.comparativeJod === undefined || value.comparativeJod === null ? '' : String(value.comparativeJod).trim(),
+    }))
+    .sort((a, b) => a.accountCode.localeCompare(b.accountCode));
+  const bytes = new TextEncoder().encode(JSON.stringify(canonical));
+  let hash = 14695981039346656037n;
+  const mask = (1n << 64n) - 1n;
+  for (const byte of bytes) { hash ^= BigInt(byte); hash = (hash * 1099511628211n) & mask; }
+  return 'account-map-fnv1a64:' + hash.toString(16).padStart(16, '0');
+}
+
 export function buildQualityShield(input) {
   const workpapers = input.workpapers || [];
   const evidence = input.evidence || [];
@@ -488,9 +510,15 @@ export function buildQualityShield(input) {
   const reviewNotesOpen = workpapers.filter(row => String(row.reviewNotes ?? '').trim() && !['مغلق', 'مغلقة', 'تمت المعالجة', 'resolved'].includes(cleanText(row.reviewNotesStatus)));
   const configuredReportDrafts = reportDrafts.filter(row => Boolean(row.lastExportSnapshot) || ['firmName', 'auditorName', 'periodEnd', 'opinion'].some(field => String(row[field] ?? '').trim()));
   const exportedReportDrafts = configuredReportDrafts.filter(row => row.lastExportSnapshot && typeof row.lastExportSnapshot === 'object');
-  const staleReportSnapshots = currentSourceFingerprint ? exportedReportDrafts.filter(row => row.lastExportSnapshot.sourceFingerprint && row.lastExportSnapshot.sourceFingerprint !== currentSourceFingerprint) : [];
+  const currentAccountMappingFingerprint = fingerprintAccountMappings(accountMappings, engagementId);
+  const staleReportSnapshots = currentSourceFingerprint ? exportedReportDrafts.filter(row =>
+    (row.lastExportSnapshot.sourceFingerprint && row.lastExportSnapshot.sourceFingerprint !== currentSourceFingerprint) ||
+    (row.lastExportSnapshot.accountMappingFingerprint && row.lastExportSnapshot.accountMappingFingerprint !== currentAccountMappingFingerprint)
+  ) : [];
   const reportDraftsWithoutExport = configuredReportDrafts.filter(row => !row.lastExportSnapshot);
-  const reportSnapshotsWithoutSource = currentSourceFingerprint ? exportedReportDrafts.filter(row => !row.lastExportSnapshot.sourceFingerprint) : [];
+  const reportSnapshotsWithoutSource = currentSourceFingerprint ? exportedReportDrafts.filter(row =>
+    !row.lastExportSnapshot.sourceFingerprint || !row.lastExportSnapshot.accountMappingFingerprint
+  ) : [];
   const checks = [];
   const add = (id, severity, title, count, detail, action) => {
     checks.push({ id, severity, title, count, detail, action, state: count > 0 ? 'needs-attention' : 'clear' });
