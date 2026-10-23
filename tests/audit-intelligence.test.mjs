@@ -321,7 +321,7 @@ test('closure gate can pass a complete administrative evidence chain while retai
   const evidence = [{ id: 'ev-1', engagementId: 'e1', workpaperRef: 'WP-1', title: 'Invoice' }];
   const findings = [{ id: 'f-1', engagementId: 'e1', status: 'مغلقة', title: 'Finding', criteria: 'Criteria', condition: 'Condition', effect: 'Effect', recommendation: 'Recommendation', workpaperRef: 'WP-1', evidenceIds: ['ev-1'] }];
   const result = evaluateEngagementClosure({
-    engagementId: 'e1', workpapers, evidence, findings, risks: [], trialBalance: balancedTB, operations: {},
+    engagementId: 'e1', workpapers, evidence, findings, risks: [], trialBalance: balancedTB, operations: { accountMappings: { 'e1::1000': { lineKey: 'assets.cash' }, 'e1::3000': { lineKey: 'equity' } } },
     currentSourceFingerprint: currentFingerprint,
   });
   assert.equal(result.allowed, true);
@@ -345,4 +345,33 @@ test('quality shield flags report configuration that has not been exported', () 
     reportDrafts: [{ engagementId: 'e1', firmName: 'Example Firm', opinion: 'مسودة' }],
   });
   assert.equal(quality.checks.find(item => item.id === 'quality-report-not-exported')?.count, 1);
+});
+
+
+test('data trust reports unclassified account codes with original source rows', () => {
+  const result = runDataTrustChecks([
+    tbRow({ code: '1000', sourceRowNumber: 12 }),
+    tbRow({ id: 'tb-2', code: '2000', sourceRowNumber: 14 }),
+  ], { unmappedAccountCodes: ['2000'] });
+  const issue = result.issues.find(item => item.id === 'tb-unmapped-accounts');
+  assert.ok(issue);
+  assert.deepEqual(issue.rowNumbers, [14]);
+  assert.equal(issue.count, 1);
+});
+
+test('closure gate blocks unclassified accounts by default and supports explicit policy override', () => {
+  const tb = [
+    tbRow({ id: 'tb-cash', engagementId: 'e1', code: '1000', name: 'Cash', openingDebit: 100, openingCredit: 0, debit: 50, credit: 20, closingDebit: 130, closingCredit: 0 }),
+    tbRow({ id: 'tb-equity', engagementId: 'e1', code: '3000', name: 'Equity', openingDebit: 0, openingCredit: 100, debit: 20, credit: 50, closingDebit: 0, closingCredit: 130 }),
+  ];
+  const currentFingerprint = fingerprintTrialBalanceRows(tb);
+  const workpapers = [{ id: 'wp', engagementId: 'e1', ref: 'WP-1', status: 'معتمد', procedure: 'Procedure', conclusion: 'Conclusion', sourceFingerprint: currentFingerprint }];
+  const evidence = [{ id: 'ev', engagementId: 'e1', workpaperRef: 'WP-1' }];
+  const findings = [{ id: 'f', engagementId: 'e1', status: 'مغلقة', workpaperRef: 'WP-1', evidenceIds: ['ev'], criteria: 'C', condition: 'X', effect: 'Y', recommendation: 'Z' }];
+  const input = { engagementId: 'e1', workpapers, evidence, findings, risks: [], trialBalance: tb, operations: { accountMappings: { 'e1::1000': { lineKey: 'assets.cash' } } }, currentSourceFingerprint: currentFingerprint };
+  const blocked = evaluateEngagementClosure(input);
+  assert.equal(blocked.allowed, false);
+  assert.ok(blocked.blockers.some(item => item.id === 'close-unmapped-accounts'));
+  const allowed = evaluateEngagementClosure(input, { requireAccountClassification: false });
+  assert.ok(!allowed.blockers.some(item => item.id === 'close-unmapped-accounts'));
 });
