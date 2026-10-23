@@ -1,4 +1,4 @@
-const TOLERANCE = 0.01;
+const TOLERANCE = 0.001; // JOD is carried to three decimal places (fils).
 
 function cleanText(value) {
   return String(value ?? '').replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
@@ -56,23 +56,28 @@ export function parseAuditAmount(input) {
 }
 
 function parseDate(value) {
-  if (value instanceof Date && Number.isFinite(value.getTime())) return value.toISOString().slice(0, 10);
+  const formatParts = (year, month, day) => {
+    if (![year, month, day].every(Number.isInteger) || year < 1 || year > 9999 || month < 1 || month > 12 || day < 1 || day > 31) return '';
+    const check = new Date(0);
+    check.setUTCHours(0, 0, 0, 0);
+    check.setUTCFullYear(year, month - 1, day);
+    if (check.getUTCFullYear() !== year || check.getUTCMonth() !== month - 1 || check.getUTCDate() !== day) return '';
+    return String(year).padStart(4, '0') + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+  };
+  if (value instanceof Date && Number.isFinite(value.getTime())) return formatParts(value.getUTCFullYear(), value.getUTCMonth() + 1, value.getUTCDate());
   const raw = cleanText(value);
   if (!raw) return '';
-  const iso = raw.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
-  if (iso) {
-    const d = new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
-    if (d.getFullYear() === Number(iso[1]) && d.getMonth() === Number(iso[2]) - 1 && d.getDate() === Number(iso[3])) return d.toISOString().slice(0, 10);
-    return '';
-  }
-  const dmy = raw.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/);
+  const iso = raw.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:$|[t\s])/i);
+  if (iso) return formatParts(Number(iso[1]), Number(iso[2]), Number(iso[3]));
+  const dmy = raw.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})(?:$|[t\s])/i);
   if (dmy) {
-    const year = Number(dmy[3]) < 100 ? (Number(dmy[3]) < 70 ? 2000 + Number(dmy[3]) : 1900 + Number(dmy[3])) : Number(dmy[3]);
-    const d = new Date(year, Number(dmy[2]) - 1, Number(dmy[1]));
-    if (d.getFullYear() === year && d.getMonth() === Number(dmy[2]) - 1 && d.getDate() === Number(dmy[1])) return d.toISOString().slice(0, 10);
+    const shortYear = Number(dmy[3]);
+    const year = dmy[3].length < 3 ? (shortYear < 70 ? 2000 + shortYear : 1900 + shortYear) : shortYear;
+    return formatParts(year, Number(dmy[2]), Number(dmy[1]));
   }
   const parsed = new Date(String(value));
-  return Number.isFinite(parsed.getTime()) ? parsed.toISOString().slice(0, 10) : '';
+  if (!Number.isFinite(parsed.getTime())) return '';
+  return formatParts(parsed.getUTCFullYear(), parsed.getUTCMonth() + 1, parsed.getUTCDate());
 }
 
 /**
@@ -93,6 +98,7 @@ export function normalizeJournalRows(records) {
   const creditH = firstMatch(headers, ['credit', 'credit amount', 'cr', 'دائن', 'مبلغ دائن', 'الدائن']);
   const amountH = firstMatch(headers, ['amount', 'transaction amount', 'value', 'المبلغ', 'قيمة الحركة', 'قيمة']);
   const directionH = firstMatch(headers, ['direction', 'type', 'dc flag', 'debit credit', 'nature', 'نوع الحركة', 'الطبيعة', 'مدين دائن']);
+  const counterpartyH = firstMatch(headers, ['counterparty', 'vendor', 'supplier', 'payee', 'beneficiary', 'party name', 'اسم المورد', 'اسم المستفيد', 'المستفيد', 'المورد', 'اسم الطرف']);
   const warnings = [];
   if (!dateH) warnings.push('لم يُكتشف عمود تاريخ واضح.');
   if (!descriptionH) warnings.push('لم يُكتشف عمود بيان أو وصف واضح.');
@@ -105,6 +111,11 @@ export function normalizeJournalRows(records) {
     let debit = debitH ? parseAuditAmount(get(debitH)) : null;
     let credit = creditH ? parseAuditAmount(get(creditH)) : null;
     const amount = amountH ? parseAuditAmount(get(amountH)) : null;
+    const invalidAmountFields = [];
+    const hasRawValue = header => Boolean(header) && get(header) !== undefined && get(header) !== null && String(get(header)).trim() !== '';
+    if (debitH && hasRawValue(debitH) && debit === null) invalidAmountFields.push('debit');
+    if (creditH && hasRawValue(creditH) && credit === null) invalidAmountFields.push('credit');
+    if (amountH && hasRawValue(amountH) && amount === null) invalidAmountFields.push('amount');
     if (debitH && creditH) {
       if (get(debitH) === null || get(debitH) === undefined || String(get(debitH)).trim() === '') debit = 0;
       if (get(creditH) === null || get(creditH) === undefined || String(get(creditH)).trim() === '') credit = 0;
@@ -123,6 +134,7 @@ export function normalizeJournalRows(records) {
       if (!debitH && creditH) debit = 0;
       if (!creditH && debitH) credit = 0;
     }
+    if (invalidAmountFields.length) classification = 'invalid-amount';
     return {
       rowNumber: index + 2,
       date: parseDate(get(dateH)),
@@ -130,9 +142,11 @@ export function normalizeJournalRows(records) {
       description: String(get(descriptionH) ?? '').trim(),
       accountCode: String(get(accountH) ?? '').trim(),
       reference: String(get(referenceH) ?? '').trim(),
+      counterparty: String(get(counterpartyH) ?? '').trim(),
       debit,
       credit,
       amount,
+      invalidAmountFields,
       classification,
       raw: { ...raw },
     };
@@ -140,7 +154,7 @@ export function normalizeJournalRows(records) {
   return {
     rows,
     sourceCount: rows.length,
-    fieldsDetected: [dateH, descriptionH, accountH, debitH, creditH, amountH, directionH, referenceH].filter(Boolean),
+    fieldsDetected: [dateH, descriptionH, accountH, debitH, creditH, amountH, directionH, referenceH, counterpartyH].filter(Boolean),
     warnings,
   };
 }
@@ -148,7 +162,7 @@ export function normalizeJournalRows(records) {
 function amountOf(value) {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
-function round2(value) { return Math.round((value + Number.EPSILON) * 100) / 100; }
+function roundMoney(value) { return Math.round((value + Number.EPSILON) * 1000) / 1000; }
 function issue(id, severity, title, count, detail, action) {
   return { id, severity, title, count, detail, action };
 }
@@ -158,57 +172,70 @@ function issue(id, severity, title, count, detail, action) {
  * Does not determine accounting correctness or form an audit conclusion.
  * @param {Array<Record<string, any>>} rows
  */
-export function runDataTrustChecks(rows) {
+export function runDataTrustChecks(rows, options = {}) {
   const data = Array.isArray(rows) ? rows : [];
   const issues = [];
+  const fields = ['openingDebit', 'openingCredit', 'debit', 'credit', 'closingDebit', 'closingCredit'];
+  const zeroTotals = { openingDebit: 0, openingCredit: 0, debit: 0, credit: 0, closingDebit: 0, closingCredit: 0 };
   if (!data.length) {
-    issues.push(issue('tb-empty', 'high', 'لا يوجد ميزان مراجعة', 1, 'لم يتم العثور على صفوف ميزان مراجعة مرتبطة بالمهمة الحالية.', 'استورد ملفًا وتحقق من تعيين الأعمدة قبل بدء التحليل.'));
-    return { rowCount: 0, totals: { openingDebit: 0, openingCredit: 0, debit: 0, credit: 0, closingDebit: 0, closingCredit: 0 }, closingDifference: 0, issues, pass: false };
+    issues.push(issue('tb-empty', 'high', 'لا يوجد ميزان مراجعة', 1, 'لم يتم العثور على صفوف ميزان مراجعة مرتبطة بالمهمة الحالية.', 'استورد الملف وتحقق من تعيين الأعمدة قبل بدء التحليل.'));
+    return { rowCount: 0, totals: zeroTotals, openingDifference: 0, movementDifference: 0, closingDifference: 0, issues, pass: false };
   }
-  const seenCodes = new Map();
-  const duplicateCodes = [];
-  const missingIdentity = [];
-  const negatives = [];
-  const bothClosingSides = [];
-  const bridgeVariances = [];
-  let openingDebit = 0, openingCredit = 0, debit = 0, credit = 0, closingDebit = 0, closingCredit = 0;
-  for (const row of data) {
-    const code = String(row.code ?? '').trim();
-    const name = String(row.name ?? '').trim();
-    if (!code || !name) missingIdentity.push(code || name || '(بدون رمز أو اسم)');
-    if (code) {
-      if (seenCodes.has(code)) duplicateCodes.push(code);
-      else seenCodes.set(code, true);
+  const seenCodes = new Map(), duplicateCodes = [], missingIdentity = [], missingFinancial = [], invalidNumeric = [], negativeValues = [], bothClosingSides = [], bridgeVariances = [], duplicateRecords = [], signatureMap = new Map();
+  const totals = { ...zeroTotals };
+  data.forEach((row, index) => {
+    const code = String(row.code ?? '').trim(), name = String(row.name ?? '').trim();
+    const rowNumber = Number.isFinite(Number(row.rowNumber)) ? Number(row.rowNumber) : index + 2;
+    if (!code || !name) missingIdentity.push({ code, name, rowNumber });
+    if (code) { if (seenCodes.has(code)) duplicateCodes.push({ code, rowNumber }); else seenCodes.set(code, rowNumber); }
+    for (const field of fields) {
+      const raw = row[field];
+      const mapped = !Array.isArray(row.sourceFinancialFields) || row.sourceFinancialFields.includes(field);
+      const present = mapped && raw !== undefined && raw !== null && String(raw).trim() !== '';
+      if (!present) { missingFinancial.push({ code: code || name || '(بدون حساب)', field, rowNumber }); continue; }
+      const value = Number(raw);
+      if (!Number.isFinite(value)) { invalidNumeric.push({ code: code || name || '(بدون حساب)', field, value: raw, rowNumber }); continue; }
+      if (value < 0) negativeValues.push({ code: code || name || '(بدون حساب)', field, value, rowNumber });
+      totals[field] += value;
     }
-    for (const field of ['openingDebit', 'openingCredit', 'debit', 'credit', 'closingDebit', 'closingCredit']) {
-      if (row[field] !== undefined && row[field] !== null && row[field] !== '' && (!Number.isFinite(Number(row[field])) || Number(row[field]) < 0)) negatives.push({ code, field, value: row[field] });
+    const cd = Number(row.closingDebit), cc = Number(row.closingCredit);
+    if (Number.isFinite(cd) && Number.isFinite(cc) && cd > TOLERANCE && cc > TOLERANCE) bothClosingSides.push({ code: code || name || '(بدون حساب)', rowNumber });
+    const complete = fields.every(field => (!Array.isArray(row.sourceFinancialFields) || row.sourceFinancialFields.includes(field)) && row[field] !== undefined && row[field] !== null && String(row[field]).trim() !== '' && Number.isFinite(Number(row[field])));
+    if (complete) {
+      const expectedNet = (Number(row.openingDebit) - Number(row.openingCredit)) + (Number(row.debit) - Number(row.credit));
+      const variance = roundMoney(expectedNet - (cd - cc));
+      if (Number.isFinite(variance) && Math.abs(variance) >= TOLERANCE) bridgeVariances.push({ code: code || name, variance, rowNumber });
     }
-    const od = amountOf(row.openingDebit), oc = amountOf(row.openingCredit), dr = amountOf(row.debit), cr = amountOf(row.credit);
-    const cd = amountOf(row.closingDebit), cc = amountOf(row.closingCredit);
-    openingDebit += od; openingCredit += oc; debit += dr; credit += cr; closingDebit += cd; closingCredit += cc;
-    if (cd > TOLERANCE && cc > TOLERANCE) bothClosingSides.push(code || name || '(بدون حساب)');
-    const present = ['openingDebit', 'openingCredit', 'debit', 'credit', 'closingDebit', 'closingCredit'].every(field => row[field] !== undefined && row[field] !== null && row[field] !== '');
-    if (present) {
-      const expectedNet = (od - oc) + (dr - cr);
-      const actualNet = cd - cc;
-      const variance = round2(expectedNet - actualNet);
-      if (Math.abs(variance) > TOLERANCE) bridgeVariances.push({ code: code || name, variance });
-    }
+    const signature = JSON.stringify([code, cleanText(name), ...fields.map(field => row[field] === undefined || row[field] === null ? '' : String(row[field]).trim())]);
+    const matching = signatureMap.get(signature) || [];
+    matching.push(rowNumber); signatureMap.set(signature, matching);
+  });
+  for (const rowNumbers of signatureMap.values()) if (rowNumbers.length > 1) duplicateRecords.push(...rowNumbers.slice(1).map(rowNumber => ({ rowNumber, firstRowNumber: rowNumbers[0] })));
+  for (const key of Object.keys(totals)) totals[key] = roundMoney(totals[key]);
+  const openingDifference = roundMoney(totals.openingDebit - totals.openingCredit);
+  const movementDifference = roundMoney(totals.debit - totals.credit);
+  const closingDifference = roundMoney(totals.closingDebit - totals.closingCredit);
+  if (missingIdentity.length) issues.push({ ...issue('tb-identity', 'medium', 'حسابات ناقصة التعريف', missingIdentity.length, 'بعض الصفوف تفتقد رمز الحساب أو اسمه؛ قد تتأثر المطابقة والتجميع.', 'صحّح الأعمدة أو بيانات المصدر، ثم أعد تشغيل الفحص.'), rowNumbers: missingIdentity.map(row => row.rowNumber) });
+  if (missingFinancial.length) issues.push({ ...issue('tb-missing-financial-fields', 'high', 'حقول مالية ناقصة', missingFinancial.length, 'هناك حقول افتتاحية أو حركة أو ختامية فارغة. لا تُعامل الفراغات كصفر قبل التحقق من تنسيق ملف المصدر.', 'راجع تعيين الأعمدة؛ ميّز الصفر الصريح عن الخانة الفارغة، ثم أعد الاستيراد.'), rowNumbers: [...new Set(missingFinancial.map(row => row.rowNumber))], examples: missingFinancial.slice(0, 10) });
+  if (invalidNumeric.length) issues.push({ ...issue('tb-invalid-numeric', 'high', 'قيم مالية غير رقمية', invalidNumeric.length, 'تعذر تفسير بعض القيم المالية كأرقام؛ استبعادها من الإجماليات قد يجعل نتائج الاتزان مضللة.', 'صحّح القيم أو إعدادات الفواصل العشرية في المصدر وأعد الاستيراد.'), rowNumbers: [...new Set(invalidNumeric.map(row => row.rowNumber))], examples: invalidNumeric.slice(0, 10) });
+  if (negativeValues.length) issues.push({ ...issue('tb-negative', 'medium', 'قيم مالية سالبة', negativeValues.length, 'تحتوي بعض الحقول المالية على قيم سالبة. قد يكون ذلك اصطلاحًا مشروعًا، لكنه يحتاج مطابقة مع طريقة عرض المصدر.', 'راجع اصطلاح الإشارة قبل تعديل أي قيمة.'), rowNumbers: [...new Set(negativeValues.map(row => row.rowNumber))], examples: negativeValues.slice(0, 10) });
+  if (duplicateCodes.length) issues.push({ ...issue('tb-duplicate-code', 'medium', 'رموز حسابات مكررة', duplicateCodes.length, 'وجدت رموز حساب متكررة. قد يكون ذلك صحيحًا عند وجود أبعاد أو مراكز تكلفة؛ راجع مفتاح الحساب قبل الدمج.', 'تحقق من رمز الحساب ومركز التكلفة والفترة قبل اعتبارها سجلات مكررة.'), rowNumbers: duplicateCodes.map(row => row.rowNumber), examples: duplicateCodes.slice(0, 10) });
+  if (duplicateRecords.length) issues.push({ ...issue('tb-duplicate-row', 'medium', 'صفوف ميزان مكررة بالكامل', duplicateRecords.length, 'توجد صفوف متطابقة في الحساب والاسم وجميع القيم المالية؛ قد يؤدي تكرار الاستيراد أو الصف إلى تضخيم الإجماليات.', 'قارنها بالمصدر وحدد إن كانت تكرارًا غير مقصود؛ لا تحذف صفًا تلقائيًا.'), rowNumbers: duplicateRecords.map(row => row.rowNumber), examples: duplicateRecords.slice(0, 10) });
+  if (bothClosingSides.length) issues.push({ ...issue('tb-both-sides', 'low', 'حسابات لها مدين ودائن ختامي معًا', bothClosingSides.length, 'رُصدت أرصدة مدين ودائن معًا في الصف نفسه؛ قد يكون ذلك مسموحًا في المصدر لكنه يحتاج تفسيرًا.', 'افحص تصميم الميزان وسياسة عرض الأرصدة قبل إعادة التصنيف.'), rowNumbers: bothClosingSides.map(row => row.rowNumber) });
+  if (Math.abs(openingDifference) >= TOLERANCE) issues.push(issue('tb-opening-unbalanced', 'high', 'إجمالي الأرصدة الافتتاحية غير متوازن', 1, 'فرق المدين والدائن الافتتاحي: ' + openingDifference.toFixed(3) + ' د.أ.', 'تحقق من اكتمال أرصدة أول المدة ومن تعيين أعمدة المدين والدائن.'));
+  if (Math.abs(movementDifference) >= TOLERANCE) issues.push(issue('tb-movement-unbalanced', 'high', 'إجمالي حركة الفترة غير متوازن', 1, 'فرق المدين والدائن لحركة الفترة: ' + movementDifference.toFixed(3) + ' د.أ.', 'تأكد أن دفتر الأستاذ كامل للفترة وأن الأعمدة تمثل الحركة المدينة والدائنة الصحيحة.'));
+  if (Math.abs(closingDifference) >= TOLERANCE) issues.push(issue('tb-unbalanced', 'high', 'إجمالي الميزان الختامي غير متوازن', 1, 'فرق المدين والدائن الختامي: ' + closingDifference.toFixed(3) + ' د.أ.', 'تأكد من اكتمال الحسابات، وتعيين الأعمدة، والفترة المحاسبية.'));
+  if (bridgeVariances.length) issues.push({ ...issue('tb-rollforward', 'medium', 'اختلاف بين حركة الفترة والرصيد الختامي', bridgeVariances.length, 'الرصيد الختامي لبعض الحسابات لا يساوي الرصيد الافتتاحي مضافًا إليه الحركة الصافية؛ قد يكون نطاق البيانات جزئيًا أو أن الأعمدة لا تمثل حركة الفترة كاملة.', 'تأكد أن الأعمدة تغطي الفترة نفسها وأن الرصيد الختامي مبني على الحركة المستوردة.'), rowNumbers: bridgeVariances.map(row => row.rowNumber), examples: bridgeVariances.slice(0, 10) });
+  const expectedRowCount = Number(options?.expectedRowCount);
+  if (Number.isFinite(expectedRowCount) && expectedRowCount >= 0 && expectedRowCount !== data.length) issues.push(issue('tb-source-row-count', 'high', 'عدد الصفوف لا يطابق المصدر', 1, 'المستورد ' + data.length + ' صفًا بينما يتوقع المصدر ' + expectedRowCount + '.', 'تحقق من الفلاتر والصفوف المخفية والورقة الصحيحة قبل الاعتماد.'));
+  const expectedTotals = options?.sourceTotals;
+  if (expectedTotals && typeof expectedTotals === 'object') {
+    const mismatches = fields.filter(field => expectedTotals[field] !== undefined && Number.isFinite(Number(expectedTotals[field])) && Math.abs(totals[field] - Number(expectedTotals[field])) >= TOLERANCE);
+    if (mismatches.length) issues.push({ ...issue('tb-source-totals-mismatch', 'high', 'إجماليات المصدر لا تطابق البيانات المستوردة', mismatches.length, 'تختلف الحقول التالية عن إجماليات المصدر المعلنة: ' + mismatches.join('، ') + '.', 'أعد مراجعة نطاق التصدير وتعيين الأعمدة والفلاتر؛ لا تبدأ التحليل قبل تفسير الفروق.'), fields: mismatches });
   }
-  const closingDifference = round2(closingDebit - closingCredit);
-  if (missingIdentity.length) issues.push(issue('tb-identity', 'medium', 'حسابات ناقصة التعريف', missingIdentity.length, 'بعض الصفوف تفتقد رمز الحساب أو اسمه؛ قد تتأثر المطابقة والتجميع.', 'صحّح الأعمدة أو بيانات المصدر، ثم أعد تشغيل الفحص.'));
-  if (duplicateCodes.length) issues.push(issue('tb-duplicate-code', 'medium', 'رموز حسابات مكررة', duplicateCodes.length, 'وجدت رموز حساب متكررة. قد يكون التكرار صحيحًا عند وجود أكثر من بُعد أو مركز تكلفة؛ راجع مفتاح الحساب قبل الدمج.', 'تحقق من رمز الحساب ومركز التكلفة والفترة قبل اعتبارها سجلات مكررة.'));
-  if (negatives.length) issues.push(issue('tb-negative', 'medium', 'قيم سالبة أو غير رقمية', negatives.length, 'هناك حقول مالية سالبة أو غير رقمية في ميزان المراجعة، وقد تكون إشارة إلى خطأ في تعيين الأعمدة أو اصطلاح الإشارة.', 'راجع طريقة تمثيل المدين والدائن في ملف المصدر.'));
-  if (bothClosingSides.length) issues.push(issue('tb-both-sides', 'low', 'حسابات لها مدين ودائن ختامي معًا', bothClosingSides.length, 'رُصدت أرصدة مدين ودائن معًا في الصف نفسه؛ قد يكون ذلك مسموحًا في المصدر لكنه يحتاج تفسيرًا.', 'افحص تصميم الميزان وسياسة عرض الأرصدة قبل إعادة التصنيف.'));
-  if (Math.abs(closingDifference) > TOLERANCE) issues.push(issue('tb-unbalanced', 'high', 'إجمالي الميزان الختامي غير متوازن', 1, 'صافي المدين الختامي لا يساوي صافي الدائن الختامي بفارق ' + closingDifference.toFixed(2) + ' د.أ.', 'تأكد من اكتمال الحسابات، وتعيين الأعمدة، والفترة المحاسبية.'));
-  if (bridgeVariances.length) issues.push(issue('tb-rollforward', 'medium', 'اختلاف بين حركة الفترة والرصيد الختامي', bridgeVariances.length, 'الرصيد الختامي لبعض الحسابات لا يساوي الرصيد الافتتاحي مضافًا إليه الحركة الصافية؛ قد يكون نطاق البيانات جزئيًا أو أن الأعمدة لا تمثل حركة الفترة كاملة.', 'تأكد أن الأعمدة تغطي الفترة نفسها وأن الرصيد الختامي مبني على الحركة المستوردة.'));
-  return {
-    rowCount: data.length,
-    totals: { openingDebit: round2(openingDebit), openingCredit: round2(openingCredit), debit: round2(debit), credit: round2(credit), closingDebit: round2(closingDebit), closingCredit: round2(closingCredit) },
-    closingDifference,
-    issues,
-    pass: issues.length === 0,
-  };
+  const unmappedCodes = Array.isArray(options?.unmappedAccountCodes) ? options.unmappedAccountCodes.map(value => String(value).trim()).filter(Boolean) : [];
+  if (unmappedCodes.length) issues.push(issue('tb-unmapped-accounts', 'medium', 'حسابات لم يتم تصنيفها', unmappedCodes.length, 'توجد حسابات لم يؤكد المدقق ربطها ببنود أو تصنيفات التقارير.', 'راجع خريطة الحسابات وصادق على التصنيف يدويًا قبل إعداد القوائم.'));
+  return { rowCount: data.length, totals, openingDifference, movementDifference, closingDifference, issues, pass: issues.length === 0 };
 }
 
 /**
@@ -216,7 +243,7 @@ export function runDataTrustChecks(rows) {
  * Results are risk indicators for auditor review, never findings of fraud.
  * @param {Array<Record<string, any>>} rows
  */
-export function analyzeJournalEntries(rows) {
+export function analyzeJournalEntries(rows, options = {}) {
   const data = Array.isArray(rows) ? rows : [];
   const issues = [];
   const pushGroup = (id, severity, title, offending, detail, action) => {
@@ -228,11 +255,11 @@ export function analyzeJournalEntries(rows) {
   pushGroup('journal-ambiguous-amount', 'high', 'المبلغ لا يحدد جهة الحركة', data.filter(row => row.classification === 'ambiguous-amount' || (row.debit === null && row.credit === null)), 'يوجد مبلغ منفرد دون عمود مدين/دائن أو مؤشر موثوق للجهة؛ لم يخمّن Ledgerly جهة القيد.', 'أضف عمودَي المدين والدائن أو عمود نوع الحركة قبل الاعتماد على التحليل.');
   pushGroup('journal-invalid-amount', 'high', 'مبلغ غير صالح أو سطر على الجانبين', data.filter(row => {
     const dr = row.debit, cr = row.credit;
-    return (dr !== null && dr !== undefined && !Number.isFinite(Number(dr))) ||
-      (cr !== null && cr !== undefined && !Number.isFinite(Number(cr))) ||
-      (dr !== null && cr !== null && Number(dr) < 0) || (cr !== null && Number(cr) < 0) ||
-      (dr !== null && cr !== null && Number(dr) > TOLERANCE && Number(cr) > TOLERANCE);
-  }), 'تحتوي بعض الأسطر على قيم سالبة أو غير رقمية أو على جهتي المدين والدائن في السطر نفسه.', 'تحقق من اصطلاح الإشارة، وتعيين الأعمدة، ومستوى تفصيل القيود.');
+    return (Array.isArray(row.invalidAmountFields) && row.invalidAmountFields.length > 0) ||
+      (dr !== null && dr !== undefined && !Number.isFinite(Number(dr))) || (cr !== null && cr !== undefined && !Number.isFinite(Number(cr))) ||
+      (dr !== null && dr !== undefined && Number(dr) < 0) || (cr !== null && cr !== undefined && Number(cr) < 0) ||
+      (dr !== null && dr !== undefined && cr !== null && cr !== undefined && Number(dr) > TOLERANCE && Number(cr) > TOLERANCE);
+  }), 'تحتوي بعض الأسطر على قيم سالبة أو غير رقمية أو على جهتي المدين والدائن في السطر نفسه. تُرفع القيم النصية التي لم تُفسَّر كأرقام حتى إن لم تُدخل في الإجماليات.', 'تحقق من اصطلاح الإشارة، وتعيين الأعمدة، ومستوى تفصيل القيود.');
   pushGroup('journal-zero-amount', 'low', 'سطر بلا مبلغ واضح', data.filter(row => row.debit === 0 && row.credit === 0 && (row.amount === null || row.amount === undefined || row.amount === 0)), 'بعض الصفوف لا يظهر فيها مبلغ مدين أو دائن.', 'تحقق إن كانت الصفوف عناوين أو إجماليات أو قيودًا غير مكتملة.');
   const signatureMap = new Map();
   for (const row of data) {
@@ -260,6 +287,64 @@ export function analyzeJournalEntries(rows) {
     if (threshold > 0) largeRows = data.filter(row => Math.max(Math.abs(Number(row.debit) || 0), Math.abs(Number(row.credit) || 0)) > threshold);
   }
   pushGroup('journal-large-amount', 'medium', 'مبالغ أكبر بكثير من الوسيط', largeRows, 'وجد النظام مبالغ تتجاوز خمسة أضعاف وسيط القيم غير الصفرية في الملف. هذه مقارنة داخلية فقط وقد لا تعكس الأهمية النسبية المهنية.', 'قارن القيم بالحدود المعتمدة للأهمية النسبية وطبيعة النشاط.');
+
+  const reversalWords = /(reversal|reversed|reverse|voided|cancelled|canceled|عكس|عكس قيد|الغاء|إلغاء|مرتجع|استرجاع|رد قيد)/i;
+  pushGroup('journal-reversal-wording', 'medium', 'وصف يشير إلى عكس أو إلغاء', data.filter(row => reversalWords.test(String(row.description ?? ''))), 'يشير الوصف إلى عكس أو إلغاء أو استرجاع؛ يلزم ربط الحركة بالقيد الأصلي وسببها.', 'تحقق من مرجع القيد الأصلي والموافقة وتوقيت العكس؛ لا تعتبر الوصف دليلًا على مخالفة وحده.');
+  const referenceParties = new Map();
+  for (const row of data) {
+    const reference = cleanText(row.reference), party = cleanText(row.counterparty);
+    if (!reference || !party) continue;
+    const list = referenceParties.get(reference) || [];
+    list.push(row); referenceParties.set(reference, list);
+  }
+  const partyConflictRows = [];
+  for (const list of referenceParties.values()) if (new Set(list.map(row => cleanText(row.counterparty)).filter(Boolean)).size > 1) partyConflictRows.push(...list);
+  pushGroup('journal-reference-party-conflict', 'medium', 'مرجع واحد مرتبط بأطراف متعددة', partyConflictRows, 'تظهر أسماء موردين أو مستفيدين مختلفة تحت المرجع نفسه. قد يكون ذلك مشروعًا بحسب طريقة ترقيم النظام، لكنه يستحق التحقق من المستندات الأصلية.', 'راجع مرجع المستند أو القيد وبيانات الطرف المقابل قبل تعديل أي سجل.');
+  const approvalThreshold = Number(options?.approvalThreshold);
+  const splitWindowRaw = Number(options?.splitWindowDays);
+  const splitWindowDays = Number.isFinite(splitWindowRaw) ? Math.max(0, Math.min(30, Math.trunc(splitWindowRaw))) : 1;
+  if (Number.isFinite(approvalThreshold) && approvalThreshold > 0) {
+    const groups = new Map();
+    for (const row of data) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(row.date ?? ''))) continue;
+      const debit = Number(row.debit), credit = Number(row.credit);
+      const isDebit = Number.isFinite(debit) && debit > TOLERANCE && !(Number.isFinite(credit) && credit > TOLERANCE);
+      const isCredit = Number.isFinite(credit) && credit > TOLERANCE && !(Number.isFinite(debit) && debit > TOLERANCE);
+      if (!isDebit && !isCredit) continue;
+      const amount = isDebit ? debit : credit;
+      if (!(amount > 0 && amount < approvalThreshold)) continue;
+      const account = cleanText(row.accountCode), partyOrDescription = cleanText(row.counterparty) || cleanText(row.description);
+      if (!account || partyOrDescription.length < 3) continue;
+      const key = [account, isDebit ? 'debit' : 'credit', partyOrDescription].join('|');
+      const list = groups.get(key) || [];
+      list.push({ row, amount, time: Date.parse(String(row.date) + 'T00:00:00Z') }); groups.set(key, list);
+    }
+    const splitRows = new Map(), splitClusters = [];
+    for (const items of groups.values()) {
+      items.sort((a, b) => a.time - b.time || Number(a.row.rowNumber) - Number(b.row.rowNumber));
+      let left = 0, sum = 0;
+      for (let right = 0; right < items.length; right += 1) {
+        sum += items[right].amount;
+        while (left < right && (items[right].time - items[left].time) / 86400000 > splitWindowDays) { sum -= items[left].amount; left += 1; }
+        while (left < right && sum - items[left].amount >= approvalThreshold) { sum -= items[left].amount; left += 1; }
+        if (right - left + 1 >= 2 && sum >= approvalThreshold) {
+          const clusterItems = items.slice(left, right + 1);
+          const rowNumbers = clusterItems.map(item => Number(item.row.rowNumber)).filter(Number.isFinite);
+          const signature = [...rowNumbers].sort((a, b) => a - b).join(',');
+          if (!splitClusters.some(cluster => cluster.signature === signature)) splitClusters.push({ signature, accountCode: clusterItems[0].row.accountCode, partyOrDescription: clusterItems[0].row.counterparty || clusterItems[0].row.description, totalAmount: roundMoney(sum), rowNumbers });
+          for (const item of clusterItems) if (Number.isFinite(Number(item.row.rowNumber))) splitRows.set(Number(item.row.rowNumber), item.row);
+        }
+      }
+    }
+    if (splitRows.size) issues.push({
+      id: 'journal-possible-split-transactions', severity: 'high', title: 'معاملات متقاربة قد تتجاوز حد الموافقة عند جمعها',
+      count: splitRows.size, rowNumbers: [...splitRows.keys()].sort((a, b) => a - b),
+      examples: [...splitRows.values()].slice(0, 10),
+      clusters: splitClusters.map(({ signature, ...cluster }) => cluster),
+      detail: 'رُصدت معاملات منفردة تقل عن حد ' + approvalThreshold.toFixed(3) + ' د.أ. ويبلغ مجموع بعض مجموعاتها هذا الحد أو يتجاوزه خلال ' + splitWindowDays + ' يومًا. هذه إشارة أولية تعتمد على الحساب والبيان/الطرف المقابل.',
+      action: 'تحقق من حدود الصلاحيات الفعلية وتوقيت المعاملات والمستندات والموافقات؛ لا تستنتج التجزئة المتعمدة من المبلغ وحده.',
+    });
+  }
   const counts = issues.reduce((out, item) => { out[item.severity] = (out[item.severity] || 0) + item.count; return out; }, {});
   return { scannedCount: data.length, issueCount: issues.reduce((sum, item) => sum + item.count, 0), counts, issues, monthEndSignals: monthEndRows.length, hasRows: data.length > 0 };
 }
@@ -270,27 +355,26 @@ export function analyzeJournalEntries(rows) {
  * @param {Array<Record<string, any>>} evidence
  */
 export function buildEvidenceLineage(workpapers, evidence) {
-  const papers = Array.isArray(workpapers) ? workpapers : [];
-  const items = Array.isArray(evidence) ? evidence : [];
-  const byRef = new Map(papers.map(p => [String(p.ref ?? '').trim(), p]).filter(([ref]) => Boolean(ref)));
+  const papers = Array.isArray(workpapers) ? workpapers : [], items = Array.isArray(evidence) ? evidence : [];
+  const byRef = new Map();
+  for (const paper of papers) {
+    const key = cleanText(paper.ref);
+    if (!key) continue;
+    const list = byRef.get(key) || []; list.push(paper); byRef.set(key, list);
+  }
+  const duplicateWorkpaperReferences = [...byRef.entries()].filter(([, list]) => list.length > 1).map(([reference, list]) => ({ reference, count: list.length, workpaperIds: list.map(paper => paper.id) }));
   const links = items.map(item => {
-    const ref = String(item.workpaperRef ?? '').trim();
-    const workpaper = ref ? byRef.get(ref) : undefined;
-    return { evidence: item, workpaper, linked: Boolean(workpaper), reason: !ref ? 'missing-reference' : !workpaper ? 'unknown-reference' : 'linked' };
+    const ref = cleanText(item.workpaperRef), candidates = ref ? (byRef.get(ref) || []) : [];
+    const workpaper = candidates.length === 1 ? candidates[0] : undefined;
+    const reason = !ref ? 'missing-reference' : candidates.length === 0 ? 'unknown-reference' : candidates.length > 1 ? 'ambiguous-reference' : 'linked';
+    return { evidence: item, workpaper, linked: Boolean(workpaper), reason };
   });
   const workpaperRows = papers.map(workpaper => {
-    const linkedEvidence = items.filter(item => String(item.workpaperRef ?? '').trim() === String(workpaper.ref ?? '').trim());
+    const ref = cleanText(workpaper.ref), candidates = ref ? (byRef.get(ref) || []) : [];
+    const linkedEvidence = candidates.length === 1 ? items.filter(item => cleanText(item.workpaperRef) === ref) : [];
     return { workpaper, evidenceCount: linkedEvidence.length, evidence: linkedEvidence };
   });
-  return {
-    workpaperCount: papers.length,
-    evidenceCount: items.length,
-    linkedEvidenceCount: links.filter(link => link.linked).length,
-    unlinkedEvidenceCount: links.filter(link => !link.linked).length,
-    workpapersWithoutEvidence: workpaperRows.filter(row => row.evidenceCount === 0).length,
-    links,
-    workpapers: workpaperRows,
-  };
+  return { workpaperCount: papers.length, evidenceCount: items.length, linkedEvidenceCount: links.filter(link => link.linked).length, unlinkedEvidenceCount: links.filter(link => !link.linked).length, workpapersWithoutEvidence: workpaperRows.filter(row => row.evidenceCount === 0).length, duplicateWorkpaperReferences, ambiguousReferenceCount: links.filter(link => link.reason === 'ambiguous-reference').length, links, workpapers: workpaperRows };
 }
 
 /**
@@ -302,13 +386,38 @@ export function buildEvidenceLineage(workpapers, evidence) {
  * @param {Array<Record<string, any>>} input.risks
  * @param {Array<Record<string, any>>} input.trialBalance
  */
+
+/** Deterministic change detection only; this is not a cryptographic integrity control. */
+export function fingerprintTrialBalanceRows(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return '';
+  const canonicalRows = rows.map(row => ({
+    code: String(row.code ?? '').trim(),
+    name: String(row.name ?? '').trim(),
+    sourceFinancialFields: Array.isArray(row.sourceFinancialFields) ? [...row.sourceFinancialFields].sort() : null,
+    openingDebit: row.openingDebit ?? null,
+    openingCredit: row.openingCredit ?? null,
+    debit: row.debit ?? null,
+    credit: row.credit ?? null,
+    closingDebit: row.closingDebit ?? null,
+    closingCredit: row.closingCredit ?? null,
+  })).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  const bytes = new TextEncoder().encode(JSON.stringify(canonicalRows));
+  let hash = 14695981039346656037n; const mask = (1n << 64n) - 1n;
+  for (const byte of bytes) { hash ^= BigInt(byte); hash = (hash * 1099511628211n) & mask; }
+  return 'tb-fnv1a64:' + hash.toString(16).padStart(16, '0');
+}
+
 export function buildQualityShield(input) {
   const workpapers = input.workpapers || [];
   const evidence = input.evidence || [];
   const findings = input.findings || [];
   const risks = input.risks || [];
-  const tb = runDataTrustChecks(input.trialBalance || []);
+  const tb = runDataTrustChecks(input.trialBalance || [], input.dataTrustOptions || {});
   const lineage = buildEvidenceLineage(workpapers, evidence);
+  const currentSourceFingerprint = String(input.currentSourceFingerprint || '');
+  const staleWorkpapers = currentSourceFingerprint ? workpapers.filter(row => row.sourceFingerprint && row.sourceFingerprint !== currentSourceFingerprint) : [];
+  const workpapersWithoutSnapshot = currentSourceFingerprint ? workpapers.filter(row => !row.sourceFingerprint) : [];
+  const reviewNotesOpen = workpapers.filter(row => String(row.reviewNotes ?? '').trim() && !['مغلق', 'مغلقة', 'تمت المعالجة', 'resolved'].includes(cleanText(row.reviewNotesStatus)));
   const checks = [];
   const add = (id, severity, title, count, detail, action) => {
     checks.push({ id, severity, title, count, detail, action, state: count > 0 ? 'needs-attention' : 'clear' });
@@ -318,6 +427,11 @@ export function buildQualityShield(input) {
   add('quality-workpaper-procedure', 'medium', 'أوراق بلا إجراء موثق', workpapers.filter(row => !String(row.procedure ?? '').trim()).length, 'بعض أوراق العمل لا تحتوي نصًا في حقل الإجراء.', 'وثّق طبيعة الإجراء ونطاقه وتنفيذه؛ لا تملأ الحقل شكليًا دون تنفيذ.');
   add('quality-workpaper-conclusion', 'medium', 'أوراق بلا استنتاج موثق', workpapers.filter(row => !String(row.conclusion ?? '').trim()).length, 'بعض أوراق العمل لا تحتوي استنتاجًا مسجلًا.', 'سجّل استنتاج المدقق المدعوم بالأدلة المناسبة.');
   add('quality-evidence-link', 'medium', 'أدلة بلا ربط بورقة عمل', lineage.unlinkedEvidenceCount, 'الارتباط المرجعي وحده لا يثبت كفاية الدليل أو ملاءمته.', 'اربط كل دليل بورقة العمل المقصودة وتحقق من محتواه وصلاحيته.');
+  add('quality-workpaper-duplicate-ref', 'high', 'مراجع أوراق عمل مكررة', lineage.duplicateWorkpaperReferences.length, 'مراجع غير فريدة تمنع ربط الأدلة بثقة؛ لا يختار النظام إحدى الأوراق بصمت.', 'اجعل مرجع كل ورقة فريدًا داخل ملف التدقيق ثم أعد فحص الروابط.');
+  add('quality-ambiguous-evidence-link', 'high', 'أدلة مرتبطة بمرجع ملتبس', lineage.ambiguousReferenceCount, 'بعض الأدلة تشير إلى مرجع تستخدمه أكثر من ورقة عمل.', 'صحّح مرجع الدليل بعد تحديد ورقة العمل المقصودة.');
+  add('quality-stale-workpaper', 'high', 'أوراق عمل تعتمد على نسخة أقدم من البيانات', staleWorkpapers.length, 'تغيّرت بصمة مجموعة البيانات المصدرية منذ حفظ لقطة ورقة العمل. هذا لا يؤكد وقوع خطأ، لكنه يعني أن نتائجها تحتاج مراجعة.', 'أعد تنفيذ الإجراءات المتأثرة وقارن الاستنتاجات بالمصدر الحالي، ثم حدّث لقطة البيانات بعد المراجعة.');
+  add('quality-source-snapshot-missing', 'medium', 'أوراق عمل بلا لقطة بيانات مصدرية', workpapersWithoutSnapshot.length, 'لا تحمل بعض أوراق العمل بصمة للميزان الذي استندت إليه؛ لا يمكن للنظام تحديد ما إذا تغير المصدر منذ إعدادها.', 'راجع الورقة على ضوء البيانات الحالية، ثم أكّد المراجعة المستقلة لتسجيل لقطة المصدر الحالية.');
+  add('quality-review-notes', 'medium', 'أوراق تحمل ملاحظات مراجعة غير محسومة', reviewNotesOpen.length, 'تحتوي بعض أوراق العمل على ملاحظات مراجعة لا تحمل حالة معالجة صريحة.', 'تحقق من كل ملاحظة؛ بعد معالجتها سجّل حالتها بوضوح بدل حذف أثر المراجعة.');
   add('quality-paper-no-evidence', 'low', 'أوراق بلا أدلة مفهرسة', lineage.workpapersWithoutEvidence, 'قد لا تحتاج كل ورقة إلى مرفق مستقل بحسب طبيعة الإجراء، لذلك هذه إشارة وليست قاعدة منع مطلقة.', 'راجع ما إذا كان الدليل محفوظًا أو إذا كان الإجراء لا يتطلب مرفقًا.');
   add('quality-finding-documentation', 'medium', 'ملاحظات ناقصة عناصر التوثيق', findings.filter(row => ['criteria', 'condition', 'effect', 'recommendation'].some(field => !String(row[field] ?? '').trim())).length, 'تفتقد بعض الملاحظات معيارًا أو حالة أو أثرًا أو توصية.', 'أكمل العناصر ذات الصلة وفق منهجية المكتب قبل اعتماد الملاحظة.');
   add('quality-open-findings', 'medium', 'ملاحظات غير مغلقة', findings.filter(row => !['مغلقة', 'مغلق', 'مكتمل'].includes(String(row.status ?? ''))).length, 'هذه الملاحظات لم تُسجل كإغلاق إداري.', 'راجع رد الإدارة والأدلة والإجراءات المطلوبة قبل الإغلاق.');
@@ -342,7 +456,7 @@ export function buildPartnerDashboard(engagements, clients, database) {
     const findings = scoped(database.findings);
     const risks = scoped(database.risks);
     const tbRows = scoped(database.trialBalance);
-    const quality = buildQualityShield({ workpapers: papers, evidence, findings, risks, trialBalance: tbRows });
+    const quality = buildQualityShield({ workpapers: papers, evidence, findings, risks, trialBalance: tbRows, currentSourceFingerprint: fingerprintTrialBalanceRows(tbRows) });
     return {
       engagement,
       client: (clients || []).find(client => client.id === engagement.clientId),
