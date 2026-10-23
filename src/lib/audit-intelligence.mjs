@@ -238,8 +238,11 @@ export function runDataTrustChecks(rows, options = {}) {
     const mismatches = fields.filter(field => expectedTotals[field] !== undefined && Number.isFinite(Number(expectedTotals[field])) && Math.abs(totals[field] - Number(expectedTotals[field])) >= TOLERANCE);
     if (mismatches.length) issues.push({ ...issue('tb-source-totals-mismatch', 'high', 'إجماليات المصدر لا تطابق البيانات المستوردة', mismatches.length, 'تختلف الحقول التالية عن إجماليات المصدر المعلنة: ' + mismatches.join('، ') + '.', 'أعد مراجعة نطاق التصدير وتعيين الأعمدة والفلاتر؛ لا تبدأ التحليل قبل تفسير الفروق.'), fields: mismatches });
   }
-  const unmappedCodes = Array.isArray(options?.unmappedAccountCodes) ? options.unmappedAccountCodes.map(value => String(value).trim()).filter(Boolean) : [];
-  if (unmappedCodes.length) issues.push(issue('tb-unmapped-accounts', 'medium', 'حسابات لم يتم تصنيفها', unmappedCodes.length, 'توجد حسابات لم يؤكد المدقق ربطها ببنود أو تصنيفات التقارير.', 'راجع خريطة الحسابات وصادق على التصنيف يدويًا قبل إعداد القوائم.'));
+  const unmappedCodes = [...new Set(Array.isArray(options?.unmappedAccountCodes) ? options.unmappedAccountCodes.map(value => String(value).trim()).filter(Boolean) : [])];
+  if (unmappedCodes.length) {
+    const unmappedRows = data.flatMap((row, index) => unmappedCodes.includes(String(row.code ?? '').trim()) ? [{ code: String(row.code ?? '').trim(), name: String(row.name ?? '').trim(), rowNumber: Number.isFinite(Number(row.sourceRowNumber)) ? Number(row.sourceRowNumber) : index + 2 }] : []);
+    issues.push({ ...issue('tb-unmapped-accounts', 'medium', 'حسابات لم يتم تصنيفها', unmappedCodes.length, 'توجد حسابات لم يؤكد المدقق ربطها ببنود أو تصنيفات التقارير: ' + unmappedCodes.slice(0, 15).join('، ') + '.', 'راجع خريطة الحسابات وصادق على التصنيف يدويًا قبل إعداد القوائم.'), rowNumbers: unmappedRows.map(row => row.rowNumber), examples: unmappedRows.slice(0, 15) });
+  }
   return { rowCount: data.length, totals, availableFields, unmappedFields, openingDifference, movementDifference, closingDifference, issues, pass: issues.length === 0 };
 }
 
@@ -469,7 +472,15 @@ export function buildQualityShield(input) {
   const findings = input.findings || [];
   const risks = input.risks || [];
   const reportDrafts = Array.isArray(input.reportDrafts) ? input.reportDrafts : [];
-  const tb = runDataTrustChecks(input.trialBalance || [], input.dataTrustOptions || {});
+  const accountMappings = input.accountMappings && typeof input.accountMappings === 'object' ? input.accountMappings : {};
+  const engagementId = String(input.engagementId || (Array.isArray(input.trialBalance) ? input.trialBalance[0]?.engagementId : '') || '');
+  const tbRowsForTrust = Array.isArray(input.trialBalance) ? input.trialBalance : [];
+  const derivedUnmappedCodes = tbRowsForTrust.filter(row => {
+    const key = String(engagementId || row.engagementId || '') + '::' + String(row.code ?? '');
+    return !String(accountMappings[key]?.lineKey ?? '').trim();
+  }).map(row => String(row.code ?? '').trim()).filter(Boolean);
+  const dataTrustOptions = { ...(input.dataTrustOptions || {}), unmappedAccountCodes: input.dataTrustOptions?.unmappedAccountCodes ?? derivedUnmappedCodes };
+  const tb = runDataTrustChecks(tbRowsForTrust, dataTrustOptions);
   const lineage = buildEvidenceLineage(workpapers, evidence, findings);
   const currentSourceFingerprint = String(input.currentSourceFingerprint || fingerprintTrialBalanceRows(input.trialBalance || []));
   const staleWorkpapers = currentSourceFingerprint ? workpapers.filter(row => row.sourceFingerprint && row.sourceFingerprint !== currentSourceFingerprint) : [];
@@ -484,7 +495,8 @@ export function buildQualityShield(input) {
   const add = (id, severity, title, count, detail, action) => {
     checks.push({ id, severity, title, count, detail, action, state: count > 0 ? 'needs-attention' : 'clear' });
   };
-  add('quality-tb', 'high', 'تنبيهات جودة ميزان المراجعة', tb.issues.length, 'عدد أنواع فحوص الميزان التي تحتاج مراجعة: ' + tb.issues.length + '.', 'راجع كل فحص على حدة ولا تعتمد الإجماليات قبل فهم الاستثناءات.');
+  const tbSeverity = tb.issues.some(row => row.severity === 'high') ? 'high' : tb.issues.some(row => row.severity === 'medium') ? 'medium' : 'low';
+  add('quality-tb', tbSeverity, 'تنبيهات جودة ميزان المراجعة', tb.issues.length, 'عدد أنواع فحوص الميزان التي تحتاج مراجعة: ' + tb.issues.length + '.', 'راجع كل فحص على حدة ولا تعتمد الإجماليات قبل فهم الاستثناءات.');
   add('quality-workpaper-status', 'medium', 'أوراق عمل غير معتمدة', workpapers.filter(row => row.status !== 'معتمد').length, 'اعتُبرت الورقة معتمدة فقط عندما تكون حالتها المسجلة "معتمد".', 'راجع الإجراء والاستنتاج والأدلة، ثم أكمل الاعتماد وفق صلاحيات المكتب.');
   add('quality-workpaper-procedure', 'medium', 'أوراق بلا إجراء موثق', workpapers.filter(row => !String(row.procedure ?? '').trim()).length, 'بعض أوراق العمل لا تحتوي نصًا في حقل الإجراء.', 'وثّق طبيعة الإجراء ونطاقه وتنفيذه؛ لا تملأ الحقل شكليًا دون تنفيذ.');
   add('quality-workpaper-conclusion', 'medium', 'أوراق بلا استنتاج موثق', workpapers.filter(row => !String(row.conclusion ?? '').trim()).length, 'بعض أوراق العمل لا تحتوي استنتاجًا مسجلًا.', 'سجّل استنتاج المدقق المدعوم بالأدلة المناسبة.');
@@ -529,7 +541,7 @@ export function evaluateEngagementClosure(input = {}, policy = {}) {
   const operations = input.operations && typeof input.operations === 'object' ? input.operations : {};
   const scopedReportDrafts = (Array.isArray(operations.reportDrafts) ? operations.reportDrafts : []).filter(row => row.engagementId === input.engagementId);
   const quality = buildQualityShield({
-    workpapers, evidence, findings, risks, trialBalance, reportDrafts: scopedReportDrafts,
+    workpapers, evidence, findings, risks, trialBalance, reportDrafts: scopedReportDrafts, accountMappings: operations.accountMappings || {}, engagementId: input.engagementId,
     currentSourceFingerprint: input.currentSourceFingerprint || fingerprintTrialBalanceRows(trialBalance),
     dataTrustOptions: input.dataTrustOptions || {},
   });
@@ -546,6 +558,11 @@ export function evaluateEngagementClosure(input = {}, policy = {}) {
   if (policy.blockCriticalDataIssues !== false) {
     const critical = quality.tb.issues.filter(row => row.severity === 'high');
     addBlocker('close-critical-data-quality', 'فحوص جودة بيانات عالية الأهمية', critical.length, critical.map(row => row.title).join('، '));
+  }
+
+  if (policy.requireAccountClassification !== false) {
+    const unmapped = quality.tb.issues.find(row => row.id === 'tb-unmapped-accounts');
+    addBlocker('close-unmapped-accounts', 'حسابات بلا تصنيف مؤكد', unmapped?.count || 0, 'راجع خريطة الحسابات وحدد بند العرض أو وثّق سبب عدم التصنيف وفق سياسة المكتب.');
   }
 
   if (policy.requireApprovedWorkpapers !== false) {
@@ -624,7 +641,7 @@ export function buildPartnerDashboard(engagements, clients, database, operations
     const risks = scoped(database.risks);
     const tbRows = scoped(database.trialBalance);
     const reportDrafts = operationRows('reportDrafts').filter(row => row.engagementId === id);
-    const quality = buildQualityShield({ workpapers: papers, evidence, findings, risks, trialBalance: tbRows, reportDrafts, currentSourceFingerprint: fingerprintTrialBalanceRows(tbRows) });
+    const quality = buildQualityShield({ workpapers: papers, evidence, findings, risks, trialBalance: tbRows, reportDrafts, accountMappings: operations.accountMappings || {}, engagementId: id, currentSourceFingerprint: fingerprintTrialBalanceRows(tbRows) });
     const requests = scoped(operationRows('clientRequests'));
     const outstandingRequests = requests.filter(row => !row.done && !['مستلم للمراجعة', 'مكتمل', 'مغلقة', 'مغلق'].includes(String(row.status ?? '')));
     const overdueRequests = outstandingRequests.filter(row => /^\d{4}-\d{2}-\d{2}$/.test(String(row.dueDate ?? '')) && String(row.dueDate) < asOfDate);
