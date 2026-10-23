@@ -26,12 +26,14 @@ test('first-firm bootstrap requires an authenticated caller and serializes first
   assert.match(edgeFunction, /Deno\.env\.get\("SUPABASE_SERVICE_ROLE_KEY"\)/);
 });
 
-test('successful first-firm setup refreshes the cloud workspace without requiring a page reload', () => {
+test('first-firm onboarding does not imply cloud workspace sync is enabled', () => {
   const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
   assert.match(panel, /onFirmProvisioned\?: \(\) => void/);
   assert.match(panel, /onFirmProvisioned\?\.\(\)/);
-  assert.match(app, /onFirmProvisioned=\{\(\)=>setCloudWorkspaceRefresh\(v=>v\+1\)\}/);
-  assert.match(app, /key=\{cloudWorkspaceRefresh\}/);
+  assert.match(app, /المزامنة السحابية محجوبة مؤقتًا/);
+  assert.match(app, /لم نفعّل رفع أو استعادة لقطات مساحة العمل عبر السحابة/);
+  assert.doesNotMatch(app, /CloudWorkspacePanel/);
+  assert.doesNotMatch(app, /setCloudWorkspaceRefresh/);
 });
 
 test('first launch shows a login gate with an explicit local-only escape hatch', () => {
