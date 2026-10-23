@@ -22,7 +22,7 @@ type Evidence = { id: string; engagementId: string; title: string; type: string;
 type Finding = { id: string; engagementId: string; title: string; criteria: string; condition: string; effect: string; recommendation: string; severity: string; status: string; workpaperRef?: string; evidenceIds?: string[] };
 type Risk = { id: string; engagementId: string; title: string; area?: string; likelihood: string; impact: string; response: string; status: string };
 type DBShape = { workpapers: Workpaper[]; evidence: Evidence[]; findings: Finding[]; risks: Risk[]; trialBalance: TBRow[] };
-type RequestItem = { id: string; title: string; dueDate: string; done: boolean; requiredForClosure?: boolean; engagementId?: string; clientName?: string; phone?: string };
+type RequestItem = { id: string; title: string; dueDate: string; done: boolean; requiredForClosure?: boolean; engagementId?: string; clientName?: string; phone?: string; sourceRiskId?: string; generatedFromRisk?: boolean; createdAt?: string };
 type AuditOperationsState = { clientRequests: Array<Record<string, any>>; samplingRuns: Array<Record<string, any>>; accountMappings: Record<string, Record<string, any>>; bankProfiles: Array<Record<string, any>>; timeEntries: Array<Record<string, any>>; officeInvoices: Array<Record<string, any>>; fieldworkRecords: Array<Record<string, any>>; externalConfirmations: Array<Record<string, any>>; reportDrafts: Array<Record<string, any>> };
 type Props = {
   engagementId?: string;
@@ -252,8 +252,8 @@ export default function AuditIntelligence(props: Props) {
 
   function exportRequests() {
     downloadCsv('ledgerly-client-document-requests.csv', [
-      ['request_id', 'engagement_id', 'اسم العميل', 'اسم المستند المطلوب', 'تاريخ الاستحقاق', 'رقم التواصل', 'إلزامي للإقفال', 'الحالة'],
-      ...requests.map(row => [row.id, row.engagementId || '', row.clientName || '', row.title, row.dueDate, row.phone || '', row.requiredForClosure ? 'نعم' : 'لا', row.done ? 'مستلم للمراجعة' : 'بانتظار المستند']),
+      ['request_id', 'engagement_id', 'اسم العميل', 'اسم المستند المطلوب', 'تاريخ الاستحقاق', 'رقم التواصل', 'مصدر الطلب / الخطر', 'إلزامي للإقفال', 'الحالة'],
+      ...requests.map(row => [row.id, row.engagementId || '', row.clientName || '', row.title, row.dueDate, row.phone || '', row.sourceRiskId ? currentRisks.find(risk => risk.id === row.sourceRiskId)?.title || row.sourceRiskId : 'طلب يدوي أو افتراضي', row.requiredForClosure ? 'نعم' : 'لا', row.done ? 'مستلم للمراجعة' : 'بانتظار المستند']),
     ]);
   }
 
@@ -456,7 +456,7 @@ export default function AuditIntelligence(props: Props) {
           return <div key={row.id} className="audit-intel-request-item">
             <label className={row.done ? 'is-done' : ''}>
               <input type="checkbox" checked={row.done} onChange={event => saveRequests(requests.map(item => item.id === row.id ? { ...item, done: event.target.checked } : item))} />
-              <span>{row.title}<small>{row.dueDate ? 'الاستحقاق: ' + row.dueDate : 'لم يُحدد تاريخ استحقاق'}{row.phone ? ' · ' + row.phone : ''}</small></span>
+              <span>{row.title}<small>{row.dueDate ? 'الاستحقاق: ' + row.dueDate : 'لم يُحدد تاريخ استحقاق'}{row.phone ? ' · ' + row.phone : ''}</small>{row.sourceRiskId && <small>الطلب مرتبط بالخطر: {currentRisks.find(risk => risk.id === row.sourceRiskId)?.title || 'خطر غير موجود'}</small>}</span>
               <b>{row.done ? 'مستلم للمراجعة' : overdue ? 'متأخر' : 'بانتظار المستند'}</b>
             </label>
             <label className="audit-intel-required-request"><input type="checkbox" checked={Boolean(row.requiredForClosure)} onChange={event => saveRequests(requests.map(item => item.id === row.id ? { ...item, requiredForClosure: event.target.checked } : item))} /><span>مستند إلزامي لإقفال الملف</span></label>
