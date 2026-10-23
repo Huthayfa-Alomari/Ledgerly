@@ -5,6 +5,7 @@ import {
   evaluateEngagementClosure,
   fingerprintTrialBalanceRows,
   fingerprintAccountMappings,
+  fingerprintReportConfiguration,
   buildEvidenceLineage,
   buildPartnerDashboard,
   buildQualityShield,
@@ -421,4 +422,35 @@ test('external control totals are not compared against source columns that were 
   assert.ok(!mismatch);
   assert.equal(result.openingDifference, null);
   assert.equal(result.closingDifference, null);
+});
+
+
+test('report metadata fingerprint changes when period, auditor or opinion changes', () => {
+  const metadata = { firmName: 'Firm A', auditorName: 'Auditor A', periodEnd: '2026-12-31', opinion: 'Unmodified' };
+  const fingerprint = fingerprintReportConfiguration(metadata);
+  assert.equal(fingerprintReportConfiguration({ ...metadata }), fingerprint);
+  assert.notEqual(fingerprintReportConfiguration({ ...metadata, opinion: 'Qualified' }), fingerprint);
+  assert.notEqual(fingerprintReportConfiguration({ ...metadata, periodEnd: '2026-09-30' }), fingerprint);
+  assert.notEqual(fingerprintReportConfiguration({ ...metadata, auditorName: 'Auditor B' }), fingerprint);
+});
+
+test('quality shield marks a previously exported report stale after report metadata changes', () => {
+  const trialBalance = [tbRow({ id: 'tb-report', engagementId: 'e1', code: '1000', name: 'Cash' })];
+  const currentConfig = { firmName: 'Firm', auditorName: 'Auditor', periodEnd: '2026-12-31', opinion: 'Qualified' };
+  const snapshotConfig = { ...currentConfig, opinion: 'Unmodified' };
+  const accountMappings = { 'e1::1000': { lineKey: 'assets.cash', comparativeJod: '1.000' } };
+  const quality = buildQualityShield({
+    workpapers: [], evidence: [], findings: [], risks: [], trialBalance,
+    engagementId: 'e1', accountMappings, currentSourceFingerprint: fingerprintTrialBalanceRows(trialBalance),
+    reportDrafts: [{
+      engagementId: 'e1', ...currentConfig,
+      lastExportSnapshot: {
+        sourceFingerprint: fingerprintTrialBalanceRows(trialBalance),
+        accountMappingFingerprint: fingerprintAccountMappings(accountMappings, 'e1'),
+        reportConfigurationFingerprint: fingerprintReportConfiguration(snapshotConfig),
+        generatedAt: '2026-10-23T10:00:00.000Z',
+      },
+    }],
+  });
+  assert.equal(quality.checks.find(item => item.id === 'quality-report-stale-source')?.count, 1);
 });
