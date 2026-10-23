@@ -44,6 +44,12 @@ function openVault(): Promise<IDBDatabase> {
   });
 }
 
+function toOwnedArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
+}
+
 function requireSubtle(): SubtleCrypto {
   if (typeof crypto === 'undefined' || !crypto.subtle || typeof crypto.getRandomValues !== 'function') {
     throw new Error('تشفير المرفقات غير متاح في هذه البيئة.');
@@ -60,9 +66,9 @@ function randomBytes(length: number): Uint8Array {
 async function deriveKey(passphrase: string, salt: Uint8Array): Promise<CryptoKey> {
   if (passphrase.length < 12) throw new Error('كلمة مرور المخزن المحلي يجب ألا تقل عن 12 حرفًا.');
   const subtle = requireSubtle();
-  const passwordKey = await subtle.importKey('raw', encoder.encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+  const passwordKey = await subtle.importKey('raw', toOwnedArrayBuffer(encoder.encode(passphrase)), 'PBKDF2', false, ['deriveKey']);
   return subtle.deriveKey(
-    { name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
+    { name: 'PBKDF2', salt: toOwnedArrayBuffer(salt), iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
     passwordKey,
     { name: 'AES-GCM', length: 256 },
     false,
@@ -74,14 +80,14 @@ async function encryptBlob(passphrase: string, blob: Blob): Promise<{ salt: numb
   const salt = randomBytes(16);
   const iv = randomBytes(12);
   const key = await deriveKey(passphrase, salt);
-  const ciphertext = await requireSubtle().encrypt({ name: 'AES-GCM', iv }, key, await blob.arrayBuffer());
+  const ciphertext = await requireSubtle().encrypt({ name: 'AES-GCM', iv: toOwnedArrayBuffer(iv) }, key, await blob.arrayBuffer());
   return { salt: Array.from(salt), iv: Array.from(iv), ciphertext };
 }
 
 async function decryptBlob(passphrase: string, row: EncryptedStoredEvidenceFile): Promise<Blob> {
   try {
     const key = await deriveKey(passphrase, new Uint8Array(row.salt));
-    const bytes = await requireSubtle().decrypt({ name: 'AES-GCM', iv: new Uint8Array(row.iv) }, key, row.ciphertext);
+    const bytes = await requireSubtle().decrypt({ name: 'AES-GCM', iv: toOwnedArrayBuffer(new Uint8Array(row.iv)) }, key, row.ciphertext);
     return new Blob([bytes], { type: row.fileType || 'application/octet-stream' });
   } catch {
     throw new Error('تعذر فك تشفير المرفق. تحقق من كلمة مرور المخزن المحلي وسلامة الملف.');

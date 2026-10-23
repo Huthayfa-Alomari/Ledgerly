@@ -62,6 +62,12 @@ async function storeRecord(record: VaultRecord): Promise<void> {
   }
 }
 
+function toOwnedArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
+}
+
 function requireCrypto(): SubtleCrypto {
   if (typeof crypto === 'undefined' || !crypto.subtle || typeof crypto.getRandomValues !== 'function') {
     throw new Error('التشفير غير متاح في هذه البيئة. افتح Ledgerly عبر HTTPS أو نسخة سطح المكتب المدعومة.');
@@ -71,9 +77,9 @@ function requireCrypto(): SubtleCrypto {
 
 async function deriveKey(passphrase: string, salt: Uint8Array): Promise<CryptoKey> {
   const subtle = requireCrypto();
-  const baseKey = await subtle.importKey('raw', encoder.encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+  const baseKey = await subtle.importKey('raw', toOwnedArrayBuffer(encoder.encode(passphrase)), 'PBKDF2', false, ['deriveKey']);
   return subtle.deriveKey(
-    { name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
+    { name: 'PBKDF2', salt: toOwnedArrayBuffer(salt), iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
     baseKey,
     { name: 'AES-GCM', length: 256 },
     false,
@@ -92,9 +98,9 @@ async function encryptValue(passphrase: string, value: unknown, salt?: Uint8Arra
   const iv = makeRandomBytes(12);
   const key = await deriveKey(passphrase, resolvedSalt);
   const ciphertext = await requireCrypto().encrypt(
-    { name: 'AES-GCM', iv },
+    { name: 'AES-GCM', iv: toOwnedArrayBuffer(iv) },
     key,
-    encoder.encode(JSON.stringify(serializeJodVaultPayload(value))),
+    toOwnedArrayBuffer(encoder.encode(JSON.stringify(serializeJodVaultPayload(value)))),
   );
   return {
     id: RECORD_ID,
@@ -110,7 +116,7 @@ async function decryptRecord(passphrase: string, record: VaultRecord): Promise<u
   try {
     const key = await deriveKey(passphrase, new Uint8Array(record.salt));
     const plaintext = await requireCrypto().decrypt(
-      { name: 'AES-GCM', iv: new Uint8Array(record.iv) },
+      { name: 'AES-GCM', iv: toOwnedArrayBuffer(new Uint8Array(record.iv)) },
       key,
       record.ciphertext,
     );

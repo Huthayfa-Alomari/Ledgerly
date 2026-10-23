@@ -36,7 +36,10 @@ function money(value: unknown) {
   return new Intl.NumberFormat('ar-JO', { minimumFractionDigits: 3, maximumFractionDigits: 3 }).format(Number.isFinite(amount) ? amount : 0) + ' د.أ';
 }
 function downloadBlob(name: string, data: BlobPart | Uint8Array, type: string) {
-  const blob = new Blob([data], { type });
+  const safeData: BlobPart = data instanceof Uint8Array
+    ? (() => { const buffer = new ArrayBuffer(data.byteLength); new Uint8Array(buffer).set(data); return buffer; })()
+    : data;
+  const blob = new Blob([safeData], { type });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url; link.download = name; link.click();
@@ -128,7 +131,7 @@ export default function AuditOperationsPanels(props: Props) {
   const currentTime = (operations.timeEntries || []).filter(row => row.engagementId === engagementId);
   const currentInvoices = (operations.officeInvoices || []).filter(row => row.engagementId === engagementId);
   const currentConfirmations = (operations.externalConfirmations || []).filter(row => row.engagementId === engagementId);
-  const currentVisits = (operations.fieldworkRecords || []).filter(row => row.engagementId === engagementId).slice(0, 12);
+  const currentFieldRecords = (operations.fieldworkRecords || []).filter((row: Row) => row.engagementId === engagementId).slice(0, 12);
   const sampleHistory = (operations.samplingRuns || []).filter(row => row.engagementId === engagementId).slice(0, 8);
   const journalTests = useMemo(() => journalRows.length ? runAdvancedJournalTests(journalRows) : null, [journalRows]);
   const statement = useMemo(() => buildDraftFinancialStatements(trialBalance, operations.accountMappings || {}), [trialBalance, operations.accountMappings]);
@@ -138,9 +141,9 @@ export default function AuditOperationsPanels(props: Props) {
   const reportAuditorName = String(reportDraft.auditorName ?? reportAuditor);
   const reportEnd = String(reportDraft.periodEnd ?? reportPeriodEnd);
   const reportOpinionValue = String(reportDraft.opinion ?? reportOpinion);
-  const statementRows = [
+  const statementRows: unknown[][] = [
     ['البند / Statement line', 'Current / الفترة الحالية (JOD)', 'Comparative / المقارن (JOD)'],
-    ...statement.lines.map(item => [item.line.ar + ' / ' + item.line.en, Number(item.current).toFixed(3), Number(item.comparative).toFixed(3)]),
+    ...statement.lines.map((item: Row) => [item.line.ar + ' / ' + item.line.en, Number(item.current).toFixed(3), Number(item.comparative).toFixed(3)]),
   ];
   const summaryRows = [
     ['ملخص / Summary', 'Current (JOD)', 'Comparative (JOD)'],
@@ -232,11 +235,6 @@ export default function AuditOperationsPanels(props: Props) {
     } catch (error) { setSampleError(error instanceof Error ? error.message : 'تعذر إنشاء العينة.'); }
   }
 
-  function mapAccount(code: string, field: string, value: string) {
-    const key = String(engagementId) + '::' + code;
-    const current = operations.accountMappings?.[key] || {};
-    update({ accountMappings: { ...(operations.accountMappings || {}), [key]: { ...current, [field]: value, editedAt: new Date().toISOString() } } });
-  }
 
   async function importBankHeaders(file?: File) {
     setBankNotice('');
@@ -293,7 +291,7 @@ export default function AuditOperationsPanels(props: Props) {
   }
 
   function addTimeEntry() {
-    const h = Number(officeHours), rate = Number(hourlyRate);
+    const h = Number(hours), rate = Number(hourlyRate);
     if (!engagementId || !Number.isFinite(h) || h <= 0 || !Number.isFinite(rate) || rate < 0) { setOfficeMessage('أدخل ساعات موجبة ومعدلًا بالساعة غير سالب.'); return; }
     const entry = { id: id('time'), engagementId, date: new Date().toISOString().slice(0, 10), staff: reportAuditorName || 'مستخدم محلي', description: timeDescription.trim() || 'عمل تدقيق', hours: h, hourlyRateJod: rate.toFixed(3), amountJod: (h * rate).toFixed(3) };
     update({ timeEntries: [entry, ...(operations.timeEntries || [])] });
@@ -313,7 +311,7 @@ export default function AuditOperationsPanels(props: Props) {
     if (!engagementId || !confirmParty.trim()) { setConfirmMessage('أدخل اسم البنك أو المدين أو الدائن.'); return; }
     const row = { id: id('confirmation'), engagementId, kind: confirmKind, party: confirmParty.trim(), contact: confirmContact.trim(), dueDate: confirmDueDate, status: 'لم ترسل', createdAt: new Date().toISOString() };
     update({ externalConfirmations: [row, ...(operations.externalConfirmations || [])] });
-    setConfirmationNotice('تم تسجيل طلب المصادقة للمتابعة المحلية. لم يتم إرسال أي طلب تلقائيًا.');
+    setConfirmMessage('تم تسجيل طلب المصادقة للمتابعة المحلية. لم يتم إرسال أي طلب تلقائيًا.');
     setConfirmParty(''); setConfirmContact(''); setConfirmDueDate('');
   }
 
@@ -361,7 +359,7 @@ export default function AuditOperationsPanels(props: Props) {
           <div className="audit-intel-kpi"><span>قيم Benford</span><strong>{journalTests.benford.populationSize}</strong><small>{journalTests.benford.interpretable ? 'حجم عينة وصفي كافٍ مبدئيًا' : 'أقل من 50 قيمة'}</small></div>
           <div className="audit-intel-kpi"><span>مؤشرات الشهر الأخير</span><strong>{journalRows.filter(row => row.date && Number(row.date.slice(8,10)) >= 28).length}</strong><small>إشارة وقتية فقط</small></div>
         </div>
-        {journalTests.issues.length ? <div className="audit-intel-issue-list">{journalTests.issues.map(item => <article key={item.id} className="audit-intel-issue">
+        {journalTests.issues.length ? <div className="audit-intel-issue-list">{journalTests.issues.map((item: Row) => <article key={item.id} className="audit-intel-issue">
           <div className="audit-intel-issue-top"><strong>{item.title}</strong><span className={'audit-pill ' + (item.severity === 'high' ? 'intel-severity-high' : item.severity === 'medium' ? 'intel-severity-medium' : 'intel-severity-low')}>{item.count} صف</span></div>
           <p>{item.detail}</p><small><b>خطوة مقترحة:</b> {item.action}</small>
           {item.rowNumbers.length > 0 && <small>صفوف أمثلة: {item.rowNumbers.slice(0, 15).join('، ')}</small>}
@@ -492,7 +490,7 @@ export default function AuditOperationsPanels(props: Props) {
       <div><strong>توقيع ميداني (اختياري)</strong><p className="muted-copy">لا يمثل هذا الرسم هوية رقمية معتمدة أو توقيعًا موثقًا قانونيًا.</p><SignaturePad value={fieldSignature} onChange={setFieldSignature} /></div>
       <button className="audit-primary" onClick={() => void saveFieldworkRecord()}>حفظ الملاحظة الميدانية المشفّرة</button>
       {fieldMessage && <p className="muted-copy" role="status">{fieldMessage}</p>}
-      {currentFieldRecords.length > 0 && <div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>التاريخ</th><th>الملاحظة</th><th>الموقع</th><th>الصورة</th><th>المزامنة</th></tr></thead><tbody>{currentFieldRecords.map(row => <tr key={row.id}><td>{new Date(row.createdAt).toLocaleString('ar-JO')}</td><td>{row.note}</td><td>{row.location || '—'}</td><td>{row.photoEvidenceId ? 'أضيفت للأدلة' : '—'}</td><td>{row.syncStatus}</td></tr>)}</tbody></table></div>}
+      {currentFieldRecords.length > 0 && <div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>التاريخ</th><th>الملاحظة</th><th>الموقع</th><th>الصورة</th><th>المزامنة</th></tr></thead><tbody>{currentFieldRecords.map((row: Row) => <tr key={row.id}><td>{new Date(row.createdAt).toLocaleString('ar-JO')}</td><td>{row.note}</td><td>{row.location || '—'}</td><td>{row.photoEvidenceId ? 'أضيفت للأدلة' : '—'}</td><td>{row.syncStatus}</td></tr>)}</tbody></table></div>}
     </section>
 
     <section className="audit-card audit-operations-section">
@@ -526,7 +524,7 @@ export default function AuditOperationsPanels(props: Props) {
       <p>مكتب التدقيق / Firm: {reportFirmName} · المدقق / Auditor: {reportAuditorName || '[يستكمل]'}</p>
       <p>الرأي المختار مبدئيًا / Draft opinion: {reportOpinionValue} · نهاية الفترة / Period end: {reportEnd || '[يستكمل]'}</p>
       <h2>قوائم مالية — مسودة / Draft financial statements</h2>
-      <table><thead><tr>{statementRows[0].map((cell, i) => <th key={i}>{cell}</th>)}</tr></thead><tbody>{statementRows.slice(1).map((row, index) => <tr key={index}>{row.map((cell, i) => <td key={i}>{cell}</td>)}</tr>)}</tbody></table>
+      <table><thead><tr>{(statementRows[0] || []).map((cell: unknown, i: number) => <th key={i}>{String(cell ?? '')}</th>)}</tr></thead><tbody>{statementRows.slice(1).map((row, index) => <tr key={index}>{row.map((cell: unknown, i: number) => <td key={i}>{String(cell ?? '')}</td>)}</tr>)}</tbody></table>
       <h2>تنبيه / Disclaimer</h2><p>مسودة غير صالحة للإصدار أو التوقيع. يجب استكمال مطابقة الأرصدة، والإفصاحات، والسياسات المحاسبية، ونص الرأي ومسؤوليّات الأطراف من الشريك المسؤول.</p>
       <p>This draft is not for issue or signature. The partner must complete account mapping, disclosures, accounting policies, opinion wording, and responsibilities sections.</p>
     </section>
