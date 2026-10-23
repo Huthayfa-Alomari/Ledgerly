@@ -218,11 +218,23 @@ test('source import row-count and control-total mismatches are explicit high-sev
 });
 
 
-test('source column mapping metadata prevents a missing column from passing as zero', () => {
+test('source column mapping metadata prevents a missing mapped value from passing as zero', () => {
   const result = runDataTrustChecks([tbRow({
-    sourceFinancialFields: ['openingDebit', 'openingCredit', 'credit', 'closingDebit', 'closingCredit'],
+    debit: null,
+    sourceFinancialFields: ['openingDebit', 'openingCredit', 'debit', 'credit', 'closingDebit', 'closingCredit'],
   })]);
   assert.ok(result.issues.some(item => item.id === 'tb-missing-financial-fields'));
+});
+
+test('movement-only trial balances do not pretend omitted opening and closing columns are zero', () => {
+  const result = runDataTrustChecks([tbRow({
+    sourceFinancialFields: ['debit', 'credit'],
+  })]);
+  assert.deepEqual(result.availableFields, ['debit', 'credit']);
+  assert.equal(result.openingDifference, null);
+  assert.equal(result.closingDifference, null);
+  assert.ok(!result.issues.some(item => item.id === 'tb-missing-financial-fields'));
+  assert.ok(result.issues.some(item => item.id === 'tb-source-field-coverage'));
 });
 
 
