@@ -19,7 +19,7 @@ type Client = { id: string; name: string };
 type TBRow = { id: string; engagementId: string; code: string; name: string; openingDebit: number; openingCredit: number; debit: number; credit: number; closingDebit: number; closingCredit: number; source?: string; sourceFinancialFields?: string[] };
 type Workpaper = { id: string; engagementId: string; ref: string; title: string; status: string; procedure?: string; conclusion: string; reviewNotes?: string; updatedAt?: string; preparer?: string; reviewer?: string; sourceFingerprint?: string };
 type Evidence = { id: string; engagementId: string; title: string; type: string; reference: string; workpaperRef: string; notes?: string; addedAt?: string; fileName?: string };
-type Finding = { id: string; engagementId: string; title: string; criteria: string; condition: string; effect: string; recommendation: string; severity: string; status: string };
+type Finding = { id: string; engagementId: string; title: string; criteria: string; condition: string; effect: string; recommendation: string; severity: string; status: string; workpaperRef?: string; evidenceIds?: string[] };
 type Risk = { id: string; engagementId: string; title: string; area?: string; likelihood: string; impact: string; response: string; status: string };
 type DBShape = { workpapers: Workpaper[]; evidence: Evidence[]; findings: Finding[]; risks: Risk[]; trialBalance: TBRow[] };
 type RequestItem = { id: string; title: string; dueDate: string; done: boolean; requiredForClosure?: boolean; engagementId?: string; clientName?: string; phone?: string };
@@ -126,7 +126,7 @@ export default function AuditIntelligence(props: Props) {
   const currentRisks = scoped(risks);
   const currentSourceFingerprint = useMemo(() => fingerprintTrialBalanceRows(currentTB), [currentTB]);
   const dataTrust = useMemo(() => runDataTrustChecks(currentTB), [currentTB]);
-  const lineage = useMemo(() => buildEvidenceLineage(currentWorkpapers, currentEvidence), [currentWorkpapers, currentEvidence]);
+  const lineage = useMemo(() => buildEvidenceLineage(currentWorkpapers, currentEvidence, currentFindings), [currentWorkpapers, currentEvidence, currentFindings]);
   const quality = useMemo(() => buildQualityShield({
     workpapers: currentWorkpapers,
     evidence: currentEvidence,
@@ -370,10 +370,13 @@ export default function AuditIntelligence(props: Props) {
           <Kpi label="الأدلة المفهرسة" value={lineage.evidenceCount} note="السجلات التي أضيفت" />
           <Kpi label="أدلة بلا مرجع مطابق" value={lineage.unlinkedEvidenceCount} note="تحتاج مراجعة" />
           <Kpi label="أوراق بلا أدلة مفهرسة" value={lineage.workpapersWithoutEvidence} note="قد يكون ذلك مقبولًا بحسب الإجراء" />
+          <Kpi label="ملاحظات بلا ورقة عمل" value={lineage.findingsWithoutWorkpaper} note="تحتاج ربطًا بإجراء تدقيق" />
+          <Kpi label="ملاحظات بلا دليل" value={lineage.findingsWithoutEvidence} note="تحتاج مرجع دليل قابلًا للتتبع" />
         </div>
         {lineage.workpapers.length ? <div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>مرجع الورقة</th><th>ورقة العمل</th><th>الحالة</th><th>عدد الأدلة</th><th>أسماء الأدلة</th></tr></thead><tbody>{lineage.workpapers.map(row => <tr key={row.workpaper.id}>
           <td>{row.workpaper.ref || '—'}</td><td className="cell-strong">{row.workpaper.title}</td><td>{row.workpaper.status}</td><td>{row.evidenceCount}</td><td>{row.evidence.map(item => item.title).join('، ') || 'لا يوجد دليل مفهرس'}</td>
         </tr>)}</tbody></table></div> : <p className="muted-copy">لا توجد أوراق عمل في هذا الملف بعد.</p>}
+        {lineage.findingLinks?.length > 0 && <section className="audit-intel-finding-lineage"><div className="audit-card-head"><div><h4>سلسلة الملاحظات إلى ورقة العمل والدليل</h4><p className="muted-copy">يتم التحقق من وجود مرجع فريد لورقة العمل ودليل من الملف الحالي، ومن توافق مرجع الدليل مع ورقة العمل.</p></div><span className={'audit-pill ' + (lineage.findingLinks.some(row => !row.linked) ? 'risk-pill' : '')}>{lineage.fullyLinkedFindings} / {lineage.findingsCount} مرتبط بالكامل</span></div><div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>الملاحظة</th><th>ورقة العمل</th><th>الأدلة</th><th>حالة السلسلة</th></tr></thead><tbody>{lineage.findingLinks.map(row => <tr key={row.finding.id}><td className="cell-strong">{row.finding.title}</td><td>{row.finding.workpaperRef || '—'}<small className="table-sub">{row.workpaper?.title || (row.workpaperReason === 'ambiguous-workpaper-reference' ? 'مرجع ملتبس' : 'لا توجد ورقة عمل مطابقة')}</small></td><td>{row.linkedEvidence.map(item => item.title).join('، ') || '—'}{row.missingEvidenceIds.length > 0 && <small className="table-sub">مراجع غير موجودة: {row.missingEvidenceIds.join('، ')}</small>}</td><td><span className={'audit-pill ' + (row.linked ? '' : 'risk-pill')}>{row.linked ? 'مرتبط بالكامل' : [row.workpaperReason, row.evidenceReason].filter(value => value !== 'linked').join(' · ')}</span></td></tr>)}</tbody></table></div></section>}
         {lineage.unlinkedEvidenceCount > 0 && <div className="audit-intel-issue-list">{lineage.links.filter(row => !row.linked).map(row => <article key={row.evidence.id} className="audit-intel-issue">
           <strong>{row.evidence.title || row.evidence.fileName || 'دليل بلا عنوان'}</strong>
           <p>{row.reason === 'missing-reference' ? 'لم يُسجل مرجع ورقة عمل لهذا الدليل.' : row.reason === 'ambiguous-reference' ? 'مرجع ورقة العمل مستخدم لأكثر من ورقة؛ أوقف النظام الربط التلقائي كي لا يختار ورقة خطأ: ' + row.evidence.workpaperRef : 'مرجع ورقة العمل لا يطابق ورقة موجودة في الملف الحالي: ' + row.evidence.workpaperRef}</p>
