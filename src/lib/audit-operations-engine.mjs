@@ -279,3 +279,45 @@ export function inferBankColumns(headers, savedProfiles = []) {
     item.headers.length === items.length && item.headers.every(header => items.some(key => key.header === header)));
   return { mapping: profile?.mapping || mapping, matchedSavedProfile: profile?.name || '', headerSignature: items.map(item => item.key).join('|') };
 }
+
+
+/**
+ * Suggest internal PBC requests from open risk descriptions.
+ * Deterministic rule-based suggestions only; the auditor edits and approves the requests.
+ */
+export function suggestRiskPbcRequestsFromRisks(risks) {
+  const data = Array.isArray(risks) ? risks : [];
+  const suggestions = [];
+  const rules = [
+    { test: /(bank|cash|treasury|بنك|نقد|صندوق|تسهيلات|مصادقات بنكية)/, docs: ['كشف حساب بنكي كامل للفترة مع الأرصدة الافتتاحية والختامية', 'مطابقة البنك وتسوية البنود المعلقة مع مستنداتها', 'مصادقة بنك مستقلة وتفاصيل التسهيلات والضمانات'] },
+    { test: /(revenue|sales|income|إيراد|ايراد|مبيعات|اعتراف)/, docs: ['عينة فواتير مبيعات مع أوامر الشراء ومستندات التسليم', 'سجل المبيعات حول نهاية الفترة ومستندات القطع المحاسبي', 'سياسة الاعتراف بالإيراد والعقود أو أوامر العملاء ذات الصلة'] },
+    { test: /(inventory|stock|warehouse|مخزون|مستودع|مخزون)/, docs: ['قائمة المخزون حسب الصنف والموقع وتقرير الحركة', 'محاضر الجرد الفعلي وتسويات فروق الجرد', 'تحليل تقادم المخزون وتقييم صافي القيمة القابلة للتحقق'] },
+    { test: /(receivable|customer|debtor|ذمم مدينة|عملاء|مدينون)/, docs: ['كشف أعمار الذمم المدينة ومطابقته مع دفتر الأستاذ', 'عينة فواتير ومتحصلات لاحقة وإثبات التسليم', 'مصادقات أرصدة العملاء وتحليل المبالغ المتنازع عليها'] },
+    { test: /(payable|supplier|vendor|ذمم دائنة|مورد|دائنون|مشتريات)/, docs: ['كشف أعمار الذمم الدائنة وكشوف الموردين', 'فواتير الموردين والاستلامات والمدفوعات اللاحقة', 'فحص الالتزامات غير المسجلة حول نهاية الفترة'] },
+    { test: /(payroll|salary|staff|رواتب|أجور|موظفين)/, docs: ['كشف الرواتب ومطابقته مع ملف الموظفين والموافقات', 'إثبات تحويل الرواتب والاستقطاعات والاشتراكات', 'تسويات مكافآت ونهاية خدمة ومستحقات الموظفين'] },
+    { test: /(fixed asset|property plant|asset|أصول ثابتة|أصل ثابت|آلات|مركبات)/, docs: ['سجل الأصول الثابتة والإضافات والاستبعادات', 'فواتير شراء الأصول ومحاضر الاستلام والتصرف', 'احتساب الإهلاك وربط الأعمار الإنتاجية والسياسات'] },
+    { test: /(related party|related parties|طرف ذو علاقة|أطراف ذات علاقة|طرف مرتبط)/, docs: ['سجل الأطراف ذات العلاقة والمعاملات والأرصدة', 'العقود والموافقات ومحاضر مجلس الإدارة المتعلقة بالطرف', 'مطابقات الأرصدة والإفصاحات ذات الصلة'] },
+    { test: /(it|access|system|cyber|صلاحيات|نظام|تقني|معلوماتي)/, docs: ['قائمة المستخدمين والصلاحيات وموافقات منح أو إلغاء الوصول', 'سجل التغييرات والعمليات الحساسة خلال الفترة', 'تقارير النسخ الاحتياطي والاستعادة والحوادث التقنية'] },
+  ];
+  const seen = new Set();
+  for (const risk of data) {
+    const status = normText(risk?.status);
+    if (['مغلق', 'مغلقة', 'مكتمل', 'closed', 'resolved'].includes(status)) continue;
+    const riskTitle = String(risk?.title ?? '').trim();
+    if (!riskTitle) continue;
+    const context = normText([risk?.title, risk?.area].filter(Boolean).join(' '));
+    const matching = rules.filter(rule => rule.test.test(context));
+    const docs = matching.length
+      ? [...new Set(matching.flatMap(rule => rule.docs))]
+      : ['مستندات المصدر والمستندات المؤيدة للمعاملة أو الرصيد موضوع الخطر', 'تحليل تفصيلي للحساب والسجلات الداعمة للفترة', 'موافقات الإدارة والإجراءات الرقابية ذات الصلة بالخطر'];
+    for (const doc of docs) {
+      const title = doc + ' — متابعة الخطر: ' + riskTitle;
+      const key = normText(title);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      suggestions.push({ title, sourceRiskId: String(risk.id ?? ''), riskTitle, area: String(risk.area ?? '') });
+      if (suggestions.length >= 40) return suggestions;
+    }
+  }
+  return suggestions;
+}
