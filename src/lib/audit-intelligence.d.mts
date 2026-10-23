@@ -11,6 +11,8 @@ export interface AuditIssue {
   examples?: any[];
   clusters?: Array<{ accountCode: string; partyOrDescription: string; totalAmount: number; rowNumbers: number[] }>;
   fields?: string[];
+  clusters?: Array<{ accountCode: string; partyOrDescription: string; totalAmount: number; rowNumbers: number[] }>;
+  fields?: string[];
   state?: 'needs-attention' | 'clear';
 }
 
@@ -21,6 +23,8 @@ export interface JournalRow {
   description: string;
   accountCode: string;
   reference: string;
+  counterparty?: string;
+  invalidAmountFields?: string[];
   debit: number | null;
   credit: number | null;
   amount: number | null;
@@ -45,6 +49,8 @@ export interface TrialBalanceCheck {
     closingDebit: number;
     closingCredit: number;
   };
+  openingDifference: number;
+  movementDifference: number;
   closingDifference: number;
   issues: AuditIssue[];
   pass: boolean;
@@ -63,7 +69,7 @@ export interface EvidenceLink {
   evidence: any;
   workpaper?: any;
   linked: boolean;
-  reason: 'missing-reference' | 'unknown-reference' | 'linked';
+  reason: 'missing-reference' | 'unknown-reference' | 'ambiguous-reference' | 'linked';
 }
 export interface EvidenceLineage {
   workpaperCount: number;
@@ -71,6 +77,8 @@ export interface EvidenceLineage {
   linkedEvidenceCount: number;
   unlinkedEvidenceCount: number;
   workpapersWithoutEvidence: number;
+  duplicateWorkpaperReferences: Array<{ reference: string; count: number; workpaperIds: any[] }>;
+  ambiguousReferenceCount: number;
   links: EvidenceLink[];
   workpapers: Array<{ workpaper: any; evidenceCount: number; evidence: any[] }>;
 }
@@ -110,8 +118,18 @@ export interface AssistantSuggestion {
 
 export function parseAuditAmount(input: unknown): number | null;
 export function normalizeJournalRows(records: Array<Record<string, unknown>>): NormalizedJournal;
-export function runDataTrustChecks(rows: any[]): TrialBalanceCheck;
-export function analyzeJournalEntries(rows: JournalRow[]): JournalAnalysis;
+export interface DataTrustOptions {
+  expectedRowCount?: number;
+  sourceTotals?: Record<string, number>;
+  unmappedAccountCodes?: string[];
+}
+export interface JournalAnalysisOptions {
+  approvalThreshold?: number;
+  splitWindowDays?: number;
+}
+export function runDataTrustChecks(rows: any[], options?: DataTrustOptions): TrialBalanceCheck;
+export function analyzeJournalEntries(rows: JournalRow[], options?: JournalAnalysisOptions): JournalAnalysis;
+export function fingerprintTrialBalanceRows(rows: any[]): string;
 export function buildEvidenceLineage(workpapers: any[], evidence: any[]): EvidenceLineage;
 export function buildQualityShield(input: {
   workpapers?: any[];
@@ -119,6 +137,8 @@ export function buildQualityShield(input: {
   findings?: any[];
   risks?: any[];
   trialBalance?: any[];
+  dataTrustOptions?: DataTrustOptions;
+  currentSourceFingerprint?: string;
 }): QualityShield;
 export function buildPartnerDashboard(engagements: any[], clients: any[], database: Record<string, any>): PartnerDashboardRow[];
 export function summarizeFindingsForAssistant(items: any[]): Array<string | AssistantSuggestion>;
