@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildDraftFinancialStatements, buildWhatsappReminder, calculateOfficeMetrics,
   inferBankColumns, parseUblInvoiceXml, rollForwardWorkpapers, runAdvancedJournalTests,
-  selectAuditSample, validateLocalWorkpaperTransition,
+  selectAuditSample, validateLocalWorkpaperTransition, suggestRiskPbcRequestsFromRisks,
 } from '../src/lib/audit-operations-engine.mjs';
 
 const journal = (overrides = {}) => ({
@@ -103,4 +103,19 @@ test('bank column learning can reuse only a matching normalized header signature
   const result = inferBankColumns(headers, saved);
   assert.equal(result.matchedSavedProfile, 'Bank A');
   assert.equal(result.mapping.amountDebit, 'Debit');
+});
+
+
+test('risk-based PBC requests produce traceable suggestions and ignore closed risks', () => {
+  const suggestions = suggestRiskPbcRequestsFromRisks([
+    { id: 'risk-revenue', area: 'الإيرادات', title: 'الاعتراف بالإيراد قرب نهاية الفترة', status: 'مفتوح' },
+    { id: 'risk-bank', area: 'Cash and bank', title: 'Bank reconciliation differences', status: 'open' },
+    { id: 'risk-closed', area: 'inventory', title: 'Closed count issue', status: 'مغلقة' },
+    { id: 'risk-empty', area: 'General', title: '   ', status: 'open' },
+  ]);
+  assert.ok(suggestions.length > 0);
+  assert.ok(suggestions.every(item => item.title.includes('متابعة الخطر:')));
+  assert.ok(suggestions.some(item => item.sourceRiskId === 'risk-revenue' && /فواتير مبيعات|المبيعات/.test(item.title)));
+  assert.ok(suggestions.some(item => item.sourceRiskId === 'risk-bank' && /بنكي|مطابقة البنك|مصادقة بنك/.test(item.title)));
+  assert.ok(!suggestions.some(item => item.sourceRiskId === 'risk-closed'));
 });
