@@ -475,7 +475,7 @@ export function buildQualityShield(input) {
   const staleWorkpapers = currentSourceFingerprint ? workpapers.filter(row => row.sourceFingerprint && row.sourceFingerprint !== currentSourceFingerprint) : [];
   const workpapersWithoutSnapshot = currentSourceFingerprint ? workpapers.filter(row => !row.sourceFingerprint) : [];
   const reviewNotesOpen = workpapers.filter(row => String(row.reviewNotes ?? '').trim() && !['مغلق', 'مغلقة', 'تمت المعالجة', 'resolved'].includes(cleanText(row.reviewNotesStatus)));
-  const configuredReportDrafts = reportDrafts.filter(row => ['firmName', 'auditorName', 'periodEnd', 'opinion'].some(field => String(row[field] ?? '').trim()));
+  const configuredReportDrafts = reportDrafts.filter(row => Boolean(row.lastExportSnapshot) || ['firmName', 'auditorName', 'periodEnd', 'opinion'].some(field => String(row[field] ?? '').trim()));
   const exportedReportDrafts = configuredReportDrafts.filter(row => row.lastExportSnapshot && typeof row.lastExportSnapshot === 'object');
   const staleReportSnapshots = currentSourceFingerprint ? exportedReportDrafts.filter(row => row.lastExportSnapshot.sourceFingerprint && row.lastExportSnapshot.sourceFingerprint !== currentSourceFingerprint) : [];
   const reportDraftsWithoutExport = configuredReportDrafts.filter(row => !row.lastExportSnapshot);
@@ -587,7 +587,9 @@ export function evaluateEngagementClosure(input = {}, policy = {}) {
   if (policy.blockStaleReports !== false) {
     const stale = quality.checks.find(row => row.id === 'quality-report-stale-source');
     const missingSource = quality.checks.find(row => row.id === 'quality-report-source-missing');
+    const notExported = quality.checks.find(row => row.id === 'quality-report-not-exported');
     addBlocker('close-stale-report-snapshot', 'نسخة تقرير قديمة أو بلا مصدر قابل للتحقق', (stale?.count || 0) + (missingSource?.count || 0), 'أعد تصدير مسودة التقرير بعد تحديث بيانات المصدر، أو تحقق من البصمة المسجلة.');
+    addBlocker('close-report-not-exported', 'مسودة تقرير لم يتم تصديرها', notExported?.count || 0, 'صدّر المسودة المطلوبة وافحص النسخة الناتجة قبل إقفال الملف.');
   }
 
   const requests = Array.isArray(operations.clientRequests) ? operations.clientRequests : [];
