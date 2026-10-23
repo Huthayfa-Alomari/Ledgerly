@@ -150,4 +150,7 @@ export function buildQualityShield(input: {
   currentSourceFingerprint?: string;
 }): QualityShield;
 export function buildPartnerDashboard(engagements: any[], clients: any[], database: Record<string, any>, operations?: Record<string, any>, options?: { asOfDate?: string }): PartnerDashboardRow[];
+export interface EngagementClosureBlocker { id: string; title: string; count: number; detail: string }
+export interface EngagementClosureResult { allowed: boolean; blockers: EngagementClosureBlocker[]; warnings: EngagementClosureBlocker[]; quality: QualityShield }
+export function evaluateEngagementClosure(input?: { engagementId?: string; workpapers?: any[]; evidence?: any[]; findings?: any[]; risks?: any[]; trialBalance?: any[]; operations?: Record<string, any>; currentSourceFingerprint?: string; asOfDate?: string; dataTrustOptions?: DataTrustOptions }, policy?: { requireTrialBalance?: boolean; blockCriticalDataIssues?: boolean; requireApprovedWorkpapers?: boolean; requireEvidenceLinked?: boolean; requireReviewNotesResolved?: boolean; requireFindingsResolved?: boolean; blockStaleWorkpapers?: boolean }): EngagementClosureResult;
 export function summarizeFindingsForAssistant(items: any[]): Array<string | AssistantSuggestion>;
