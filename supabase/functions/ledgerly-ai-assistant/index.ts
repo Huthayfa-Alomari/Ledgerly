@@ -50,6 +50,8 @@ function sanitize(input: unknown) {
       category,
       title: allowedIssueTitles[category],
       amount: typeof q.amount === "number" && Number.isFinite(q.amount) ? number(q.amount) : null,
+      accountCode: typeof q.accountCode === "string" && /^[\\p{L}\\p{N}\\s._/-]{1,40}$/u.test(q.accountCode.trim()) ? q.accountCode.trim() : "",
+      sourceRowNumber: typeof q.sourceRowNumber === "number" && Number.isInteger(q.sourceRowNumber) && q.sourceRowNumber >= 2 && q.sourceRowNumber <= 250000 ? q.sourceRowNumber : null,
     };
   });
   return {
@@ -114,7 +116,7 @@ Deno.serve(async (req: Request) => {
   const instructions = [
     "You are Ledgerly Audit Copilot for external-audit professionals.",
     "Answer in the user's language, normally Arabic. Be precise and concise.",
-    "Use only the supplied sanitized summary. Never claim to have read source files or evidence.",
+    "Use only the supplied sanitized summary. Never claim to have read source files or evidence. When a TB-XX reference includes an accountCode or sourceRowNumber, cite that exact code/row and do not invent a file name or page.",
     "Do not infer fraud, misstatement, or compliance. Distinguish supplied facts from hypotheses and suggested procedures.",
     "Cite only exact TB-xx refs present in the supplied context. Never fabricate references.",
     "Never approve workpapers, write journal entries, change records, or issue an audit opinion.",
