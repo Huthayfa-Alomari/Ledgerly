@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { SupabaseConfigResult } from '../lib/supabase-config';
 
-type Issue = { ref: string; severity: 'error' | 'warning' | 'info'; category: string; title: string; amount: number | null };
+type Issue = { ref: string; severity: 'error' | 'warning' | 'info'; category: string; title: string; amount: number | null; accountCode?: string; sourceRowNumber?: number | null };
 type CopilotContext = {
   fiscalYear: string;
   engagementType: string;
@@ -23,6 +23,7 @@ export default function AuditCopilot({ config, context, hasEngagement }: Props) 
   const [model, setModel] = useState('');
   const [disclaimer, setDisclaimer] = useState('');
   const availableRefs = useMemo(() => new Set(context.trialBalance.issues.map(issue => issue.ref)), [context]);
+  const issueSources = useMemo(() => new Map(context.trialBalance.issues.map(issue => [issue.ref, { accountCode: issue.accountCode || '', sourceRowNumber: issue.sourceRowNumber ?? null }])), [context]);
 
   async function runCopilot() {
     setError('');
@@ -99,7 +100,7 @@ export default function AuditCopilot({ config, context, hasEngagement }: Props) 
       {result.observations.length > 0 && <div className="ai-observations">{result.observations.map((item, index) => <article className="ai-observation" key={index}>
         <div className="ai-observation-head"><strong>{item.title}</strong><span className={`ai-confidence ai-confidence-${item.confidence}`}>{item.confidence === 'high' ? 'ثقة مرتفعة' : item.confidence === 'medium' ? 'ثقة متوسطة' : 'ثقة منخفضة'}</span></div>
         <p><b>لماذا يستحق المراجعة؟</b> {item.whyItMatters}</p><p><b>خطوة مقترحة:</b> {item.suggestedNextStep}</p>
-        {item.sourceRefs.length > 0 && <p className="ai-source-refs"><b>مراجع الملخص:</b> {item.sourceRefs.join('، ')}</p>}
+        {item.sourceRefs.length > 0 && <p className="ai-source-refs"><b>مراجع قابلة للتتبّع:</b> {item.sourceRefs.map(ref => { const source = issueSources.get(ref); return source?.accountCode ? `${ref} (حساب ${source.accountCode}${source.sourceRowNumber ? '، صف المصدر ' + source.sourceRowNumber : ''})` : ref; }).join('، ')}</p>}
       </article>)}</div>}
       {result.questions.length > 0 && <div className="ai-result-section"><h4>أسئلة تحتاج إجابة</h4><ul>{result.questions.map((x,i)=><li key={i}>{x}</li>)}</ul></div>}
       {result.limitations.length > 0 && <div className="ai-result-section"><h4>حدود التحليل</h4><ul>{result.limitations.map((x,i)=><li key={i}>{x}</li>)}</ul></div>}
