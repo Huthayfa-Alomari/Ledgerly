@@ -47,8 +47,6 @@ export interface TrialBalanceCheck {
     closingDebit: number;
     closingCredit: number;
   };
-  openingDifference: number;
-  movementDifference: number;
   availableFields: string[];
   unmappedFields: string[];
   openingDifference: number | null;
@@ -73,6 +71,19 @@ export interface EvidenceLink {
   linked: boolean;
   reason: 'missing-reference' | 'unknown-reference' | 'ambiguous-reference' | 'linked';
 }
+export interface FindingEvidenceLink {
+  finding: any;
+  workpaper?: any;
+  linkedEvidence: any[];
+  evidenceIds: string[];
+  missingEvidenceIds: string[];
+  workpaperLinked: boolean;
+  evidenceLinked: boolean;
+  evidenceMatchesWorkpaper: boolean;
+  linked: boolean;
+  workpaperReason: string;
+  evidenceReason: string;
+}
 export interface EvidenceLineage {
   workpaperCount: number;
   evidenceCount: number;
@@ -81,6 +92,12 @@ export interface EvidenceLineage {
   workpapersWithoutEvidence: number;
   duplicateWorkpaperReferences: Array<{ reference: string; count: number; workpaperIds: any[] }>;
   ambiguousReferenceCount: number;
+  findingsCount: number;
+  findingLinks: FindingEvidenceLink[];
+  findingsWithoutWorkpaper: number;
+  findingsWithoutEvidence: number;
+  findingEvidenceMismatches: number;
+  fullyLinkedFindings: number;
   links: EvidenceLink[];
   workpapers: Array<{ workpaper: any; evidenceCount: number; evidence: any[] }>;
 }
@@ -143,7 +160,7 @@ export interface JournalAnalysisOptions {
 export function runDataTrustChecks(rows: any[], options?: DataTrustOptions): TrialBalanceCheck;
 export function analyzeJournalEntries(rows: JournalRow[], options?: JournalAnalysisOptions): JournalAnalysis;
 export function fingerprintTrialBalanceRows(rows: any[]): string;
-export function buildEvidenceLineage(workpapers: any[], evidence: any[]): EvidenceLineage;
+export function buildEvidenceLineage(workpapers: any[], evidence: any[], findings?: any[]): EvidenceLineage;
 export function buildQualityShield(input: {
   workpapers?: any[];
   evidence?: any[];
@@ -156,5 +173,5 @@ export function buildQualityShield(input: {
 export function buildPartnerDashboard(engagements: any[], clients: any[], database: Record<string, any>, operations?: Record<string, any>, options?: { asOfDate?: string }): PartnerDashboardRow[];
 export interface EngagementClosureBlocker { id: string; title: string; count: number; detail: string }
 export interface EngagementClosureResult { allowed: boolean; blockers: EngagementClosureBlocker[]; warnings: EngagementClosureBlocker[]; quality: QualityShield }
-export function evaluateEngagementClosure(input?: { engagementId?: string; workpapers?: any[]; evidence?: any[]; findings?: any[]; risks?: any[]; trialBalance?: any[]; operations?: Record<string, any>; currentSourceFingerprint?: string; asOfDate?: string; dataTrustOptions?: DataTrustOptions }, policy?: { requireTrialBalance?: boolean; blockCriticalDataIssues?: boolean; requireApprovedWorkpapers?: boolean; requireEvidenceLinked?: boolean; requireReviewNotesResolved?: boolean; requireFindingsResolved?: boolean; blockStaleWorkpapers?: boolean }): EngagementClosureResult;
+export function evaluateEngagementClosure(input?: { engagementId?: string; workpapers?: any[]; evidence?: any[]; findings?: any[]; risks?: any[]; trialBalance?: any[]; operations?: Record<string, any>; currentSourceFingerprint?: string; asOfDate?: string; dataTrustOptions?: DataTrustOptions }, policy?: { requireTrialBalance?: boolean; blockCriticalDataIssues?: boolean; requireApprovedWorkpapers?: boolean; requireEvidenceLinked?: boolean; requireReviewNotesResolved?: boolean; requireFindingsResolved?: boolean; blockStaleWorkpapers?: boolean; requireFindingLineage?: boolean }): EngagementClosureResult;
 export function summarizeFindingsForAssistant(items: any[]): Array<string | AssistantSuggestion>;
