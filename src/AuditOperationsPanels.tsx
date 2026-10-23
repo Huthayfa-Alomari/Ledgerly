@@ -176,7 +176,7 @@ export default function AuditOperationsPanels(props: Props) {
       kind,
       generatedAt,
       sourceFingerprint: fingerprintTrialBalanceRows(trialBalance),
-      accountMappingFingerprint: fingerprintAccountMappings(operations.accountMappings || {}, engagementId),
+      accountMappingFingerprint: fingerprintAccountMappings(operations.accountMappings || {}, engagementId || ''),
       sourceRowCount: trialBalance.length,
       statementSnapshot: {
         current: { ...statement.current },
