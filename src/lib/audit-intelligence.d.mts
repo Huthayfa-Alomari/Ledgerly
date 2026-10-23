@@ -49,7 +49,11 @@ export interface TrialBalanceCheck {
   };
   openingDifference: number;
   movementDifference: number;
-  closingDifference: number;
+  availableFields: string[];
+  unmappedFields: string[];
+  openingDifference: number | null;
+  movementDifference: number | null;
+  closingDifference: number | null;
   issues: AuditIssue[];
   pass: boolean;
 }
