@@ -32,7 +32,8 @@ function installPermissionPolicy() {
   });
 
   defaultSession.setPermissionCheckHandler((webContents, permission, requestingOrigin, details = {}) => {
-    if (!isTrustedPage(requestingOrigin || webContents?.getURL?.() || '')) return false;
+    const candidateUrl = isTrustedPage(requestingOrigin || '') ? requestingOrigin : (webContents?.getURL?.() || requestingOrigin || '');
+    if (!isTrustedPage(candidateUrl)) return false;
     if (permission === 'geolocation') return true;
     if (permission === 'media') return details.mediaType === 'video';
     return false;
