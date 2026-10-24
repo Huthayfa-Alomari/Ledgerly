@@ -133,7 +133,7 @@ export default function AuditIntelligence(props: Props) {
     const options: Record<string, any> = { unmappedAccountCodes };
     const expected = expectedSourceRows.trim() === '' ? null : Number(expectedSourceRows);
     if (expected !== null && Number.isInteger(expected) && expected >= 0) options.expectedRowCount = expected;
-    const totals = Object.fromEntries(Object.entries(sourceControlTotals).filter(([key, value]) => value.trim() !== '' && Number.isFinite(Number(value))).map(([key, value]) => [key, Number(value)]));
+    const totals = Object.fromEntries(Object.entries(sourceControlTotals).filter(([, value]) => value.trim() !== '' && Number.isFinite(Number(value))).map(([key, value]) => [key, Number(value)]));
     if (Object.keys(totals).length) options.sourceTotals = totals;
     return options;
   }, [unmappedAccountCodes, expectedSourceRows, sourceControlTotals]);
