@@ -28,7 +28,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_client_portal_member_pending_email
   WHERE status IN ('invited','active') AND deleted_at IS NULL;
 
 ALTER TABLE public.pbc_submission
-  ADD COLUMN IF NOT EXISTS submitted_by_portal_user_id uuid REFERENCES auth.users(id);
+  ADD COLUMN IF NOT EXISTS submitted_by_portal_user_id uuid REFERENCES auth.users(id),
+  ADD COLUMN IF NOT EXISTS scan_provider text,
+  ADD COLUMN IF NOT EXISTS scan_reference text,
+  ADD COLUMN IF NOT EXISTS scan_completed_at text,
+  ADD COLUMN IF NOT EXISTS scan_completed_by text REFERENCES public.app_user(id);
 
 CREATE INDEX IF NOT EXISTS idx_pbc_submission_portal_user
   ON public.pbc_submission(submitted_by_portal_user_id, request_id, uploaded_at DESC);
@@ -55,7 +59,8 @@ REVOKE SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON TABLE public.pbc_submission F
 GRANT SELECT (
   id, firm_id, request_id, submitted_by_name, submitted_by_user,
   submitted_by_portal_user_id, object_key, file_name, mime_type, file_size,
-  file_sha256, uploaded_at, scan_status, rejection_reason, supersedes_id
+  file_sha256, uploaded_at, scan_status, rejection_reason, supersedes_id,
+  scan_provider, scan_reference, scan_completed_at, scan_completed_by
 ) ON TABLE public.pbc_submission TO authenticated;
 GRANT INSERT (
   id, firm_id, request_id, submitted_by_name, submitted_by_portal_user_id,
@@ -327,7 +332,86 @@ CREATE POLICY ledgerly_client_portal_object_read ON storage.objects
 
 -- Browser clients cannot replace or delete submissions or storage objects.
 REVOKE UPDATE, DELETE, TRUNCATE ON public.pbc_submission FROM anon, authenticated;
+GRANT UPDATE (scan_status, scan_provider, scan_reference, scan_completed_at, scan_completed_by)
+  ON public.pbc_submission TO authenticated;
 REVOKE UPDATE, DELETE, TRUNCATE ON storage.objects FROM anon, authenticated;
+
+
+
+-- Reviewers can see submissions only through the same firm/engagement scope as their request.
+DROP POLICY IF EXISTS ledgerly_client_portal_submission_office_read ON public.pbc_submission;
+CREATE POLICY ledgerly_client_portal_submission_office_read ON public.pbc_submission
+  FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.pbc_request r
+      WHERE r.id = pbc_submission.request_id
+        AND r.firm_id = pbc_submission.firm_id
+        AND private.brp_user_has_role_in_scope(
+          r.firm_id, r.engagement_id,
+          ARRAY['firm_admin','managing_partner','engagement_partner','manager','senior','staff','reviewer','eqcr']::text[]
+        )
+    )
+  );
+
+CREATE OR REPLACE FUNCTION private.brp_client_portal_can_review_submission(
+  target_submission_id text,
+  target_scan_status text,
+  target_scan_provider text,
+  target_scan_reference text,
+  target_scan_completed_at text,
+  target_scan_completed_by text
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.pbc_submission s
+    JOIN public.pbc_request r ON r.id = s.request_id AND r.firm_id = s.firm_id
+    WHERE s.id = target_submission_id
+      AND private.brp_user_has_role_in_scope(
+        r.firm_id, r.engagement_id,
+        ARRAY['firm_admin','managing_partner','engagement_partner','manager','reviewer','eqcr']::text[]
+      )
+      AND (
+        target_scan_status <> 'clean'
+        OR (
+          pg_catalog.length(pg_catalog.btrim(COALESCE(target_scan_provider,''))) BETWEEN 2 AND 120
+          AND pg_catalog.length(pg_catalog.btrim(COALESCE(target_scan_reference,''))) BETWEEN 2 AND 240
+          AND target_scan_completed_at IS NOT NULL
+          AND target_scan_completed_by = (SELECT auth.uid())::text
+        )
+      )
+  );
+$function$;
+REVOKE ALL ON FUNCTION private.brp_client_portal_can_review_submission(text,text,text,text,text,text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION private.brp_client_portal_can_review_submission(text,text,text,text,text,text) TO authenticated, service_role;
+
+DROP POLICY IF EXISTS ledgerly_client_portal_submission_review ON public.pbc_submission;
+CREATE POLICY ledgerly_client_portal_submission_review ON public.pbc_submission
+  FOR UPDATE TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.pbc_request r
+      WHERE r.id = pbc_submission.request_id
+        AND r.firm_id = pbc_submission.firm_id
+        AND private.brp_user_has_role_in_scope(
+          r.firm_id, r.engagement_id,
+          ARRAY['firm_admin','managing_partner','engagement_partner','manager','reviewer','eqcr']::text[]
+        )
+    )
+  )
+  WITH CHECK (
+    private.brp_client_portal_can_review_submission(
+      id, scan_status, scan_provider, scan_reference, scan_completed_at, scan_completed_by
+    )
+  );
 
 -- Invitation provisioning is server-only: it validates the inviter, target engagement and email.
 CREATE OR REPLACE FUNCTION public.ledgerly_add_client_portal_member(
