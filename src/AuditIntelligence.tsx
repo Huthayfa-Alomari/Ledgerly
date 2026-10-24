@@ -544,6 +544,6 @@ export default function AuditIntelligence(props: Props) {
       onAddEvidence={onAddEvidence}
       onOpenReconciliation={onOpenReconciliation}
     />
-    <p className="audit-intel-disclaimer">حالة التطوير: مركز محلي أولي قابل للاختبار. لا تستخدم بيانات عملاء حقيقية حتى اكتمال مراجعة التشفير، وصلاحيات المستخدمين، وعزل المكاتب، والنسخ الاحتياطي والاستعادة، والتحقق المهني من القواعد.</p>
+    <p className="audit-intel-disclaimer">للتجربة الحالية، استخدم بيانات اصطناعية فقط. لا تستخدم بيانات عملاء حقيقية قبل إغلاق متطلبات الأمن والصلاحيات وعزل المكاتب والنسخ الاحتياطي والاستعادة والمراجعة المهنية.</p>
   </div>;
 }
