@@ -489,6 +489,9 @@ test('audit evidence graph links journal row to test result, exact evidence refe
   const findings = [{ id: 'f-1', title: 'Invoice exception', workpaperRef: 'WP-AP-1', evidenceIds: ['ev-1'] }];
   const graph = buildAuditEvidenceGraph({ sourceName: 'journal.csv', journalRows, journalAnalysis, workpapers, evidence, findings });
   assert.equal(graph.sourceRowCount, 1);
+  assert.equal(graph.scannedSourceRowCount, 1);
+  assert.equal(graph.sourceRowsWithIssueCount, 1);
+  assert.equal(graph.sourceRowsWithoutDetectedIssueCount, 0);
   assert.equal(graph.issuesWithEvidenceCount, 1);
   assert.equal(graph.issuesWithoutEvidenceCount, 0);
   assert.equal(graph.issueNodes[0].linkedWorkpapers[0].ref, 'WP-AP-1');
