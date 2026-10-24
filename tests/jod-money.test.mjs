@@ -58,3 +58,17 @@ test('supports parenthesized negative amounts', () => {
   assert.equal(parseJodAmount('(12.345)'), -12.345);
   assert.equal(parseJodAmount('($1,234.567)'), -1234.567);
 });
+
+
+test('strict JOD parser never guesses separator conventions or strips unknown suffixes', () => {
+  const warnings = [];
+  assert.equal(parseJodAmount('1,5', { onWarning: value => warnings.push(value) }), null);
+  assert.equal(parseJodAmount('1.234,567', { onWarning: value => warnings.push(value) }), null);
+  assert.equal(parseJodAmount('100 CR', { onWarning: value => warnings.push(value) }), null);
+  assert.equal(warnings.length, 3);
+  assert.equal(parseJodAmount('1,234.567'), 1234.567);
+  assert.equal(parseJodAmount('JOD 12.004'), 12.004);
+  assert.equal(parseJodAmount('(12.345)'), -12.345);
+  assert.equal(parseJodAmount(''), 0);
+  assert.equal(parseJodAmount('', { blankAsZero: false }), null);
+});
