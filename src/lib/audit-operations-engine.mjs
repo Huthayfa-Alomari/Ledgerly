@@ -335,8 +335,10 @@ export function matchInvoiceToJournal(invoice, journalRows = [], options = {}) {
     return Math.round((Date.parse(String(date) + 'T00:00:00Z') - Date.parse(invoiceDate + 'T00:00:00Z')) / 86400000);
   };
   const rowAmount = row => {
-    const debit = parseJodAmount(row?.debit), credit = parseJodAmount(row?.credit), amount = parseJodAmount(row?.amount);
-    return Math.max(Math.abs(debit ?? 0), Math.abs(credit ?? 0), Math.abs(amount ?? 0));
+    const debit = parseJodAmount(row?.debit), credit = parseJodAmount(row?.credit);
+    const hasDebitCreditColumns = (row?.debit !== undefined && row?.debit !== null && String(row.debit).trim() !== '') || (row?.credit !== undefined && row?.credit !== null && String(row.credit).trim() !== '');
+    if (hasDebitCreditColumns) return Math.max(Math.abs(debit ?? 0), Math.abs(credit ?? 0));
+    return Math.abs(parseJodAmount(row?.amount) ?? 0);
   };
   const rowPartyMatch = row => {
     if (!supplierName) return false;
@@ -487,8 +489,10 @@ export function matchInvoiceRegisterToJournal(invoices = [], journalRows = [], o
     list.push(row); map.set(key, list);
   };
   const getAmount = row => {
-    const debit = parseJodAmount(row?.debit), credit = parseJodAmount(row?.credit), amount = parseJodAmount(row?.amount);
-    return Math.max(Math.abs(debit ?? 0), Math.abs(credit ?? 0), Math.abs(amount ?? 0));
+    const debit = parseJodAmount(row?.debit), credit = parseJodAmount(row?.credit);
+    const hasDebitCreditColumns = (row?.debit !== undefined && row?.debit !== null && String(row.debit).trim() !== '') || (row?.credit !== undefined && row?.credit !== null && String(row.credit).trim() !== '');
+    if (hasDebitCreditColumns) return Math.max(Math.abs(debit ?? 0), Math.abs(credit ?? 0));
+    return Math.abs(parseJodAmount(row?.amount) ?? 0);
   };
   for (const row of ledger) {
     const reference = normalizedInvoiceReference(row?.reference);
