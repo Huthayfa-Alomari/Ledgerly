@@ -31,7 +31,7 @@ export default function App() {
   const formatMoney = (value: number | null | undefined) =>
     value == null || !Number.isFinite(value)
       ? '—'
-      : Number(value).toLocaleString(lang === 'ar' ? 'ar-JO' : 'en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+      : Number(value).toLocaleString(lang === 'ar' ? 'ar-JO-u-nu-latn' : 'en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
   const formatMovement = (row: ReturnType<typeof normalizeRows>[number] | undefined) => {
     if (!row) return '—';
     const debit = row.debit;
@@ -50,7 +50,7 @@ export default function App() {
     if (!bankData || !ledgerData || !matchResult) return;
     try {
       const now = new Date();
-      const exportedAt = now.toLocaleString(lang === 'ar' ? 'ar-JO' : 'en-US');
+      const exportedAt = now.toLocaleString(lang === 'ar' ? 'ar-JO-u-nu-latn' : 'en-US');
       const signedMovement = (row: ReturnType<typeof normalizeRows>[number] | undefined): number | string =>
         !row || (row.debit == null && row.credit == null)
           ? ''
