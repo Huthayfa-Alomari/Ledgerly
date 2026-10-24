@@ -330,7 +330,7 @@ export default function AuditOperationsPanels(props: Props) {
   }
 
   async function importUbl(file?: File) {
-    setUblInvoice(null); setUblError('');
+    setUblInvoice(null); setUblSourceFile(null); setUblError('');
     if (!file) return;
     if (file.size > 10 * 1024 * 1024) { setUblError('ملف UBL يتجاوز حد 10 ميغابايت.'); return; }
     try {
