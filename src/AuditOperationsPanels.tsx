@@ -37,7 +37,7 @@ function id(prefix: string) {
 }
 function money(value: unknown) {
   const amount = Number(value);
-  return new Intl.NumberFormat('ar-JO', { minimumFractionDigits: 3, maximumFractionDigits: 3 }).format(Number.isFinite(amount) ? amount : 0) + ' د.أ';
+  return new Intl.NumberFormat('ar-JO-u-nu-latn', { minimumFractionDigits: 3, maximumFractionDigits: 3 }).format(Number.isFinite(amount) ? amount : 0) + ' د.أ';
 }
 function downloadBlob(name: string, data: BlobPart | Uint8Array, type: string) {
   const safeData: BlobPart = data instanceof Uint8Array
@@ -187,7 +187,7 @@ export default function AuditOperationsPanels(props: Props) {
   }
 
   function exportWord(title: string, paragraphs: string[], tables: unknown[][][]) {
-    const bytes = buildDocxBytes({ title, paragraphs, tables, language: 'ar-JO', rtl: true });
+    const bytes = buildDocxBytes({ title, paragraphs, tables, language: 'ar-JO-u-nu-latn', rtl: true });
     downloadBlob('ledgerly-' + (title.includes('تقرير') ? 'draft-auditor-report' : 'draft-financial-statements') + '.docx',
       bytes, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
   }
@@ -553,7 +553,7 @@ export default function AuditOperationsPanels(props: Props) {
       <div className="audit-card-head"><div><h3>8. تحليلات القيود المتقدمة وBenford</h3><p className="muted-copy">يجري الفحص على كامل مجتمع القيود المستورد في هذه الشاشة. تشمل الإشارات نهاية الأسبوع الأردنية، وقت القيد عند توفره، المبالغ المدوّرة، الصفوف المتطابقة، وتوزيع أول رقم. هذه إشارات للتحقق وليست نتائج احتيال.</p></div><span className="soft-tag">Full population</span></div>
       {journalTests ? <>
         <div className="audit-intel-kpis audit-intel-kpis-small">
-          <div className="audit-intel-kpi"><span>مجتمع القيود</span><strong>{journalTests.scannedCount.toLocaleString('ar-JO')}</strong><small>{journalFileName || 'الملف الحالي'}</small></div>
+          <div className="audit-intel-kpi"><span>مجتمع القيود</span><strong>{journalTests.scannedCount.toLocaleString('ar-JO-u-nu-latn')}</strong><small>{journalFileName || 'الملف الحالي'}</small></div>
           <div className="audit-intel-kpi"><span>قواعد أطلقت إشارات</span><strong>{journalTests.issues.length}</strong><small>لا تعني مخالفات مؤكدة</small></div>
           <div className="audit-intel-kpi"><span>قيم Benford</span><strong>{journalTests.benford.populationSize}</strong><small>{journalTests.benford.interpretable ? 'حجم عينة وصفي كافٍ مبدئيًا' : 'أقل من 50 قيمة'}</small></div>
           <div className="audit-intel-kpi"><span>مؤشرات الشهر الأخير</span><strong>{journalRows.filter(row => row.date && Number(row.date.slice(8,10)) >= 28).length}</strong><small>إشارة وقتية فقط</small></div>
@@ -580,7 +580,7 @@ export default function AuditOperationsPanels(props: Props) {
       <div className="stack-actions"><button className="audit-primary" onClick={() => void runSample()}>إنشاء وحفظ سجل العينة</button><button className="audit-secondary" onClick={() => downloadCSV('ledgerly-sampling-history.csv', [['run_id','method','seed','sample_size','population','selected','created_at'], ...sampleHistory.map(row => [row.id,row.method,row.seed,row.requestedSampleSize,row.populationSize,row.selectedItemCount,row.createdAt])])}>تصدير سجل العينات CSV</button></div>
       {sampleError && <p className="audit-warning" role="alert">{sampleError}</p>}
       {sampleMessage && <p className="muted-copy" role="status">{sampleMessage}</p>}
-      {sampleHistory.length > 0 && <div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>التاريخ</th><th>المنهج</th><th>المصدر</th><th>المجتمع</th><th>الحجم المطلوب</th><th>المختارون</th><th></th></tr></thead><tbody>{sampleHistory.map(row => <tr key={row.id}><td>{new Date(row.createdAt).toLocaleString('ar-JO')}</td><td>{row.method}</td><td>{row.source}</td><td>{row.populationSize}</td><td>{row.requestedSampleSize}</td><td>{row.selectedItemCount}</td><td><button className="audit-text-button" onClick={() => exportSampleRecord(row)}>تنزيل السجل</button></td></tr>)}</tbody></table></div>}
+      {sampleHistory.length > 0 && <div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>التاريخ</th><th>المنهج</th><th>المصدر</th><th>المجتمع</th><th>الحجم المطلوب</th><th>المختارون</th><th></th></tr></thead><tbody>{sampleHistory.map(row => <tr key={row.id}><td>{new Date(row.createdAt).toLocaleString('ar-JO-u-nu-latn')}</td><td>{row.method}</td><td>{row.source}</td><td>{row.populationSize}</td><td>{row.requestedSampleSize}</td><td>{row.selectedItemCount}</td><td><button className="audit-text-button" onClick={() => exportSampleRecord(row)}>تنزيل السجل</button></td></tr>)}</tbody></table></div>}
     </section>
 
     <section className="audit-card audit-operations-section">
@@ -631,7 +631,7 @@ export default function AuditOperationsPanels(props: Props) {
         <button className="audit-primary" onClick={saveBankProfile}>حفظ تعيين الأعمدة المشفّر</button>
       </>}
       {bankNotice && <p className="muted-copy" role="status">{bankNotice}</p>}
-      {(operations.bankProfiles || []).length > 0 && <div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>القالب</th><th>عدد العناوين</th><th>تاريخ التحديث</th><th></th></tr></thead><tbody>{operations.bankProfiles.map(profile => <tr key={profile.id}><td>{profile.name}</td><td>{profile.headers?.length || 0}</td><td>{profile.updatedAt ? new Date(profile.updatedAt).toLocaleDateString('ar-JO') : '—'}</td><td><button className="audit-text-button danger-text" onClick={() => update({ bankProfiles: operations.bankProfiles.filter(item => item.id !== profile.id) })}>حذف القالب</button></td></tr>)}</tbody></table></div>}
+      {(operations.bankProfiles || []).length > 0 && <div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>القالب</th><th>عدد العناوين</th><th>تاريخ التحديث</th><th></th></tr></thead><tbody>{operations.bankProfiles.map(profile => <tr key={profile.id}><td>{profile.name}</td><td>{profile.headers?.length || 0}</td><td>{profile.updatedAt ? new Date(profile.updatedAt).toLocaleDateString('ar-JO-u-nu-latn') : '—'}</td><td><button className="audit-text-button danger-text" onClick={() => update({ bankProfiles: operations.bankProfiles.filter(item => item.id !== profile.id) })}>حذف القالب</button></td></tr>)}</tbody></table></div>}
       <p className="audit-intel-footnote">هذا التعلّم يعتمد على تعيين المستخدم وبصمة العناوين، ولا يفترض أن كل كشوف البنك تستخدم اصطلاحات المدين/الدائن نفسها. يلزم اختبار كل بنك مع عينة مؤكدة.</p>
     </section>
 
@@ -689,7 +689,7 @@ export default function AuditOperationsPanels(props: Props) {
       <div><strong>توقيع ميداني (اختياري)</strong><p className="muted-copy">لا يمثل هذا الرسم هوية رقمية معتمدة أو توقيعًا موثقًا قانونيًا.</p><SignaturePad value={fieldSignature} onChange={setFieldSignature} /></div>
       <button className="audit-primary" onClick={() => void saveFieldworkRecord()}>حفظ الملاحظة الميدانية المشفّرة</button>
       {fieldMessage && <p className="muted-copy" role="status">{fieldMessage}</p>}
-      {currentFieldRecords.length > 0 && <div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>التاريخ</th><th>الملاحظة</th><th>الموقع</th><th>الصورة</th><th>المزامنة</th></tr></thead><tbody>{currentFieldRecords.map((row: Row) => <tr key={row.id}><td>{new Date(row.createdAt).toLocaleString('ar-JO')}</td><td>{row.note}</td><td>{row.location || '—'}</td><td>{row.photoEvidenceId ? 'أضيفت للأدلة' : '—'}</td><td>{row.syncStatus}</td></tr>)}</tbody></table></div>}
+      {currentFieldRecords.length > 0 && <div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>التاريخ</th><th>الملاحظة</th><th>الموقع</th><th>الصورة</th><th>المزامنة</th></tr></thead><tbody>{currentFieldRecords.map((row: Row) => <tr key={row.id}><td>{new Date(row.createdAt).toLocaleString('ar-JO-u-nu-latn')}</td><td>{row.note}</td><td>{row.location || '—'}</td><td>{row.photoEvidenceId ? 'أضيفت للأدلة' : '—'}</td><td>{row.syncStatus}</td></tr>)}</tbody></table></div>}
     </section>
 
     <section className="audit-card audit-operations-section">
