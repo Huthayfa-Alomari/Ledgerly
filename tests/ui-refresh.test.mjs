@@ -100,6 +100,17 @@ test('AI copilot requires explicit consent and submits only a minimized engageme
   assert.match(css, /\.ai-consent/);
 });
 
+test('AI copilot receives account-level comparative values with traceable account references', () => {
+  assert.match(app, /summarizeTrialBalanceForCopilot/);
+  const panel = readFileSync(new URL('../src/components/AuditCopilot.tsx', import.meta.url), 'utf8');
+  assert.match(panel, /ai-context-accounts/);
+  assert.match(panel, /availableRefs = useMemo\(\(\) => new Set\(\[\.\.\.context\.trialBalance\.issues\.map\(issue => issue\.ref\), \.\.\.context\.trialBalance\.accounts\.map\(account => account\.ref\)\]\)/);
+  const edge = readFileSync(new URL('../supabase/functions/ledgerly-ai-assistant/index.ts', import.meta.url), 'utf8');
+  assert.match(edge, /const rawAccounts = Array\.isArray\(tb\.accounts\)/);
+  assert.match(edge, /ACC-\\d\{3\}/);
+  assert.match(edge, /do not infer the cause of a variance/);
+});
+
 test('AI edge function is gated, authenticated, server-key only, and does not store requests', () => {
   const edge = readFileSync(new URL('../supabase/functions/ledgerly-ai-assistant/index.ts', import.meta.url), 'utf8');
   assert.match(edge, /LEDGERLY_AI_ENABLED/);
