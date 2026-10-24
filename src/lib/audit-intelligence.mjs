@@ -353,6 +353,77 @@ export function analyzeJournalEntries(rows, options = {}) {
       action: 'تحقق من حدود الصلاحيات الفعلية وتوقيت المعاملات والمستندات والموافقات؛ لا تستنتج التجزئة المتعمدة من المبلغ وحده.',
     });
   }
+  // Repeated document references at the same account/direction/amount are suspicious, but not automatically duplicates.
+  const duplicateReferenceGroups = new Map();
+  for (const row of data) {
+    const reference = cleanText(row.reference), accountCode = cleanText(row.accountCode);
+    const debit = Number(row.debit), credit = Number(row.credit);
+    const direction = debit > TOLERANCE && !(credit > TOLERANCE) ? 'debit' : credit > TOLERANCE && !(debit > TOLERANCE) ? 'credit' : '';
+    const amount = direction === 'debit' ? debit : direction === 'credit' ? credit : 0;
+    if (!reference || !accountCode || !direction || !(amount > 0) || !Number.isFinite(amount)) continue;
+    const key = [reference, accountCode, direction, roundMoney(amount).toFixed(3)].join('|');
+    const matches = duplicateReferenceGroups.get(key) || [];
+    matches.push(row); duplicateReferenceGroups.set(key, matches);
+  }
+  const repeatedDocumentRows = [];
+  for (const matches of duplicateReferenceGroups.values()) {
+    if (matches.length < 2) continue;
+    const distinctDates = new Set(matches.map(row => String(row.date ?? '')));
+    const distinctDescriptions = new Set(matches.map(row => cleanText(row.description)).filter(Boolean));
+    if (distinctDates.size > 1 || distinctDescriptions.size > 1) repeatedDocumentRows.push(...matches);
+  }
+  pushGroup('journal-duplicate-document-reference', 'high', 'مرجع مستند ومبلغ مكرران في الحساب نفسه', [...new Map(repeatedDocumentRows.map(row => [row.rowNumber, row])).values()], 'ظهر المرجع نفسه في الحساب والجهة والمبلغ نفسها أكثر من مرة، وربما بتاريخ أو وصف مختلف. قد يكون ذلك استخدامًا مشروعًا للمرجع، لذا يلزم الرجوع إلى المستند الأصلي.', 'قارن رقم الفاتورة/القيد الأصلي وتاريخ التسجيل والطرف المقابل قبل اعتبارها حركة مكررة أو استبعادها.');
+
+  // A reversal candidate requires the same explicit reference, account, amount and opposite direction on different dates.
+  const reversalGroups = new Map();
+  for (const row of data) {
+    const reference = cleanText(row.reference), accountCode = cleanText(row.accountCode);
+    const debit = Number(row.debit), credit = Number(row.credit);
+    const direction = debit > TOLERANCE && !(credit > TOLERANCE) ? 'debit'
+      : credit > TOLERANCE && !(debit > TOLERANCE) ? 'credit' : '';
+    const amount = direction === 'debit' ? debit : direction === 'credit' ? credit : 0;
+    if (!reference || !accountCode || !direction || !(amount > 0) || !Number.isFinite(amount) || !/^\\d{4}-\\d{2}-\\d{2}$/.test(String(row.date ?? ''))) continue;
+    const key = [reference, accountCode, roundMoney(amount).toFixed(3)].join('|');
+    const group = reversalGroups.get(key) || [];
+    group.push({ row, direction, amount, timestamp: Date.parse(String(row.date) + 'T00:00:00Z') });
+    reversalGroups.set(key, group);
+  }
+  const reversalPairs = [];
+  const reversalRows = new Map();
+  for (const [key, group] of reversalGroups) {
+    for (let left = 0; left < group.length; left += 1) {
+      for (let right = left + 1; right < group.length; right += 1) {
+        const first = group[left], second = group[right];
+        const daysBetween = Math.abs(second.timestamp - first.timestamp) / 86400000;
+        if (first.direction === second.direction || daysBetween < 1 || daysBetween > 30) continue;
+        const pair = {
+          reference: first.row.reference,
+          accountCode: first.row.accountCode,
+          amount: roundMoney(first.amount),
+          firstRowNumber: first.row.rowNumber,
+          reversalRowNumber: second.row.rowNumber,
+          daysBetween,
+        };
+        const signature = [key, Math.min(Number(pair.firstRowNumber), Number(pair.reversalRowNumber)), Math.max(Number(pair.firstRowNumber), Number(pair.reversalRowNumber))].join('|');
+        if (!reversalPairs.some(existing => existing.signature === signature)) {
+          reversalPairs.push({ ...pair, signature });
+          reversalRows.set(pair.firstRowNumber, first.row);
+          reversalRows.set(pair.reversalRowNumber, second.row);
+        }
+      }
+    }
+  }
+  if (reversalPairs.length) {
+    issues.push({
+      id: 'journal-possible-reversal-pair', severity: 'medium', title: 'حركات متعاكسة قد تمثل عكس قيد',
+      count: reversalRows.size, rowNumbers: [...reversalRows.keys()].sort((a, b) => Number(a) - Number(b)),
+      examples: [...reversalRows.values()].slice(0, 10),
+      pairs: reversalPairs.map(({ signature, ...pair }) => pair),
+      detail: 'وجدت حركات بالمرجع والحساب والمبلغ نفسها لكن بجهة معاكسة خلال 30 يومًا. قد تمثل عكسًا مشروعًا أو حركة مستقلة؛ لا يُجزم بالسبب آليًا.',
+      action: 'اربط الحركة بالقيد الأصلي، وراجع اعتماد العكس والسبب والمستندات وتوقيت التسجيل.',
+    });
+  }
+
   const counts = issues.reduce((out, item) => { out[item.severity] = (out[item.severity] || 0) + item.count; return out; }, {});
   return { scannedCount: data.length, issueCount: issues.reduce((sum, item) => sum + item.count, 0), counts, issues, monthEndSignals: monthEndRows.length, hasRows: data.length > 0 };
 }
@@ -445,6 +516,106 @@ export function buildEvidenceLineage(workpapers, evidence, findings = []) {
  * @param {Array<Record<string, any>>} input.risks
  * @param {Array<Record<string, any>>} input.trialBalance
  */
+
+/**
+ * Builds an inspectable trace graph for the imported journal population.
+ * Only exact normalized document references are used to connect ledger rows to indexed evidence.
+ */
+export function buildAuditEvidenceGraph({ sourceName = '', journalRows = [], journalAnalysis = null, workpapers = [], evidence = [], findings = [] } = {}) {
+  const rows = Array.isArray(journalRows) ? journalRows : [];
+  const issues = Array.isArray(journalAnalysis?.issues) ? journalAnalysis.issues : [];
+  const papers = Array.isArray(workpapers) ? workpapers : [];
+  const docs = Array.isArray(evidence) ? evidence : [];
+  const findingRows = Array.isArray(findings) ? findings : [];
+  const lineage = buildEvidenceLineage(papers, docs, findingRows);
+  const rowsByNumber = new Map(rows.map(row => [Number(row.rowNumber), row]));
+  const evidenceByRef = new Map();
+  for (const item of docs) {
+    const ref = cleanText(item.reference);
+    if (!ref) continue;
+    const values = evidenceByRef.get(ref) || [];
+    values.push(item);
+    evidenceByRef.set(ref, values);
+  }
+  const workpapersByRef = new Map();
+  for (const paper of papers) {
+    const ref = cleanText(paper.ref);
+    if (!ref) continue;
+    const values = workpapersByRef.get(ref) || [];
+    values.push(paper);
+    workpapersByRef.set(ref, values);
+  }
+
+  const issueNodes = issues.map(issueRow => {
+    const rowNumbers = [...new Set((issueRow.rowNumbers || []).map(Number).filter(Number.isFinite))];
+    const sourceRecords = rowNumbers.map(rowNumber => rowsByNumber.get(rowNumber)).filter(Boolean).map(row => ({
+      rowNumber: row.rowNumber,
+      date: row.date,
+      accountCode: row.accountCode,
+      reference: row.reference,
+      counterparty: row.counterparty || '',
+      description: row.description,
+      debit: row.debit,
+      credit: row.credit,
+      raw: row.raw,
+    }));
+    const matches = [];
+    for (const row of sourceRecords) {
+      const ref = cleanText(row.reference);
+      const candidates = ref ? (evidenceByRef.get(ref) || []) : [];
+      for (const doc of candidates) matches.push({ sourceRowNumber: row.rowNumber, reference: row.reference, evidence: doc, matchMethod: 'exact-normalized-reference' });
+    }
+    const uniqueEvidence = [...new Map(matches.map(item => [String(item.evidence.id ?? item.evidence.reference), item.evidence])).values()];
+    const linkedWorkpapers = [...new Map(uniqueEvidence.flatMap(doc => {
+      const ref = cleanText(doc.workpaperRef), candidates = ref ? (workpapersByRef.get(ref) || []) : [];
+      return candidates.length === 1 ? [[String(candidates[0].id), candidates[0]]] : [];
+    })).values()];
+    const linkedFindings = lineage.findingLinks.filter(link =>
+      link.workpaper && linkedWorkpapers.some(paper => paper.id === link.workpaper.id)
+    );
+    const approvals = linkedWorkpapers.map(paper => ({
+      workpaperRef: paper.ref,
+      status: paper.status,
+      approved: paper.status === 'معتمد' && (Array.isArray(paper.history) ? paper.history.some(event => event.status === 'معتمد' || /اعتماد.*ورقة|تغيير الحالة إلى معتمد/.test(String(event.action ?? ''))) : false),
+      reviewer: paper.sourceSnapshotReviewedBy || paper.reviewer || '',
+      snapshotAt: paper.sourceSnapshotAt || '',
+    }));
+    return {
+      id: String(issueRow.id ?? 'test-result'),
+      title: String(issueRow.title ?? issueRow.id ?? 'اختبار'),
+      severity: String(issueRow.severity ?? 'low'),
+      reason: String(issueRow.detail ?? ''),
+      action: String(issueRow.action ?? ''),
+      rowNumbers,
+      sourceRecords,
+      evidenceMatches: matches,
+      linkedEvidenceCount: uniqueEvidence.length,
+      linkedWorkpapers,
+      linkedFindings: linkedFindings.map(link => link.finding),
+      approvals,
+      traceStatus: sourceRecords.length === 0 ? 'test-without-row-level-source' : uniqueEvidence.length === 0 ? 'source-without-indexed-evidence' : linkedWorkpapers.length === 0 ? 'evidence-without-workpaper' : linkedFindings.length === 0 ? 'workpaper-without-finding' : approvals.some(item => item.approved) ? 'trace-with-review-history' : 'trace-needs-review',
+    };
+  });
+  const rowNumbersCoveredByTests = new Set(issueNodes.flatMap(node => node.rowNumbers));
+  const sourceRowsWithoutTest = rows.filter(row => !rowNumbersCoveredByTests.has(Number(row.rowNumber)));
+  const issueNodesWithEvidence = issueNodes.filter(node => node.linkedEvidenceCount > 0).length;
+  const evidenceWithNoWorkpaper = lineage.links.filter(link => link.linked && (!link.workpaper || link.workpaper.status !== 'معتمد')).length;
+  const findingsFullyLinked = lineage.fullyLinkedFindings;
+  return {
+    sourceName,
+    sourceRowCount: rows.length,
+    testedSourceRowCount: rowNumbersCoveredByTests.size,
+    sourceRowsWithoutTestCount: sourceRowsWithoutTest.length,
+    sourceRowsWithoutTest: sourceRowsWithoutTest.slice(0, 100),
+    issueCount: issues.length,
+    issuesWithEvidenceCount: issueNodesWithEvidence,
+    issuesWithoutEvidenceCount: issueNodes.filter(node => node.sourceRecords.length > 0 && node.linkedEvidenceCount === 0).length,
+    evidenceWithNoApprovedWorkpaperCount: evidenceWithNoWorkpaper,
+    findingsCount: lineage.findingsCount,
+    findingsFullyLinked,
+    issueNodes,
+  };
+}
 
 /** Deterministic change detection only; this is not a cryptographic integrity control. */
 export function fingerprintTrialBalanceRows(rows) {
