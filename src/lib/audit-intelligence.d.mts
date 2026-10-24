@@ -11,6 +11,7 @@ export interface AuditIssue {
   examples?: any[];
   clusters?: Array<{ accountCode: string; partyOrDescription: string; totalAmount: number; rowNumbers: number[] }>;
   fields?: string[];
+  pairs?: Array<{ reference: string; accountCode: string; amount: number; firstRowNumber: number; reversalRowNumber: number; daysBetween: number }>;
   state?: 'needs-attention' | 'clear';
 }
 
@@ -163,9 +164,14 @@ export interface JournalAnalysisOptions {
 export function runDataTrustChecks(rows: any[], options?: DataTrustOptions): TrialBalanceCheck;
 export function analyzeJournalEntries(rows: JournalRow[], options?: JournalAnalysisOptions): JournalAnalysis;
 export function fingerprintTrialBalanceRows(rows: any[]): string;
+export interface CopilotAccountSummary { ref: string; accountCode: string; accountName: string; sourceRowNumber: number | null; openingNetJod: number | null; periodDebitJod: number | null; periodCreditJod: number | null; movementNetJod: number | null; closingNetJod: number | null; comparativeNetJod: number | null; varianceJod: number | null; variancePercent: number | null; statementLineKey: string }
+export function summarizeTrialBalanceForCopilot(rows: any[], accountMappings?: Record<string, any>, engagementId?: string, limit?: number): CopilotAccountSummary[];
 export function fingerprintAccountMappings(accountMappings: Record<string, any>, engagementId: string): string;
 export function fingerprintReportConfiguration(config?: { firmName?: string; auditorName?: string; periodEnd?: string; opinion?: string }): string;
 export function buildEvidenceLineage(workpapers: any[], evidence: any[], findings?: any[]): EvidenceLineage;
+export interface AuditEvidenceGraphIssue { id: string; title: string; severity: string; reason: string; action: string; rowNumbers: number[]; sourceRecords: any[]; evidenceMatches: any[]; linkedEvidence: any[]; linkedEvidenceCount: number; linkedWorkpapers: any[]; linkedFindings: any[]; approvals: any[]; traceStatus: string }
+export interface AuditEvidenceGraph { sourceName: string; sourceRowCount: number; scannedSourceRowCount: number; sourceRowsWithIssueCount: number; sourceRowsWithoutDetectedIssueCount: number; sourceRowsWithoutDetectedIssue: any[]; issueCount: number; issuesWithEvidenceCount: number; issuesWithoutEvidenceCount: number; evidenceWithNoApprovedWorkpaperCount: number; findingsCount: number; findingsFullyLinked: number; issueNodes: AuditEvidenceGraphIssue[] }
+export function buildAuditEvidenceGraph(input?: { sourceName?: string; journalRows?: JournalRow[]; journalAnalysis?: JournalAnalysis | null; workpapers?: any[]; evidence?: any[]; findings?: any[] }): AuditEvidenceGraph;
 export function buildQualityShield(input: {
   workpapers?: any[];
   evidence?: any[];

@@ -10,3 +10,61 @@ export function rollForwardWorkpapers(previousPapers: any[], newEngagementId: st
 export function inferBankColumns(headers: string[], savedProfiles?: any[]): any;
 
 export function suggestRiskPbcRequestsFromRisks(risks: any[]): Array<{ title: string; sourceRiskId: string; riskTitle: string; area: string }>;
+
+
+export interface NormalizedInvoiceRecord {
+  invoiceId: string;
+  issueDate: string;
+  issueDateRaw: string;
+  supplierName: string;
+  supplierTaxId: string;
+  currency: string;
+  payableAmount: number | null;
+  taxAmount: number | null;
+  sourceRowNumber: number;
+  sourceFields: { invoice: string; date: string; supplier: string; amount: string; currency: string };
+  invalidAmount: boolean;
+}
+export interface InvoiceRegisterResult {
+  rows: NormalizedInvoiceRecord[];
+  sourceCount: number;
+  fieldsDetected: string[];
+  warnings: string[];
+}
+export interface InvoiceMatchCandidate {
+  method: string;
+  rowNumbers: number[];
+  journalReference: string;
+  transactionDate: string;
+  accountCodes: string[];
+  descriptions: string[];
+  counterpartyNames: string[];
+  debitTotalJod: number;
+  creditTotalJod: number;
+  comparisonAmountJod: number;
+  amountDifferenceJod: number;
+  dateDifferenceDays: number | null;
+  partyMatch: boolean;
+  amountOk: boolean;
+  dateOk: boolean;
+  score: number;
+}
+export interface InvoiceMatchResult {
+  status: string;
+  statusLabel: string;
+  message: string;
+  invoiceId: string;
+  invoiceDate: string;
+  invoiceAmountJod: number | null;
+  currency: string;
+  currencyConfirmed: boolean;
+  toleranceJod: number;
+  dateWindowDays: number;
+  candidates: InvoiceMatchCandidate[];
+  exactReferenceRows?: number;
+}
+export function normalizeInvoiceRegisterRows(records: Array<Record<string, unknown>>): InvoiceRegisterResult;
+export function matchInvoiceToJournal(invoice: Record<string, unknown>, journalRows?: any[], options?: { toleranceJod?: number; dateWindowDays?: number }): InvoiceMatchResult;
+
+export interface InvoiceRegisterBatchResult { invoiceCount: number; journalRowCount: number; matchedCandidateCount: number; conflictCount: number; unmatchedCount: number; statusCounts: Record<string, number>; results: Array<{ invoice: NormalizedInvoiceRecord | Record<string, unknown>; match: InvoiceMatchResult }>; disclaimer: string }
+export function matchInvoiceRegisterToJournal(invoices?: Array<NormalizedInvoiceRecord | Record<string, unknown>>, journalRows?: any[], options?: { toleranceJod?: number; dateWindowDays?: number }): InvoiceRegisterBatchResult;

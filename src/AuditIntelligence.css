@@ -111,3 +111,11 @@
 
 .audit-intel-sheet-select{min-width:240px;max-width:420px;margin:10px 0}
 .audit-intel-sheet-select select{width:100%;}
+
+.audit-intel-source-controls{margin:18px 0;padding:14px;border:1px solid var(--audit-border,#d8d6d0);border-radius:12px;background:var(--audit-surface-soft,#faf9f6)}
+.audit-intel-source-controls .audit-card-head{margin-bottom:10px}
+.audit-intel-source-controls .audit-field{max-width:100%;margin-bottom:10px}
+.audit-intel-lineage-graph{margin-top:16px}
+.audit-intel-lineage-graph .audit-table td{vertical-align:top;min-width:110px}
+.audit-intel-lineage-graph .table-sub{display:block;overflow-wrap:anywhere}
+@media(max-width:700px){.audit-intel-source-controls{padding:10px}.audit-intel-lineage-graph .audit-table{min-width:1000px}}

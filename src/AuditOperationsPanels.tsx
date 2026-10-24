@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import {
   runAdvancedJournalTests, selectAuditSample, financialStatementLines,
   buildDraftFinancialStatements, parseUblInvoiceXml, calculateOfficeMetrics, inferBankColumns,
+  normalizeInvoiceRegisterRows, matchInvoiceToJournal, matchInvoiceRegisterToJournal,
 } from './lib/audit-operations-engine.mjs';
 import { buildDocxBytes } from './lib/docx-export.mjs';
 import { saveLocalEvidenceFile } from './lib/local-evidence-files';
@@ -18,10 +19,12 @@ type Engagement = { id: string; clientId: string; year: string; type: string; fr
 type Client = { id: string; name: string; contact?: string };
 type TBRow = { id: string; engagementId: string; code: string; name: string; openingDebit: number; openingCredit: number; debit: number; credit: number; closingDebit: number; closingCredit: number; source?: string };
 type Evidence = { id: string; engagementId: string; title: string; type: string; reference: string; workpaperRef: string; notes: string; addedAt: string; attachmentId?: string; fileName?: string; fileType?: string; fileSize?: number };
-type JournalRow = { rowNumber: number; date: string; dateRaw: string; description: string; accountCode: string; reference: string; debit: number | null; credit: number | null; amount: number | null; classification: string; raw: Record<string, unknown> };
+type JournalRow = { rowNumber: number; date: string; dateRaw: string; description: string; accountCode: string; reference: string; counterparty?: string; debit: number | null; credit: number | null; amount: number | null; classification: string; raw: Record<string, unknown> };
+type WorkpaperOption = { id: string; engagementId: string; ref: string; title: string; status: string };
+type InvoiceSheet = { name: string; rows: Array<Record<string, unknown>> };
 type Props = {
   engagementId?: string; engagement?: Engagement; client?: Client; trialBalance: TBRow[];
-  journalRows?: JournalRow[]; journalFileName?: string; operations: Operations; vaultPassphrase: string;
+  journalRows?: JournalRow[]; journalFileName?: string; workpapers?: WorkpaperOption[]; operations: Operations; vaultPassphrase: string;
   onOperationsChange: (value: Operations) => void; onAddEvidence: (row: Evidence) => void; onOpenReconciliation: () => void;
 };
 
@@ -92,7 +95,7 @@ function SignaturePad({ value, onChange }: { value: string; onChange: (data: str
 }
 
 export default function AuditOperationsPanels(props: Props) {
-  const { engagementId, engagement, client, trialBalance, journalRows = [], journalFileName = '', operations, vaultPassphrase, onOperationsChange, onAddEvidence, onOpenReconciliation } = props;
+  const { engagementId, engagement, client, trialBalance, journalRows = [], journalFileName = '', workpapers = [], operations, vaultPassphrase, onOperationsChange, onAddEvidence, onOpenReconciliation } = props;
   const [sampleMethod, setSampleMethod] = useState<'random' | 'systematic' | 'mus'>('random');
   const [sampleSize, setSampleSize] = useState('25');
   const [sampleSeed, setSampleSeed] = useState('20261023');
@@ -104,7 +107,21 @@ export default function AuditOperationsPanels(props: Props) {
   const [bankMapping, setBankMapping] = useState<Record<string, string>>({});
   const [bankNotice, setBankNotice] = useState('');
   const [ublInvoice, setUblInvoice] = useState<Row | null>(null);
+  const [ublSourceFile, setUblSourceFile] = useState<File | null>(null);
+  const [ublSaving, setUblSaving] = useState(false);
   const [ublError, setUblError] = useState('');
+  const [ublWorkpaperRef, setUblWorkpaperRef] = useState('');
+  const [invoiceRegisterSource, setInvoiceRegisterSource] = useState<{ fileName: string; file: File; sheets: InvoiceSheet[] } | null>(null);
+  const [invoiceSheetName, setInvoiceSheetName] = useState('');
+  const [invoiceBusy, setInvoiceBusy] = useState(false);
+  const [invoiceImportError, setInvoiceImportError] = useState('');
+  const [invoiceImportNotice, setInvoiceImportNotice] = useState('');
+  const [invoiceWorkpaperRefs, setInvoiceWorkpaperRefs] = useState<Record<string, string>>({});
+  const [invoiceSourceWorkpaperRef, setInvoiceSourceWorkpaperRef] = useState('');
+  const [invoiceSourceEvidenceId, setInvoiceSourceEvidenceId] = useState('');
+  const [invoiceAddedKeys, setInvoiceAddedKeys] = useState<Record<string, boolean>>({});
+  const [invoiceTolerance, setInvoiceTolerance] = useState('0.001');
+  const [invoiceDateWindow, setInvoiceDateWindow] = useState('3');
   const [hours, setHours] = useState('1');
   const [hourlyRate, setHourlyRate] = useState('15.000');
   const [timeDescription, setTimeDescription] = useState('');
@@ -132,6 +149,11 @@ export default function AuditOperationsPanels(props: Props) {
   const currentTime = (operations.timeEntries || []).filter(row => row.engagementId === engagementId);
   const currentInvoices = (operations.officeInvoices || []).filter(row => row.engagementId === engagementId);
   const currentConfirmations = (operations.externalConfirmations || []).filter(row => row.engagementId === engagementId);
+  const currentWorkpapers = useMemo(() => (workpapers || []).filter(row => row.engagementId === engagementId && String(row.ref ?? '').trim()), [workpapers, engagementId]);
+  const selectedInvoiceSheet = useMemo(() => invoiceRegisterSource?.sheets.find(sheet => sheet.name === invoiceSheetName) || null, [invoiceRegisterSource, invoiceSheetName]);
+  const invoiceRegisterData = useMemo(() => selectedInvoiceSheet ? normalizeInvoiceRegisterRows(selectedInvoiceSheet.rows) : null, [selectedInvoiceSheet]);
+  const invoiceRegisterMatches = useMemo(() => invoiceRegisterData ? matchInvoiceRegisterToJournal(invoiceRegisterData.rows, journalRows, { toleranceJod: Number(invoiceTolerance), dateWindowDays: Number(invoiceDateWindow) }) : null, [invoiceRegisterData, journalRows, invoiceTolerance, invoiceDateWindow]);
+  const ublMatch = useMemo(() => ublInvoice ? matchInvoiceToJournal({ invoiceId: ublInvoice.invoiceId, issueDate: ublInvoice.issueDate, supplierName: ublInvoice.supplierName, supplierTaxId: ublInvoice.supplierTaxId, currency: ublInvoice.currency, payableAmount: ublInvoice.payableAmount }, journalRows, { toleranceJod: Number(invoiceTolerance), dateWindowDays: Number(invoiceDateWindow) }) : null, [ublInvoice, journalRows, invoiceTolerance, invoiceDateWindow]);
   const currentFieldRecords = (operations.fieldworkRecords || []).filter((row: Row) => row.engagementId === engagementId).slice(0, 12);
   const sampleHistory = (operations.samplingRuns || []).filter(row => row.engagementId === engagementId).slice(0, 8);
   const journalTests = useMemo(() => journalRows.length ? runAdvancedJournalTests(journalRows) : null, [journalRows]);
@@ -308,23 +330,163 @@ export default function AuditOperationsPanels(props: Props) {
   }
 
   async function importUbl(file?: File) {
-    setUblInvoice(null); setUblError('');
+    setUblInvoice(null); setUblSourceFile(null); setUblError('');
     if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { setUblError('ملف UBL يتجاوز حد 10 ميغابايت.'); return; }
     try {
       const parsed = parseUblInvoiceXml(await file.text());
       setUblInvoice({ ...parsed, sourceName: file.name });
+      setUblSourceFile(file);
+      setUblWorkpaperRef('');
     } catch (error) { setUblError(error instanceof Error ? error.message : 'تعذر تحليل ملف XML.'); }
   }
 
-  function addUblAsEvidence() {
-    if (!ublInvoice || !engagementId) return;
+  async function importInvoiceRegister(file?: File) {
+    setInvoiceImportError(''); setInvoiceImportNotice('');
+    if (!file) return;
+    if (file.size > 30 * 1024 * 1024) { setInvoiceImportError('ملف الفواتير يتجاوز حد 30 ميغابايت.'); return; }
+    const extension = file.name.split('.').pop()?.toLowerCase();
+    if (!['csv', 'xlsx', 'xls'].includes(extension || '')) { setInvoiceImportError('اختر CSV أو Excel بصيغة XLSX/XLS.'); return; }
+    setInvoiceBusy(true);
+    try {
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true, raw: false });
+      const sheets: InvoiceSheet[] = [];
+      let totalSourceRows = 0;
+      for (const name of workbook.SheetNames) {
+        const worksheet = workbook.Sheets[name];
+        if (!worksheet || !worksheet['!ref']) continue;
+        const range = XLSX.utils.decode_range(worksheet['!ref']);
+        const estimatedDataRows = Math.max(0, range.e.r - range.s.r);
+        totalSourceRows += estimatedDataRows;
+        if (totalSourceRows > 10000) throw new Error('تجاوز ملف الفواتير حد 10,000 صف لهذا الاستيراد الآمن. قسّم السجل إلى ملفات أصغر.');
+        const matrix = XLSX.utils.sheet_to_json<unknown[]>(worksheet, { header: 1, defval: '', raw: false, blankrows: true });
+        if (matrix.length < 2) continue;
+        const usedHeaders = new Map<string, number>();
+        const headers = (matrix[0] || []).map((value, index) => {
+          const base = String(value ?? '').trim() || ('Column ' + (index + 1));
+          const count = (usedHeaders.get(base) || 0) + 1;
+          usedHeaders.set(base, count);
+          return count === 1 ? base : base + ' (' + count + ')';
+        });
+        if (!headers.some(header => /invoice|فاتورة|مبلغ|amount|total|الإجمالي|المستحق/i.test(header))) continue;
+        const rows: Array<Record<string, unknown>> = matrix.slice(1).map((values, rowIndex) => {
+          const record: Record<string, unknown> = {};
+          headers.forEach((header, index) => { record[header] = values?.[index] ?? ''; });
+          Object.defineProperty(record, '__sourceRowNumber', { value: range.s.r + rowIndex + 2, enumerable: false });
+          return record;
+        });
+        const normalized = normalizeInvoiceRegisterRows(rows);
+        if (normalized.sourceCount) sheets.push({ name, rows });
+      }
+      if (!sheets.length) throw new Error('لم يتم العثور على ورقة فواتير قابلة للقراءة. تحقق من عناوين رقم الفاتورة والتاريخ والمورد والمبلغ.');
+      setInvoiceRegisterSource({ fileName: file.name, file, sheets });
+      setInvoiceSheetName(sheets[0].name);
+      setInvoiceWorkpaperRefs({});
+      setInvoiceSourceWorkpaperRef('');
+      setInvoiceSourceEvidenceId('');
+      setInvoiceAddedKeys({});
+      setInvoiceImportNotice('تم استيراد عناوين وصفوف سجل الفواتير محليًا؛ اختر الورقة وراجع التعيين والمرشحين قبل ربط أي دليل.');
+    } catch (error) {
+      setInvoiceImportError(error instanceof Error ? error.message : 'تعذر قراءة سجل الفواتير.');
+    } finally { setInvoiceBusy(false); }
+  }
+
+  function normalizedInvoiceRowKey(invoice: { sourceRowNumber?: number; invoiceId?: string }) {
+    return String(invoice.sourceRowNumber ?? '') + '::' + String(invoice.invoiceId ?? '');
+  }
+
+  function resolveUniqueWorkpaper(ref: string) {
+    const normalized = String(ref ?? '').trim().toLocaleLowerCase();
+    const matches = currentWorkpapers.filter(paper => String(paper.ref ?? '').trim().toLocaleLowerCase() === normalized);
+    return matches.length === 1 ? matches[0] : undefined;
+  }
+
+  async function addUblAsEvidence() {
+    if (!ublInvoice || !engagementId || ublSaving) return;
+    const linkedWorkpaper = resolveUniqueWorkpaper(ublWorkpaperRef);
+    if (!linkedWorkpaper) { setUblError('اختر مرجع ورقة عمل موجودًا وفريدًا في هذا الملف قبل فهرسة الفاتورة.'); return; }
+    if (!ublSourceFile) { setUblError('أعد اختيار ملف XML الأصلي قبل فهرسته.'); return; }
+    setUblSaving(true); setUblError('');
+    try {
+      const attachment = await saveLocalEvidenceFile(ublSourceFile, vaultPassphrase);
+      const entry: Evidence = {
+        id: id('evidence-ubl'), engagementId, title: 'فاتورة UBL أصلية: ' + (ublInvoice.invoiceId || ublInvoice.sourceName),
+        type: 'فاتورة مورد / UBL XML', reference: String(ublInvoice.invoiceId || ublInvoice.sourceName || ''),
+        workpaperRef: linkedWorkpaper.ref,
+        notes: JSON.stringify({ invoice: ublInvoice, suggestedMatch: ublMatch ? { status: ublMatch.status, statusLabel: ublMatch.statusLabel, message: ublMatch.message, candidates: ublMatch.candidates.slice(0, 3) } : null, source: 'local UBL XML parser', note: 'تحليل أولي فقط، وليس تصديقًا ضريبيًا أو تحققًا من التوقيع أو تأكيدًا من المورد.' }, null, 2),
+        addedAt: new Date().toISOString(),
+        attachmentId: attachment.id, fileName: attachment.fileName, fileType: attachment.fileType, fileSize: attachment.fileSize,
+      };
+      onAddEvidence(entry);
+      setUblError('حُفظ ملف XML الأصلي مشفرًا محليًا وربط بورقة العمل المختارة. مرشح المطابقة يحتاج مراجعة مستقلة.');
+    } catch (error) {
+      setUblError(error instanceof Error ? error.message : 'تعذر حفظ XML الأصلي في مخزن الأدلة المشفر.');
+    } finally { setUblSaving(false); }
+  }
+
+  async function archiveInvoiceRegisterSource() {
+    if (!invoiceRegisterSource || !engagementId || invoiceSourceEvidenceId) return;
+    const linkedWorkpaper = resolveUniqueWorkpaper(invoiceSourceWorkpaperRef);
+    if (!linkedWorkpaper) { setInvoiceImportError('اختر ورقة عمل ذات مرجع فريد لحفظ سجل الفواتير الأصلي.'); return; }
+    setInvoiceImportError(''); setInvoiceImportNotice('');
+    try {
+      const attachment = await saveLocalEvidenceFile(invoiceRegisterSource.file, vaultPassphrase);
+      const evidence: Evidence = {
+        id: id('evidence-invoice-register'), engagementId,
+        title: 'سجل فواتير أصلي: ' + invoiceRegisterSource.fileName,
+        type: 'سجل مصدر فواتير',
+        reference: invoiceRegisterSource.fileName + (invoiceSheetName ? ' · ' + invoiceSheetName : ''),
+        workpaperRef: linkedWorkpaper.ref,
+        notes: JSON.stringify({
+          sourceFile: invoiceRegisterSource.fileName,
+          selectedSheet: invoiceSheetName,
+          importedInvoiceRows: invoiceRegisterData?.sourceCount ?? 0,
+          detectedFields: invoiceRegisterData?.fieldsDetected ?? [],
+          importWarnings: invoiceRegisterData?.warnings ?? [],
+          matchingSummary: invoiceRegisterMatches ? {
+            invoiceCount: invoiceRegisterMatches.invoiceCount,
+            journalRowCount: invoiceRegisterMatches.journalRowCount,
+            matchedCandidateCount: invoiceRegisterMatches.matchedCandidateCount,
+            conflictCount: invoiceRegisterMatches.conflictCount,
+            unmatchedCount: invoiceRegisterMatches.unmatchedCount,
+            statusCounts: invoiceRegisterMatches.statusCounts,
+          } : null,
+          note: 'السجل الأصلي محفوظ كمرفق مشفر. نتائج المطابقة مجرد مرشحين ولا تمثل اعتمادًا تلقائيًا.',
+        }, null, 2),
+        addedAt: new Date().toISOString(),
+        attachmentId: attachment.id, fileName: attachment.fileName, fileType: attachment.fileType, fileSize: attachment.fileSize,
+      };
+      onAddEvidence(evidence);
+      setInvoiceSourceEvidenceId(attachment.id);
+      setInvoiceImportNotice('حُفظ أصل سجل الفواتير مشفرًا وربط بورقة العمل ' + linkedWorkpaper.ref + '. استخدم رقم الصف والمرجع للتحقق من كل مرشح.');
+    } catch (error) {
+      setInvoiceImportError(error instanceof Error ? error.message : 'تعذر حفظ سجل الفواتير الأصلي مشفرًا.');
+    }
+  }
+
+  function addInvoiceRegisterEvidence(invoice: { invoiceId: string; issueDate: string; issueDateRaw: string; supplierName: string; supplierTaxId: string; currency: string; payableAmount: number | null; taxAmount: number | null; sourceRowNumber: number; sourceFields: Record<string, string>; invalidAmount: boolean }, match: Row) {
+    if (!engagementId || !invoice.invoiceId.trim() || invoice.payableAmount === null || !Number.isFinite(invoice.payableAmount) || invoice.payableAmount <= 0) {
+      setInvoiceImportError('تعذر فهرسة هذه الفاتورة: صحح رقم الفاتورة والمبلغ أولًا.'); return;
+    }
+    const key = normalizedInvoiceRowKey(invoice);
+    const linkedWorkpaper = resolveUniqueWorkpaper(invoiceWorkpaperRefs[key] || '');
+    if (!linkedWorkpaper) { setInvoiceImportError('اختر ورقة عمل موجودة ذات مرجع فريد لفاتورة ' + invoice.invoiceId + '.'); return; }
     const entry: Evidence = {
-      id: id('evidence-ubl'), engagementId, title: 'ملخص فاتورة UBL: ' + (ublInvoice.invoiceId || ublInvoice.sourceName),
-      type: 'بيانات مستخرجة', reference: String(ublInvoice.invoiceId || ublInvoice.sourceName || ''),
-      workpaperRef: '', notes: JSON.stringify(ublInvoice, null, 2), addedAt: new Date().toISOString(),
+      id: id('evidence-invoice'), engagementId,
+      title: 'فاتورة مورد: ' + invoice.invoiceId,
+      type: 'فاتورة مورد / سجل مستورد',
+      reference: invoice.invoiceId,
+      workpaperRef: linkedWorkpaper.ref,
+      notes: JSON.stringify({
+        invoice: { ...invoice, sourceFile: invoiceRegisterSource?.fileName || '', sourceSheet: invoiceSheetName },
+        suggestedLedgerMatch: { status: match.status, statusLabel: match.statusLabel, message: match.message, candidates: match.candidates.slice(0, 5) },
+        note: 'اقتراح ربط فقط؛ لا يمثل تأكيدًا من المورد أو اعتمادًا ضريبيًا أو تسوية تلقائية.',
+      }, null, 2),
+      addedAt: new Date().toISOString(),
     };
     onAddEvidence(entry);
-    setUblError('أضيف ملخص حقول XML كدليل مفهرس. يجب إرفاق المستند الأصلي والتحقق من سلامته يدويًا أيضًا.');
+    setInvoiceAddedKeys(previous => ({ ...previous, [key]: true }));
+    setInvoiceImportNotice('تم فهرسة الفاتورة ' + invoice.invoiceId + ' وربطها بورقة العمل ' + linkedWorkpaper.ref + '. يجب مطابقة الأصل والمبلغ والعملة بصورة مستقلة.');
   }
 
   function addTimeEntry() {
@@ -531,17 +693,85 @@ export default function AuditOperationsPanels(props: Props) {
     </section>
 
     <section className="audit-card audit-operations-section">
-      <div className="audit-card-head"><div><h3>16. فحص فاتورة XML بصيغة UBL 2.1</h3><p className="muted-copy">قراءة محلية لحقول الفاتورة وملخص المبلغ والضريبة. لا يوجد اتصال بنظام الفوترة الوطني ولا إرسال لبيانات JoFotara.</p></div><span className="soft-tag">UBL XML · Local only</span></div>
-      <label className="audit-secondary audit-intel-file">اختيار XML لفحص الحقول<input type="file" accept=".xml,text/xml,application/xml" onChange={event => { void importUbl(event.target.files?.[0]); event.currentTarget.value = ''; }} /></label>
-      {ublError && <p className="muted-copy" role="status">{ublError}</p>}
-      {ublInvoice && <><div className="summary-lines">
-        <div className="summary-line"><span>رقم الفاتورة</span><strong>{ublInvoice.invoiceId || 'غير موجود'}</strong></div>
-        <div className="summary-line"><span>تاريخ الإصدار</span><strong>{ublInvoice.issueDate || 'غير موجود'}</strong></div>
-        <div className="summary-line"><span>المورد / Supplier</span><strong>{ublInvoice.supplierName || 'غير محدد'}</strong></div>
-        <div className="summary-line"><span>الرقم الضريبي</span><strong>{ublInvoice.supplierTaxId || 'غير موجود'}</strong></div>
-        <div className="summary-line"><span>الإجمالي المستحق</span><strong>{money(ublInvoice.payableAmount)}</strong></div>
-        <div className="summary-line"><span>ضريبة</span><strong>{money(ublInvoice.taxAmount)}</strong></div>
-      </div><p className="audit-intel-banner">{ublInvoice.note} {ublInvoice.validation?.readyForHumanReview ? 'الحقول الأولية موجودة للمراجعة.' : 'توجد حقول أساسية ناقصة.'}</p><button className="audit-primary" onClick={addUblAsEvidence}>إضافة ملخص XML إلى الأدلة</button></>}
+      <div className="audit-card-head"><div><h3>16. مطابقة فواتير الموردين مع دفتر الأستاذ</h3><p className="muted-copy">قراءة UBL محليًا واستيراد سجل فواتير CSV/Excel، ثم اقتراح المرشحين من دفتر الأستاذ المستورد. كل نتيجة تحتاج مراجعة بشرية؛ لا يوجد اتصال بـ JoFotara أو تحقق ضريبي آلي.</p></div><span className="soft-tag">Local UBL · Invoice register · JOD</span></div>
+
+      <section className="audit-invoice-match-subsection">
+        <h4>أ. فحص فاتورة أصلية بصيغة UBL 2.1</h4>
+        <label className="audit-secondary audit-intel-file">اختيار XML لفحص الحقول والمطابقة<input type="file" accept=".xml,text/xml,application/xml" onChange={event => { void importUbl(event.target.files?.[0]); event.currentTarget.value = ''; }} /></label>
+        {ublError && <p className="muted-copy" role="status">{ublError}</p>}
+        {ublInvoice && <>
+          <div className="summary-lines">
+            <div className="summary-line"><span>رقم الفاتورة</span><strong>{ublInvoice.invoiceId || 'غير موجود'}</strong></div>
+            <div className="summary-line"><span>تاريخ الإصدار</span><strong>{ublInvoice.issueDate || 'غير موجود'}</strong></div>
+            <div className="summary-line"><span>المورد / Supplier</span><strong>{ublInvoice.supplierName || 'غير محدد'}</strong></div>
+            <div className="summary-line"><span>الرقم الضريبي</span><strong>{ublInvoice.supplierTaxId || 'غير موجود'}</strong></div>
+            <div className="summary-line"><span>الإجمالي المستحق</span><strong>{ublInvoice.payableAmount === null ? 'غير متاح' : money(ublInvoice.payableAmount)}</strong></div>
+            <div className="summary-line"><span>الضريبة</span><strong>{ublInvoice.taxAmount === null ? 'غير متاح' : money(ublInvoice.taxAmount)}</strong></div>
+          </div>
+          <p className="audit-intel-banner">{ublInvoice.note} {ublInvoice.validation?.readyForHumanReview ? 'الحقول الأولية موجودة للمراجعة.' : 'توجد حقول أساسية ناقصة.'}</p>
+          {ublMatch && <div className="audit-invoice-match-result">
+            <div className="audit-invoice-match-status"><strong>اقتراح الربط بدفتر الأستاذ</strong><span className={'audit-pill ' + (['reference-conflict','unsupported-currency','invalid-invoice-amount'].includes(ublMatch.status) ? 'risk-pill' : '')}>{ublMatch.statusLabel}</span></div>
+            <p>{ublMatch.message}</p>
+            {ublMatch.candidates.length > 0 && <div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>طريقة الاقتراح</th><th>صفوف دفتر الأستاذ</th><th>المراجع</th><th>التاريخ</th><th>المبلغ المقارن</th><th>فرق المبلغ</th><th>فرق الأيام</th></tr></thead><tbody>{ublMatch.candidates.slice(0, 5).map((candidate, index) => <tr key={candidate.method + '-' + candidate.rowNumbers.join(',') + '-' + index}><td>{candidate.method}</td><td>{candidate.rowNumbers.join('، ') || '—'}</td><td>{candidate.journalReference || '—'}</td><td>{candidate.transactionDate || '—'}</td><td>{money(candidate.comparisonAmountJod)}</td><td>{money(candidate.amountDifferenceJod)}</td><td>{candidate.dateDifferenceDays ?? 'غير متاح'}</td></tr>)}</tbody></table></div>}
+            {!journalRows.length && <p className="muted-copy">استورد دفتر الأستاذ/القيود في «مركز ذكاء التدقيق» حتى تتوفر بيانات للمقارنة.</p>}
+          </div>}
+          <label className="audit-field"><span>ورقة العمل المرتبطة بهذا الدليل *</span><select value={ublWorkpaperRef} onChange={event => setUblWorkpaperRef(event.target.value)}><option value="">— اختر مرجعًا فريدًا —</option>{currentWorkpapers.map(paper => <option key={paper.id} value={paper.ref}>{paper.ref} · {paper.title} · {paper.status}</option>)}</select></label>
+          <button className="audit-primary" disabled={ublSaving || !resolveUniqueWorkpaper(ublWorkpaperRef)} onClick={() => void addUblAsEvidence()}>{ublSaving ? 'جارٍ تشفير الأصل...' : 'حفظ XML الأصلي مشفّرًا وربطه بالدليل'}</button>
+        </>}
+        {!currentWorkpapers.length && <p className="muted-copy">أنشئ ورقة عمل في ملف التدقيق أولًا؛ لا يسمح Ledgerly بفهرسة الفاتورة دون مرجع ورقة عمل فريد.</p>}
+      </section>
+
+      <section className="audit-invoice-match-subsection">
+        <h4>ب. استيراد سجل فواتير كامل (CSV / Excel)</h4>
+        <p className="muted-copy">يُقرأ السجل في المتصفح فقط، حتى 10,000 صف لكل استيراد. تُستخدم مراجع الفواتير والمبالغ والتواريخ والطرف المقابل لتكوين مرشحين؛ تُحفظ نسخة المصدر المشفّرة فقط عند الضغط على زر الحفظ أدناه.</p>
+        <label className="audit-secondary audit-intel-file">اختيار سجل الفواتير<input type="file" accept=".csv,.xlsx,.xls" onChange={event => { void importInvoiceRegister(event.target.files?.[0]); event.currentTarget.value = ''; }} /></label>
+        {invoiceBusy && <p className="muted-copy">جارٍ قراءة الفواتير وإنشاء فهرس المقارنة المحلي…</p>}
+        {invoiceImportError && <p className="audit-warning" role="alert">{invoiceImportError}</p>}
+        {invoiceImportNotice && <p className="muted-copy" role="status">{invoiceImportNotice}</p>}
+        {invoiceRegisterSource && <>
+          <p className="muted-copy">{invoiceRegisterSource.fileName} · {invoiceRegisterSource.sheets.length} ورقة متاحة</p>
+          <div className="audit-intel-screening-options">
+            <label className="audit-field"><span>ورقة المصدر</span><select value={invoiceSheetName} onChange={event => { setInvoiceSheetName(event.target.value); setInvoiceAddedKeys({}); }}>{invoiceRegisterSource.sheets.map(sheet => <option key={sheet.name} value={sheet.name}>{sheet.name}</option>)}</select></label>
+            <label className="audit-field"><span>هامش فرق المبلغ (د.أ)</span><select value={invoiceTolerance} onChange={event => setInvoiceTolerance(event.target.value)}><option value="0">0.000 — تطابق دقيق</option><option value="0.001">0.001</option><option value="0.005">0.005</option><option value="0.01">0.010</option><option value="0.05">0.050</option></select></label>
+            <label className="audit-field"><span>نافذة فرق التاريخ</span><select value={invoiceDateWindow} onChange={event => setInvoiceDateWindow(event.target.value)}><option value="0">نفس اليوم</option><option value="1">± يوم</option><option value="3">± 3 أيام</option><option value="7">± 7 أيام</option><option value="30">± 30 يومًا</option></select></label>
+          </div>
+          {invoiceRegisterData && invoiceRegisterMatches && <>
+            <div className="audit-intel-kpis audit-intel-kpis-small">
+              <div className="audit-intel-kpi"><span>صفوف فواتير قابلة للقراءة</span><strong>{invoiceRegisterData.sourceCount}</strong><small>في الورقة المختارة</small></div>
+              <div className="audit-intel-kpi"><span>مرشحات بها اقتراح</span><strong>{invoiceRegisterMatches.matchedCandidateCount}</strong><small>ليست مطابقة معتمدة</small></div>
+              <div className="audit-intel-kpi"><span>تعارضات / عملة غير مدعومة</span><strong>{invoiceRegisterMatches.conflictCount}</strong><small>تحتاج تحققًا</small></div>
+              <div className="audit-intel-kpi"><span>بلا مرشح</span><strong>{invoiceRegisterMatches.unmatchedCount}</strong><small>تحقق من المصدر والنطاق</small></div>
+            </div>
+            {invoiceRegisterData.warnings.length > 0 && <div className="audit-warning"><strong>ملاحظات تعيين الأعمدة</strong><ul>{invoiceRegisterData.warnings.map((warning, index) => <li key={index + '-' + warning}>{warning}</li>)}</ul></div>}
+            {!journalRows.length && <p className="audit-warning">لا يوجد دفتر أستاذ مستورد للمقارنة. استورد ملف القيود في مركز ذكاء التدقيق حتى تبدأ المطابقة.</p>}
+            {invoiceRegisterMatches.results.length > 0 && <div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>صف المصدر / الفاتورة</th><th>التاريخ</th><th>المورد</th><th>العملة والمبلغ</th><th>مرشح دفتر الأستاذ</th><th>فرق المبلغ</th><th>ورقة العمل</th><th>فهرسة الدليل</th></tr></thead><tbody>
+              {invoiceRegisterMatches.results.slice(0, 100).map(({ invoice: invoiceValue, match }, index) => {
+                const invoice = invoiceValue as any;
+                const key = normalizedInvoiceRowKey(invoice);
+                const candidate = match.candidates[0];
+                const alreadyAdded = Boolean(invoiceAddedKeys[key]);
+                return <tr key={key + '-' + index}>
+                  <td className="cell-strong">{invoice.invoiceId || 'بدون رقم'}<small className="table-sub">صف المصدر {invoice.sourceRowNumber ?? '—'}</small></td>
+                  <td>{invoice.issueDate || invoice.issueDateRaw || '—'}</td>
+                  <td>{invoice.supplierName || '—'}<small className="table-sub">{invoice.supplierTaxId || ''}</small></td>
+                  <td>{invoice.currency || 'عملة غير محددة'}<small className="table-sub">{invoice.payableAmount === null ? 'مبلغ غير صالح/ناقص' : money(invoice.payableAmount)}</small></td>
+                  <td><span className={'audit-pill ' + (['reference-conflict','unsupported-currency','invalid-invoice-amount'].includes(match.status) ? 'risk-pill' : '')}>{match.statusLabel}</span><small className="table-sub">{candidate ? 'الصفوف: ' + candidate.rowNumbers.join('، ') + (candidate.journalReference ? ' · ' + candidate.journalReference : '') : match.message}</small></td>
+                  <td>{candidate ? money(candidate.amountDifferenceJod) : '—'}</td>
+                  <td><select aria-label={'ورقة العمل للفاتورة ' + invoice.invoiceId} value={invoiceWorkpaperRefs[key] || ''} onChange={event => setInvoiceWorkpaperRefs(previous => ({ ...previous, [key]: event.target.value }))}><option value="">— اختيار —</option>{currentWorkpapers.map(paper => <option key={paper.id} value={paper.ref}>{paper.ref} · {paper.status}</option>)}</select></td>
+                  <td><button className="audit-text-button" disabled={alreadyAdded || !resolveUniqueWorkpaper(invoiceWorkpaperRefs[key] || '') || invoice.payableAmount === null} onClick={() => addInvoiceRegisterEvidence(invoice, match)}>{alreadyAdded ? 'فُهرست' : 'فهرسة مرشح'}</button></td>
+                </tr>;
+              })}
+            </tbody></table></div>}
+            {invoiceRegisterMatches.results.length > 100 && <p className="muted-copy">تم فحص جميع {invoiceRegisterMatches.results.length} سجلًا؛ الجدول يعرض أول 100 صف فقط لتبقى الواجهة سريعة.</p>}
+            <div className="stack-actions">
+              <button className="audit-secondary" onClick={() => downloadCSV('ledgerly-invoice-ledger-match.csv', [['invoice_id','source_row','invoice_date','supplier','currency','invoice_amount_jod','status','status_label','candidate_row_numbers','journal_reference','candidate_amount_jod','amount_difference_jod','date_difference_days'], ...invoiceRegisterMatches.results.map(({ invoice: invoiceValue, match }) => { const invoice = invoiceValue as any; const candidate = match.candidates[0]; return [invoice.invoiceId, invoice.sourceRowNumber, invoice.issueDate, invoice.supplierName, invoice.currency, invoice.payableAmount, match.status, match.statusLabel, candidate?.rowNumbers.join(';') || '', candidate?.journalReference || '', candidate?.comparisonAmountJod ?? '', candidate?.amountDifferenceJod ?? '', candidate?.dateDifferenceDays ?? '']; })])}>تصدير نتائج المرشحين CSV</button>
+              <label className="audit-field"><span>ورقة العمل لأصل السجل *</span><select value={invoiceSourceWorkpaperRef} onChange={event => setInvoiceSourceWorkpaperRef(event.target.value)}><option value="">— اختر ورقة العمل —</option>{currentWorkpapers.map(paper => <option key={paper.id} value={paper.ref}>{paper.ref} · {paper.title} · {paper.status}</option>)}</select></label>
+              <button className="audit-primary" disabled={Boolean(invoiceSourceEvidenceId) || !resolveUniqueWorkpaper(invoiceSourceWorkpaperRef) || !invoiceRegisterSource} onClick={() => void archiveInvoiceRegisterSource()}>{invoiceSourceEvidenceId ? 'حُفظ أصل السجل مشفّرًا' : 'حفظ أصل سجل الفواتير مشفّرًا وربطه'}</button>
+            </div>
+          </>}
+        </>}
+        <p className="audit-intel-footnote">{invoiceRegisterMatches?.disclaimer || 'استيراد الفواتير محلي فقط؛ لا يوجد اتصال بنظام JoFotara أو تأكيد خارجي من المورد.'} يُحفظ أصل سجل الفواتير مرفقًا مشفرًا فقط عند الضغط على زر الحفظ. لا تغيّر أي اقتراحات قيودًا أو أرصدة، ولا تثبت صحة فاتورة أو كفاية الدليل.</p>
+      </section>
     </section>
 
     <section className="audit-card audit-operations-section">

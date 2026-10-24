@@ -13,7 +13,7 @@ import { auditChainCsv, sealNewAuditEvents, verifyAuditChain } from './lib/audit
 import { deleteLocalEvidenceFile, getLocalEvidenceFile, saveLocalEvidenceFile } from './lib/local-evidence-files';
 import { fromFils, toFils, parseJodAmount } from './lib/jod-money.mjs';
 import { validateLocalWorkpaperTransition } from './lib/audit-operations-engine.mjs';
-import { evaluateEngagementClosure, fingerprintTrialBalanceRows } from './lib/audit-intelligence.mjs';
+import { evaluateEngagementClosure, fingerprintTrialBalanceRows, summarizeTrialBalanceForCopilot } from './lib/audit-intelligence.mjs';
 import { MAX_IMPORT_FILE_BYTES, MAX_WORKSHEET_ROWS, worksheetDimensionIssue, matrixDimensionIssue } from './lib/import-safety.mjs';
 
 const Reconciliation = lazy(() => import('./Reconciliation'));
@@ -275,7 +275,8 @@ function App() {
     amount:issue.amount,
     accountCode:typeof issue.code==='string'?issue.code:'',
     sourceRowNumber:db.trialBalance.find(row=>row.id===issue.rowId)?.sourceRowNumber??null
-   }))
+   })),
+   accounts:summarizeTrialBalanceForCopilot(scoped(db.trialBalance),db.operations.accountMappings,activeEngagement?.id||'',20)
   }
  }),[db,activeEngagement,tbAnalytics,evidenceTraceability]);
  const dashboardSignals = useMemo(()=>{

@@ -227,6 +227,337 @@ export function parseUblInvoiceXml(xml) {
   return result;
 }
 
+
+function normalizeInvoiceDate(value) {
+  const valid = (year, month, day) => {
+    if (![year, month, day].every(Number.isInteger) || year < 1 || year > 9999 || month < 1 || month > 12 || day < 1 || day > 31) return '';
+    const date = new Date(Date.UTC(year, month - 1, day));
+    return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+      ? String(year).padStart(4, '0') + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0')
+      : '';
+  };
+  if (value instanceof Date && Number.isFinite(value.getTime())) {
+    return valid(value.getUTCFullYear(), value.getUTCMonth() + 1, value.getUTCDate());
+  }
+  const text = normText(value);
+  let match = text.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:$|[t\s])/);
+  if (match) return valid(Number(match[1]), Number(match[2]), Number(match[3]));
+  match = text.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})(?:$|[t\s])/);
+  if (match) return valid(Number(match[3]), Number(match[2]), Number(match[1]));
+  const parsed = new Date(String(value ?? ''));
+  if (!Number.isFinite(parsed.getTime())) return '';
+  return valid(parsed.getUTCFullYear(), parsed.getUTCMonth() + 1, parsed.getUTCDate());
+}
+
+function normalizedInvoiceReference(value) {
+  return normText(value).replace(/[^\p{L}\p{N}]/gu, '');
+}
+
+function invoiceHeaderKey(value) {
+  return normText(value).replace(/[\s_.\-\/\\:،,()]+/g, '');
+}
+
+/** Normalize a supplier-invoice register exported as CSV/XLSX into a small, inspectable schema. */
+export function normalizeInvoiceRegisterRows(records) {
+  if (!Array.isArray(records) || !records.length) {
+    return { rows: [], sourceCount: 0, fieldsDetected: [], warnings: ['ملف الفواتير لا يحتوي صفوف بيانات.'] };
+  }
+  const headers = Array.from(new Set(records.flatMap(row => Object.keys(row || {}))));
+  const find = aliases => {
+    const normalized = aliases.map(invoiceHeaderKey);
+    const exact = headers.find(header => normalized.includes(invoiceHeaderKey(header)));
+    if (exact) return exact;
+    return headers.find(header => normalized.some(alias => alias.length >= 4 && invoiceHeaderKey(header).includes(alias)));
+  };
+  const invoiceH = find(['invoice id', 'invoice no', 'invoice number', 'invoice reference', 'رقم الفاتورة', 'رقم فاتورة', 'رقم المستند']);
+  const dateH = find(['issue date', 'invoice date', 'document date', 'date', 'تاريخ الإصدار', 'تاريخ الفاتورة', 'تاريخ المستند', 'التاريخ']);
+  const supplierH = find(['supplier name', 'supplier', 'vendor name', 'vendor', 'counterparty', 'اسم المورد', 'المورد', 'اسم البائع', 'الطرف المقابل']);
+  const taxIdH = find(['supplier tax id', 'tax id', 'vat number', 'tax number', 'الرقم الضريبي للمورد', 'رقم ضريبة المورد', 'الرقم الضريبي']);
+  const amountH = find(['payable amount', 'amount due', 'invoice total', 'gross total', 'total amount', 'payable', 'إجمالي الفاتورة', 'المبلغ الإجمالي', 'الإجمالي المستحق', 'المجموع الكلي', 'إجمالي']);
+  const taxH = find(['tax amount', 'tax total', 'vat amount', 'ضريبة الفاتورة', 'قيمة الضريبة', 'الضريبة']);
+  const currencyH = find(['currency', 'currency code', 'العملة', 'رمز العملة']);
+  const warnings = [];
+  if (!invoiceH) warnings.push('لم يتم اكتشاف عمود رقم فاتورة واضح.');
+  if (!dateH) warnings.push('لم يتم اكتشاف عمود تاريخ فاتورة واضح.');
+  if (!supplierH) warnings.push('لم يتم اكتشاف اسم مورد أو طرف مقابل.');
+  if (!amountH) warnings.push('لم يتم اكتشاف عمود إجمالي مستحق واضح.');
+  const rows = records.map((raw, index) => {
+    const get = header => header ? raw?.[header] : undefined;
+    const amountRaw = get(amountH);
+    const taxRaw = get(taxH);
+    const amount = amountRaw === undefined || amountRaw === null || String(amountRaw).trim() === '' ? null : parseJodAmount(amountRaw);
+    const tax = taxRaw === undefined || taxRaw === null || String(taxRaw).trim() === '' ? null : parseJodAmount(taxRaw);
+    return {
+      invoiceId: String(get(invoiceH) ?? '').trim(),
+      issueDate: normalizeInvoiceDate(get(dateH)),
+      issueDateRaw: String(get(dateH) ?? ''),
+      supplierName: String(get(supplierH) ?? '').trim(),
+      supplierTaxId: String(get(taxIdH) ?? '').trim(),
+      currency: String(get(currencyH) ?? '').trim().toUpperCase(),
+      payableAmount: amount,
+      taxAmount: tax,
+      sourceRowNumber: Number.isInteger(Number(raw?.__sourceRowNumber)) ? Number(raw.__sourceRowNumber) : index + 2,
+      sourceFields: { invoice: invoiceH || '', date: dateH || '', supplier: supplierH || '', amount: amountH || '', currency: currencyH || '' },
+      invalidAmount: Boolean(amountRaw !== undefined && amountRaw !== null && String(amountRaw).trim() !== '' && amount === null),
+    };
+  }).filter(row => row.invoiceId || row.supplierName || row.payableAmount !== null);
+  return {
+    rows,
+    sourceCount: rows.length,
+    fieldsDetected: [invoiceH, dateH, supplierH, taxIdH, amountH, taxH, currencyH].filter(Boolean),
+    warnings,
+  };
+}
+
+/**
+ * Suggests candidate matches between an invoice and journal rows.
+ * It never marks an invoice as verified and never modifies accounting data.
+ */
+export function matchInvoiceToJournal(invoice, journalRows = [], options = {}) {
+  const rows = Array.isArray(journalRows) ? journalRows : [];
+  const invoiceId = String(invoice?.invoiceId ?? invoice?.invoiceNo ?? invoice?.reference ?? '').trim();
+  const invoiceRefKey = normalizedInvoiceReference(invoiceId);
+  const supplierName = normText(invoice?.supplierName ?? invoice?.vendorName ?? invoice?.counterparty ?? '');
+  const invoiceAmountRaw = invoice?.payableAmount ?? invoice?.totalJod ?? invoice?.totalAmount ?? invoice?.amount;
+  const invoiceAmount = invoiceAmountRaw === null || invoiceAmountRaw === undefined || String(invoiceAmountRaw).trim() === ''
+    ? null : parseJodAmount(invoiceAmountRaw);
+  const invoiceDate = normalizeInvoiceDate(invoice?.issueDate ?? invoice?.date);
+  const currency = String(invoice?.currency ?? '').trim().toUpperCase();
+  const confirmedJod = ['JOD', 'JD', 'JORDANIAN DINAR', 'JORDANIAN DINARS'].includes(currency);
+  const currencyUnconfirmed = !currency;
+  const toleranceRaw = Number(options.toleranceJod);
+  const toleranceJod = Number.isFinite(toleranceRaw) && toleranceRaw >= 0 ? Math.min(toleranceRaw, 1000) : 0.001;
+  const windowRaw = Number(options.dateWindowDays);
+  const dateWindowDays = Number.isFinite(windowRaw) ? Math.max(0, Math.min(60, Math.trunc(windowRaw))) : 3;
+  const round = value => roundJod(value);
+  const dateDiff = date => {
+    if (!invoiceDate || !/^\d{4}-\d{2}-\d{2}$/.test(String(date ?? ''))) return null;
+    return Math.round((Date.parse(String(date) + 'T00:00:00Z') - Date.parse(invoiceDate + 'T00:00:00Z')) / 86400000);
+  };
+  const rowAmount = row => {
+    const debit = parseJodAmount(row?.debit), credit = parseJodAmount(row?.credit);
+    const hasDebitCreditColumns = (row?.debit !== undefined && row?.debit !== null && String(row.debit).trim() !== '') || (row?.credit !== undefined && row?.credit !== null && String(row.credit).trim() !== '');
+    if (hasDebitCreditColumns) return Math.max(Math.abs(debit ?? 0), Math.abs(credit ?? 0));
+    return Math.abs(parseJodAmount(row?.amount) ?? 0);
+  };
+  const rowPartyMatch = row => {
+    if (!supplierName) return false;
+    const party = normText(row?.counterparty ?? row?.supplierName ?? row?.party ?? '');
+    const description = normText(row?.description ?? '');
+    const idInDescription = invoiceRefKey && normalizedInvoiceReference(description).includes(invoiceRefKey);
+    if (idInDescription) return true;
+    if (party && (party === supplierName || party.includes(supplierName) || supplierName.includes(party))) return true;
+    const targetTokens = supplierName.split(/\s+/).filter(token => token.length >= 4);
+    const candidateTokens = new Set((party + ' ' + description).split(/\s+/).filter(token => token.length >= 4));
+    return targetTokens.some(token => candidateTokens.has(token));
+  };
+  const base = { invoiceId, invoiceDate, invoiceAmountJod: invoiceAmount, currency, currencyConfirmed: confirmedJod, toleranceJod, dateWindowDays };
+  if (!invoiceAmount || !Number.isFinite(invoiceAmount) || invoiceAmount <= 0) {
+    return { ...base, status: 'invalid-invoice-amount', statusLabel: 'مبلغ الفاتورة غير صالح', message: 'تعذر تفسير إجمالي الفاتورة كمبلغ موجب. صحح الحقل قبل المقارنة.', candidates: [] };
+  }
+  if (currency && !confirmedJod) {
+    return { ...base, status: 'unsupported-currency', statusLabel: 'عملة غير مدعومة للمقارنة', message: 'دفتر الأستاذ في هذه المقارنة يعامل المبالغ كدنانير أردنية. حوّل القيم وفق مصدر موثوق أو استخدم فاتورة JOD قبل المطابقة.', candidates: [] };
+  }
+
+  const exactRows = invoiceRefKey ? rows.filter(row => normalizedInvoiceReference(row?.reference) === invoiceRefKey) : [];
+  const candidates = [];
+  if (exactRows.length) {
+    const groups = new Map();
+    for (const row of exactRows) {
+      const transactionDate = normalizeInvoiceDate(row.date);
+      const groupKey = transactionDate || '(تاريخ غير واضح)';
+      const group = groups.get(groupKey) || [];
+      group.push(row); groups.set(groupKey, group);
+    }
+    for (const [groupDate, groupRows] of groups) {
+      const debitTotal = round(groupRows.reduce((sum, row) => sum + Math.max(0, parseJodAmount(row.debit) ?? 0), 0));
+      const creditTotal = round(groupRows.reduce((sum, row) => sum + Math.max(0, parseJodAmount(row.credit) ?? 0), 0));
+      const amountTotal = round(Math.max(debitTotal, creditTotal, ...groupRows.map(rowAmount)));
+      const amountDifference = round(amountTotal - invoiceAmount);
+      const differenceDays = dateDiff(groupDate);
+      const amountOk = Math.abs(amountDifference) <= toleranceJod;
+      const dateOk = differenceDays === null || Math.abs(differenceDays) <= dateWindowDays;
+      candidates.push({
+        method: 'exact-reference',
+        rowNumbers: groupRows.map(row => row.rowNumber).filter(Number.isFinite),
+        journalReference: String(groupRows[0]?.reference ?? ''),
+        transactionDate: groupDate === '(تاريخ غير واضح)' ? '' : groupDate,
+        accountCodes: [...new Set(groupRows.map(row => String(row.accountCode ?? '').trim()).filter(Boolean))],
+        descriptions: [...new Set(groupRows.map(row => String(row.description ?? '').trim()).filter(Boolean))],
+        counterpartyNames: [...new Set(groupRows.map(row => String(row.counterparty ?? '').trim()).filter(Boolean))],
+        debitTotalJod: debitTotal, creditTotalJod: creditTotal, comparisonAmountJod: amountTotal,
+        amountDifferenceJod: amountDifference, dateDifferenceDays: differenceDays,
+        partyMatch: groupRows.some(rowPartyMatch), amountOk, dateOk,
+        score: (amountOk ? 5 : 0) + (dateOk ? 2 : 0) + (groupRows.some(rowPartyMatch) ? 1 : 0),
+      });
+    }
+    candidates.sort((a, b) => b.score - a.score);
+    const valid = candidates.filter(candidate => candidate.amountOk && candidate.dateOk);
+    let status = valid.length === 1 ? 'reference-amount-candidate' : valid.length > 1 ? 'ambiguous-reference-candidate' : 'reference-conflict';
+    let statusLabel = valid.length === 1 ? 'تطابق مرجعي ومبلغ مقترح' : valid.length > 1 ? 'أكثر من مرشح بنفس المرجع' : 'تعارض في المرجع أو المبلغ أو التاريخ';
+    let message = valid.length === 1
+      ? 'المرجع والمبلغ والتاريخ ضمن هامش الفحص؛ راجع المستند الأصلي والقيد قبل اعتماد المطابقة.'
+      : valid.length > 1
+        ? 'ظهر أكثر من تجميع مستوفٍ للمرجع والمبلغ والتاريخ؛ يلزم تحديد القيد المقصود يدويًا.'
+        : 'وجد مرجع مطابق لكن المبلغ أو التاريخ خارج هامش الفحص. لا يُعتمد التطابق.';
+    if (currencyUnconfirmed) { message += ' العملة في الفاتورة غير محددة، فتحقق منها يدويًا.'; statusLabel += ' · العملة غير مؤكدة'; }
+    return { ...base, status, statusLabel, message, candidates: candidates.slice(0, 8), exactReferenceRows: exactRows.length };
+  }
+
+  const direct = [];
+  for (const row of rows) {
+    const amountJod = round(rowAmount(row));
+    if (!(amountJod > 0) || Math.abs(amountJod - invoiceAmount) > toleranceJod) continue;
+    const differenceDays = dateDiff(row.date);
+    if (differenceDays !== null && Math.abs(differenceDays) > dateWindowDays) continue;
+    const partyMatch = rowPartyMatch(row);
+    const description = normText(row.description ?? '');
+    const reference = String(row.reference ?? '');
+    const idMentioned = invoiceRefKey && normalizedInvoiceReference(description).includes(invoiceRefKey);
+    if (supplierName && row.counterparty && !partyMatch && !idMentioned) continue;
+    const score = 5 + (differenceDays === null ? 0 : 2) + (partyMatch ? 4 : 0) + (idMentioned ? 5 : 0);
+    direct.push({
+      method: partyMatch ? 'amount-date-party' : idMentioned ? 'invoice-id-in-description' : 'amount-date-only',
+      rowNumbers: [row.rowNumber].filter(Number.isFinite), journalReference: reference,
+      transactionDate: normalizeInvoiceDate(row.date), accountCodes: [String(row.accountCode ?? '').trim()].filter(Boolean),
+      descriptions: [String(row.description ?? '').trim()].filter(Boolean),
+      counterpartyNames: [String(row.counterparty ?? '').trim()].filter(Boolean),
+      debitTotalJod: round(Math.max(0, parseJodAmount(row.debit) ?? 0)),
+      creditTotalJod: round(Math.max(0, parseJodAmount(row.credit) ?? 0)),
+      comparisonAmountJod: amountJod, amountDifferenceJod: round(amountJod - invoiceAmount),
+      dateDifferenceDays: differenceDays, partyMatch, amountOk: true, dateOk: true, score,
+    });
+  }
+  // Try conservative one-to-many grouping only when supplier and date both identify a narrow subset.
+  if (supplierName && invoiceDate) {
+    for (const direction of ['debit', 'credit']) {
+      const members = rows.filter(row => {
+        const value = parseJodAmount(row?.[direction]);
+        const other = parseJodAmount(row?.[direction === 'debit' ? 'credit' : 'debit']);
+        const days = dateDiff(row.date);
+        return value !== null && value > 0 && !(other !== null && other > toleranceJod) &&
+          days !== null && Math.abs(days) <= dateWindowDays && rowPartyMatch(row);
+      });
+      if (members.length < 2) continue;
+      const total = round(members.reduce((sum, row) => sum + Math.max(0, parseJodAmount(row[direction]) ?? 0), 0));
+      if (Math.abs(total - invoiceAmount) > toleranceJod) continue;
+      direct.push({
+        method: 'supplier-date-aggregate', rowNumbers: members.map(row => row.rowNumber).filter(Number.isFinite),
+        journalReference: [...new Set(members.map(row => String(row.reference ?? '').trim()).filter(Boolean))].join(', '),
+        transactionDate: invoiceDate, accountCodes: [...new Set(members.map(row => String(row.accountCode ?? '').trim()).filter(Boolean))],
+        descriptions: [...new Set(members.map(row => String(row.description ?? '').trim()).filter(Boolean))],
+        counterpartyNames: [...new Set(members.map(row => String(row.counterparty ?? '').trim()).filter(Boolean))],
+        debitTotalJod: direction === 'debit' ? total : 0, creditTotalJod: direction === 'credit' ? total : 0,
+        comparisonAmountJod: total, amountDifferenceJod: round(total - invoiceAmount), dateDifferenceDays: 0,
+        partyMatch: true, amountOk: true, dateOk: true, score: 8,
+      });
+    }
+  }
+  const unique = [...new Map(direct.map(candidate => [candidate.method + '|' + candidate.rowNumbers.join(',') + '|' + candidate.journalReference, candidate])).values()]
+    .sort((a, b) => b.score - a.score || Math.abs(a.dateDifferenceDays ?? 0) - Math.abs(b.dateDifferenceDays ?? 0));
+  let status = unique.length === 0 ? 'unmatched' : unique.length === 1 ? 'possible-match-needs-review' : 'ambiguous-candidate';
+  let statusLabel = unique.length === 0 ? 'لم يُعثر على مرشح' : unique.length === 1 ? 'مرشح يحتاج مراجعة' : 'مرشحون متعددون';
+  let message = unique.length === 0
+    ? 'لم يُعثر على مرشح حسب المبلغ والتاريخ والطرف المقابل. تحقق من نطاق دفتر الأستاذ والمرجع والعملة.'
+    : unique.length === 1
+      ? 'المبلغ قريب ضمن هامش الفحص؛ لا يوجد مرجع مستند مطابق، لذا يلزم تأكيد يدوي قبل ربطه.'
+      : 'يوجد أكثر من مرشح؛ لا يستطيع النظام اختيار الحركة الصحيحة تلقائيًا.';
+  if (currencyUnconfirmed) { message += ' العملة في الفاتورة غير محددة، فتحقق منها يدويًا.'; statusLabel += ' · العملة غير مؤكدة'; }
+  return { ...base, status, statusLabel, message, candidates: unique.slice(0, 8), exactReferenceRows: 0 };
+}
+
+
+/**
+ * Indexes the ledger once, then returns review suggestions for each invoice.
+ * No match is ever promoted to an approved reconciliation automatically.
+ */
+export function matchInvoiceRegisterToJournal(invoices = [], journalRows = [], options = {}) {
+  const bills = Array.isArray(invoices) ? invoices : [];
+  const ledger = Array.isArray(journalRows) ? journalRows : [];
+  const toleranceRaw = Number(options.toleranceJod);
+  const toleranceJod = Number.isFinite(toleranceRaw) && toleranceRaw >= 0 ? Math.min(toleranceRaw, 5) : 0.001;
+  const windowRaw = Number(options.dateWindowDays);
+  const dateWindowDays = Number.isFinite(windowRaw) ? Math.max(0, Math.min(60, Math.trunc(windowRaw))) : 3;
+  const byReference = new Map();
+  const byAmountFils = new Map();
+  const byTokenAndDate = new Map();
+  const rowAmounts = new Map();
+
+  const pushMap = (map, key, row) => {
+    if (!key) return;
+    const list = map.get(key) || [];
+    list.push(row); map.set(key, list);
+  };
+  const getAmount = row => {
+    const debit = parseJodAmount(row?.debit), credit = parseJodAmount(row?.credit);
+    const hasDebitCreditColumns = (row?.debit !== undefined && row?.debit !== null && String(row.debit).trim() !== '') || (row?.credit !== undefined && row?.credit !== null && String(row.credit).trim() !== '');
+    if (hasDebitCreditColumns) return Math.max(Math.abs(debit ?? 0), Math.abs(credit ?? 0));
+    return Math.abs(parseJodAmount(row?.amount) ?? 0);
+  };
+  for (const row of ledger) {
+    const reference = normalizedInvoiceReference(row?.reference);
+    if (reference) pushMap(byReference, reference, row);
+    const amount = getAmount(row);
+    if (Number.isFinite(amount) && amount > 0) {
+      const fils = Math.round(roundJod(amount) * 1000);
+      pushMap(byAmountFils, String(fils), row);
+      rowAmounts.set(row, amount);
+    }
+    const date = normalizeInvoiceDate(row?.date);
+    if (date) {
+      const partyAndDescription = normText(String(row?.counterparty ?? row?.supplierName ?? '') + ' ' + String(row?.description ?? ''));
+      for (const token of new Set(partyAndDescription.split(/\s+/).filter(part => part.length >= 3))) pushMap(byTokenAndDate, token + '|' + date, row);
+    }
+  }
+
+  const results = bills.map(invoice => {
+    const reference = normalizedInvoiceReference(invoice?.invoiceId ?? invoice?.invoiceNo ?? invoice?.reference ?? '');
+    let candidates = reference ? (byReference.get(reference) || []) : [];
+    if (!candidates.length) {
+      const set = new Set();
+      const amountRaw = invoice?.payableAmount ?? invoice?.totalJod ?? invoice?.totalAmount ?? invoice?.amount;
+      const amount = amountRaw === null || amountRaw === undefined || String(amountRaw).trim() === '' ? null : parseJodAmount(amountRaw);
+      if (amount !== null && amount > 0 && Number.isFinite(amount)) {
+        const center = Math.round(roundJod(amount) * 1000);
+        const radius = Math.ceil(toleranceJod * 1000) + 1;
+        for (let delta = -radius; delta <= radius; delta += 1) {
+          for (const row of byAmountFils.get(String(center + delta)) || []) {
+            if (Math.abs((rowAmounts.get(row) ?? 0) - amount) <= toleranceJod + 0.000001) set.add(row);
+          }
+        }
+      }
+
+      const invoiceDate = normalizeInvoiceDate(invoice?.issueDate ?? invoice?.date);
+      if (invoiceDate && String(invoice?.supplierName ?? '').trim()) {
+        const tokens = [...new Set(normText(invoice.supplierName).split(/\s+/).filter(token => token.length >= 3))];
+        const baseDate = Date.parse(invoiceDate + 'T00:00:00Z');
+        for (let offset = -dateWindowDays; offset <= dateWindowDays; offset += 1) {
+          const dateKey = new Date(baseDate + offset * 86400000).toISOString().slice(0, 10);
+          for (const token of tokens) for (const row of byTokenAndDate.get(token + '|' + dateKey) || []) set.add(row);
+        }
+      }
+      candidates = [...set];
+    }
+
+    const match = matchInvoiceToJournal(invoice, candidates, { toleranceJod, dateWindowDays });
+    return { invoice, match };
+  });
+  const statusCounts = results.reduce((out, item) => {
+    out[item.match.status] = (out[item.match.status] || 0) + 1;
+    return out;
+  }, {});
+  return {
+    invoiceCount: bills.length,
+    journalRowCount: ledger.length,
+    matchedCandidateCount: results.filter(item => item.match.candidates.length > 0 && !['invalid-invoice-amount', 'unsupported-currency', 'reference-conflict'].includes(item.match.status)).length,
+    conflictCount: results.filter(item => ['reference-conflict', 'unsupported-currency', 'invalid-invoice-amount'].includes(item.match.status)).length,
+    unmatchedCount: results.filter(item => item.match.status === 'unmatched').length,
+    statusCounts,
+    results,
+    disclaimer: 'هذه مرشحات مطابقة محلية وليست إثباتًا من المورد أو اعتمادًا ضريبيًا أو تسوية تلقائية. راجع المستند الأصلي والقيد والعملات وفترة التسجيل قبل ربط الدليل أو اعتماد النتيجة.',
+  };
+}
+
 export function buildWhatsappReminder({ phone = '', firmName = 'مكتب التدقيق', clientName = 'العميل', requestTitle = '', dueDate = '' } = {}) {
   const message = 'مرحبًا، معك ' + firmName + '. نتابع طلب مستندات التدقيق الخاص بـ ' + clientName + ': ' + requestTitle + '.' +
     (dueDate ? ' الموعد المطلوب: ' + dueDate + '.' : '') + ' يرجى إرسال المستند عبر القناة الآمنة المعتمدة لدى المكتب. شكرًا.';

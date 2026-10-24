@@ -2,11 +2,12 @@ import { useMemo, useState } from 'react';
 import type { SupabaseConfigResult } from '../lib/supabase-config';
 
 type Issue = { ref: string; severity: 'error' | 'warning' | 'info'; category: string; title: string; amount: number | null; accountCode?: string; sourceRowNumber?: number | null };
+type AccountSummary = { ref: string; accountCode: string; accountName: string; sourceRowNumber: number | null; openingNetJod: number | null; periodDebitJod: number | null; periodCreditJod: number | null; movementNetJod: number | null; closingNetJod: number | null; comparativeNetJod: number | null; varianceJod: number | null; variancePercent: number | null; statementLineKey: string };
 type CopilotContext = {
   fiscalYear: string;
   engagementType: string;
   counts: { riskCount: number; openRiskCount: number; workpaperCount: number; approvedWorkpaperCount: number; evidenceCount: number; unlinkedEvidenceCount: number; openFindingCount: number };
-  trialBalance: { accountCount: number; balanced: boolean; differences: { opening: number; movement: number; closing: number }; counts: { error: number; warning: number; info: number; total: number }; issues: Issue[] };
+  trialBalance: { accountCount: number; balanced: boolean; differences: { opening: number; movement: number; closing: number }; counts: { error: number; warning: number; info: number; total: number }; issues: Issue[]; accounts: AccountSummary[] };
 };
 type Observation = { title: string; whyItMatters: string; suggestedNextStep: string; sourceRefs: string[]; confidence: 'low' | 'medium' | 'high' };
 type CopilotResult = { summary: string; observations: Observation[]; questions: string[]; limitations: string[] };
@@ -22,7 +23,7 @@ export default function AuditCopilot({ config, context, hasEngagement }: Props) 
   const [result, setResult] = useState<CopilotResult | null>(null);
   const [model, setModel] = useState('');
   const [disclaimer, setDisclaimer] = useState('');
-  const availableRefs = useMemo(() => new Set(context.trialBalance.issues.map(issue => issue.ref)), [context]);
+  const availableRefs = useMemo(() => new Set([...context.trialBalance.issues.map(issue => issue.ref), ...context.trialBalance.accounts.map(account => account.ref)]), [context]);
   const issueSources = useMemo(() => new Map(context.trialBalance.issues.map(issue => [issue.ref, { accountCode: issue.accountCode || '', sourceRowNumber: issue.sourceRowNumber ?? null }])), [context]);
 
   async function runCopilot() {
@@ -79,7 +80,7 @@ export default function AuditCopilot({ config, context, hasEngagement }: Props) 
       </div>
     </section>
     <section className="audit-card">
-      <div className="audit-card-head"><div><h3>ملخص الملف الذي سيُحلّل</h3><p className="muted-copy">تُرسل بيانات مجمعة ومنقّحة فقط عند الضغط على «تحليل». لا تُرسل أسماء العملاء أو أرقامهم الضريبية أو تفاصيل الأدلة أو ملفات المصدر.</p></div><span className="audit-pill">{context.trialBalance.issues.length} مؤشرات</span></div>
+      <div className="audit-card-head"><div><h3>ملخص الملف الذي سيُحلّل</h3><p className="muted-copy">تُرسل رموز وأسماء الحسابات ومجاميع الأرصدة والحركات والمقارنات المدخلة عند الضغط على «تحليل». لا تُرسل أسماء العملاء أو أرقامهم الضريبية أو تفاصيل القيود أو الأدلة أو ملفات المصدر.</p></div><span className="audit-pill">{context.trialBalance.issues.length} مؤشرات</span></div>
       <div className="ai-context-grid">
         <div><span>السنة المالية</span><strong>{context.fiscalYear || '—'}</strong></div>
         <div><span>الحسابات</span><strong>{context.trialBalance.accountCount}</strong></div>
@@ -88,9 +89,10 @@ export default function AuditCopilot({ config, context, hasEngagement }: Props) 
         <div><span>الأدلة غير المرتبطة</span><strong>{context.counts.unlinkedEvidenceCount}</strong></div>
         <div><span>الملاحظات المفتوحة</span><strong>{context.counts.openFindingCount}</strong></div>
       </div>
+      {context.trialBalance.accounts.length > 0 && <details className="ai-context-accounts"><summary>معاينة الحسابات التي قد يستند إليها المساعد ({context.trialBalance.accounts.length})</summary><div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>المرجع</th><th>الحساب</th><th>الحركة الصافية</th><th>الختامي</th><th>المقارن</th><th>الفرق</th><th>صف المصدر</th></tr></thead><tbody>{context.trialBalance.accounts.map(account => <tr key={account.ref}><td>{account.ref}</td><td className="cell-strong">{account.accountName || '—'}<small className="table-sub">{account.accountCode}</small></td><td>{account.movementNetJod === null ? '—' : account.movementNetJod.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}</td><td>{account.closingNetJod === null ? '—' : account.closingNetJod.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}</td><td>{account.comparativeNetJod === null ? 'غير متاح' : account.comparativeNetJod.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}</td><td>{account.varianceJod === null ? '—' : account.varianceJod.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}</td><td>{account.sourceRowNumber ?? '—'}</td></tr>)}</tbody></table></div><p className="muted-copy">الفرق يساوي الختامي ناقص المقارن المدخل يدويًا. هذا يبين مقدار التغيّر ولا يفسّر سببه من دون تفاصيل القيود والأدلة.</p></details>}
       <label className="audit-field ai-prompt-field"><span>ما الذي تريد من المساعد مراجعته؟</span><textarea rows={4} value={prompt} onChange={e => setPrompt(e.target.value)} maxLength={2000} placeholder="مثال: اقترح إجراءات متابعة للفرق في الحركة والرصيد الختامي." /></label>
       <label className="ai-consent"><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} /><span>أوافق على إرسال السؤال والملخص المجمع الظاهر أعلاه إلى مزود الذكاء الاصطناعي الخارجي لمعالجته. لن تُرسل ملفات الأدلة أو أسماء العملاء من هذا النموذج، ولا تُحفظ المحادثة في Ledgerly.</span></label>
-      <p className="audit-warning">لا تُدخل أسماء أشخاص أو عملاء أو أرقامًا ضريبية أو معلومات سرية في السؤال. لا تستخدم المساعد مع بيانات عميل حقيقية إلا بعد موافقة مكتبك والتحقق من التزامات السرية وسياسة مزود الخدمة.</p>
+      <p className="audit-warning">لا تُدخل أسماء أشخاص أو عملاء أو أرقامًا ضريبية أو معلومات سرية في السؤال. أسماء الحسابات والمجاميع المرسلة هي ما يظهر في معاينة الحسابات أعلاه. لا تستخدم المساعد مع بيانات عميل حقيقية إلا بعد موافقة مكتبك والتحقق من التزامات السرية وسياسة مزود الخدمة.</p>
       {error && <p className="ai-error" role="alert">{error}</p>}
       <div className="form-actions"><button className="audit-primary" type="button" disabled={busy || !consent || !hasEngagement} onClick={runCopilot}>{busy ? 'جارٍ التحليل…' : '✦ تحليل الملخص بالذكاء الاصطناعي'}</button><span className="muted-copy">{prompt.length}/2000</span></div>
     </section>

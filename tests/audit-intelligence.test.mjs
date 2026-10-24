@@ -7,6 +7,8 @@ import {
   fingerprintAccountMappings,
   fingerprintReportConfiguration,
   buildEvidenceLineage,
+  buildAuditEvidenceGraph,
+  summarizeTrialBalanceForCopilot,
   buildPartnerDashboard,
   buildQualityShield,
   normalizeJournalRows,
@@ -453,4 +455,60 @@ test('quality shield marks a previously exported report stale after report metad
     }],
   });
   assert.equal(quality.checks.find(item => item.id === 'quality-report-stale-source')?.count, 1);
+});
+
+
+test('journal screening detects a duplicate document reference at the same account, direction and amount', () => {
+  const normalized = normalizeJournalRows([
+    { Date: '2026-01-03', Description: 'Supplier invoice INV-88', Account: '5100', Reference: 'INV-88', Supplier: 'Acme', Debit: '275.000', Credit: '0' },
+    { Date: '2026-01-18', Description: 'Supplier invoice reposted INV-88', Account: '5100', Reference: 'INV-88', Supplier: 'Acme', Debit: '275.000', Credit: '0' },
+  ]);
+  const result = analyzeJournalEntries(normalized.rows);
+  const issue = result.issues.find(item => item.id === 'journal-duplicate-document-reference');
+  assert.ok(issue);
+  assert.deepEqual(issue.rowNumbers.sort((a,b)=>a-b), [2,3]);
+});
+
+test('journal screening detects an opposite-side candidate for the same referenced posting', () => {
+  const normalized = normalizeJournalRows([
+    { Date: '2026-01-03', Description: 'Supplier invoice INV-88', Account: '5100', Reference: 'INV-88', Supplier: 'Acme', Debit: '275.000', Credit: '0' },
+    { Date: '2026-01-18', Description: 'Reversal INV-88', Account: '5100', Reference: 'INV-88', Supplier: 'Acme', Debit: '0', Credit: '275.000' },
+  ]);
+  const result = analyzeJournalEntries(normalized.rows);
+  const issue = result.issues.find(item => item.id === 'journal-possible-reversal-pair');
+  assert.ok(issue);
+  assert.deepEqual(issue.rowNumbers.sort((a,b)=>a-b), [2,3]);
+  assert.equal(issue.pairs[0].daysBetween, 15);
+});
+
+test('audit evidence graph links journal row to test result, exact evidence reference, workpaper, finding and reviewer history', () => {
+  const journalRows = [{ rowNumber: 2, date: '2026-01-03', description: 'Supplier invoice INV-88', accountCode: '5100', reference: 'INV-88', counterparty: 'Acme', debit: 275, credit: 0, amount: null, classification: 'debit-credit-columns', raw: {} }];
+  const journalAnalysis = { issues: [{ id: 'journal-duplicate-line', title: 'Duplicate', severity: 'high', detail: 'Two row records', action: 'Check source', rowNumbers: [2] }] };
+  const workpapers = [{ id: 'wp-1', ref: 'WP-AP-1', title: 'AP invoice test', status: 'معتمد', reviewer: 'Reviewer', history: [{ status: 'معتمد', action: 'تغيير الحالة إلى معتمد' }] }];
+  const evidence = [{ id: 'ev-1', title: 'Invoice INV-88', reference: 'inv-88', workpaperRef: 'WP-AP-1' }];
+  const findings = [{ id: 'f-1', title: 'Invoice exception', workpaperRef: 'WP-AP-1', evidenceIds: ['ev-1'] }];
+  const graph = buildAuditEvidenceGraph({ sourceName: 'journal.csv', journalRows, journalAnalysis, workpapers, evidence, findings });
+  assert.equal(graph.sourceRowCount, 1);
+  assert.equal(graph.scannedSourceRowCount, 1);
+  assert.equal(graph.sourceRowsWithIssueCount, 1);
+  assert.equal(graph.sourceRowsWithoutDetectedIssueCount, 0);
+  assert.equal(graph.issuesWithEvidenceCount, 1);
+  assert.equal(graph.issuesWithoutEvidenceCount, 0);
+  assert.equal(graph.issueNodes[0].linkedWorkpapers[0].ref, 'WP-AP-1');
+  assert.equal(graph.issueNodes[0].linkedFindings[0].id, 'f-1');
+  assert.equal(graph.issueNodes[0].traceStatus, 'trace-with-review-history');
+});
+
+test('Copilot account summaries disclose current/comparative variance and exact TB source row', () => {
+  const rows = [
+    tbRow({ code: '6200', name: 'Maintenance expense', sourceRowNumber: 27, openingDebit: 0, openingCredit: 0, debit: 12000, credit: 0, closingDebit: 12000, closingCredit: 0 }),
+  ];
+  const summaries = summarizeTrialBalanceForCopilot(rows, { 'e1::6200': { comparativeJod: '9000', lineKey: 'expenses.maintenance' } }, 'e1');
+  assert.equal(summaries[0].ref, 'ACC-001');
+  assert.equal(summaries[0].accountName, 'Maintenance expense');
+  assert.equal(summaries[0].sourceRowNumber, 27);
+  assert.equal(summaries[0].closingNetJod, 12000);
+  assert.equal(summaries[0].comparativeNetJod, 9000);
+  assert.equal(summaries[0].varianceJod, 3000);
+  assert.equal(summaries[0].variancePercent, 33.333);
 });
