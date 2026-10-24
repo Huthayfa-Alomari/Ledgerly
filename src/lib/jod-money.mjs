@@ -77,7 +77,7 @@ export function parseJodAmount(value, options = {}) {
   if (!text) return invalid('missing-numeric-value');
 
   const plainDecimal = /^[+-]?(?:\d+(?:\.\d{1,3})?|\.\d{1,3})$/;
-  const groupedInteger = /^[+-]?[1-9]\d{0,2}(?:,\d{3})+$/;
+  const groupedInteger = /^[+-]?[1-9]\d{0,2}(?:,\d{3}){2,}$/;
   const groupedDecimal = /^[+-]?[1-9]\d{0,2}(?:,\d{3})+\.\d{1,3}$/;
   const canonical = plainDecimal.test(text) || groupedInteger.test(text) || groupedDecimal.test(text);
   if (!canonical) return invalid('ambiguous-or-malformed-number');
