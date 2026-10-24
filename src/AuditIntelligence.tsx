@@ -55,7 +55,7 @@ const REQUEST_STARTERS = [
 ];
 
 function formatMoney(value: number) {
-  return new Intl.NumberFormat('ar-JO', { style: 'currency', currency: 'JOD', minimumFractionDigits: 3, maximumFractionDigits: 3 }).format(value || 0);
+  return new Intl.NumberFormat('ar-JO-u-nu-latn', { style: 'currency', currency: 'JOD', minimumFractionDigits: 3, maximumFractionDigits: 3 }).format(value || 0);
 }
 function downloadFile(name: string, content: string, mime = 'text/plain;charset=utf-8') {
   const blob = new Blob([content], { type: mime });
@@ -314,7 +314,7 @@ export default function AuditIntelligence(props: Props) {
       <Kpi label="تنبيهات جودة بالمحفظة" value={portfolioAttention} note="أنواع الفحوص التي تحتاج مراجعة" />
       <Kpi label="عوائق إقفال الملفات" value={portfolioClosureBlockers} note="نواقص يجب معالجتها قبل الإغلاق الإداري" />
       <Kpi label="طلبات مستندات متأخرة" value={portfolioOverdueRequests} note="طلبات غير مستلمة تجاوزت تاريخ الاستحقاق" />
-      <Kpi label="ساعات عمل مسجلة" value={portfolioLoggedHours.toLocaleString("ar-JO", { maximumFractionDigits: 1 })} note="مجموع الساعات المسجلة في الارتباطات" />
+      <Kpi label="ساعات عمل مسجلة" value={portfolioLoggedHours.toLocaleString("ar-JO-u-nu-latn", { maximumFractionDigits: 1 })} note="مجموع الساعات المسجلة في الارتباطات" />
     </section>
 
     <section className="audit-card audit-intel-panel">
@@ -329,7 +329,7 @@ export default function AuditIntelligence(props: Props) {
           <td>{row.state || 'غير محدد'}</td><td>{row.pendingWorkpapers}</td><td>{row.unlinkedEvidence}</td><td>{row.openFindings}</td><td>{row.highRisks}</td>
           <td><span className={'audit-pill ' + (row.closureBlockerCount ? 'risk-pill' : '')}>{row.closureBlockerCount}</span>{row.closureBlockerCount > 0 && <small className="table-sub">{row.closureBlockers.slice(0, 2).map(item => item.title).join('، ')}</small>}</td>
           <td>{row.outstandingRequests}</td><td><span className={'audit-pill ' + (row.overdueRequests ? 'risk-pill' : '')}>{row.overdueRequests}</span></td>
-          <td>{row.loggedHours.toLocaleString("ar-JO", { maximumFractionDigits: 1 })} / {row.budgetHours === null ? '—' : row.budgetHours.toLocaleString("ar-JO", { maximumFractionDigits: 1 })}</td>
+          <td>{row.loggedHours.toLocaleString("ar-JO-u-nu-latn", { maximumFractionDigits: 1 })} / {row.budgetHours === null ? '—' : row.budgetHours.toLocaleString("ar-JO-u-nu-latn", { maximumFractionDigits: 1 })}</td>
           <td>{formatMoney(row.actualLaborCostJod)}</td><td>{row.recordedInvoiceCount ? formatMoney(row.invoiceValueJod) : '—'}</td>
           <td><span className={'audit-pill ' + (row.qualityAttention ? 'risk-pill' : '')}>{row.qualityAttention}</span></td>
         </tr>)}</tbody>
@@ -381,7 +381,7 @@ export default function AuditIntelligence(props: Props) {
           <label className="audit-secondary audit-intel-file">اختيار ملف القيود<input type="file" accept=".csv,.xlsx,.xls" onChange={event => { void importJournal(event.target.files?.[0]); event.currentTarget.value = ''; }} /></label>
           {fileBusy && <span className="muted-copy">جارٍ قراءة الملف وفحصه محليًا…</span>}
           {importedJournal && importedJournal.sheetNames.length > 1 && <label className="audit-field audit-intel-sheet-select"><span>ورقة البيانات التي سيتم فحصها بالكامل</span><select value={importedJournal.sheetName} onChange={event => selectJournalWorksheet(event.target.value)}>{importedJournal.sheetNames.map(name => <option key={name} value={name}>{name}</option>)}</select></label>}
-          {importedJournal && <><span className="audit-intel-file-name">{importedJournal.filename} · الورقة: {importedJournal.sheetName} · {importedJournal.rows.length.toLocaleString('ar-JO')} صف</span><button className="audit-text-button danger-text" onClick={() => { setImportedJournal(null); setSourceWorkbook(null); setFileError(''); }}>إزالة نتائج الملف من الشاشة</button></>}
+          {importedJournal && <><span className="audit-intel-file-name">{importedJournal.filename} · الورقة: {importedJournal.sheetName} · {importedJournal.rows.length.toLocaleString('ar-JO-u-nu-latn')} صف</span><button className="audit-text-button danger-text" onClick={() => { setImportedJournal(null); setSourceWorkbook(null); setFileError(''); }}>إزالة نتائج الملف من الشاشة</button></>}
         </div>
         <div className="audit-intel-screening-options">
           <label className="audit-field"><span>حد الموافقة للمبالغ المجمعة (د.أ.) — اختياري</span><input type="number" min="0" step="0.001" inputMode="decimal" value={approvalThreshold} onChange={event => setApprovalThreshold(event.target.value)} placeholder="اتركه فارغًا لتعطيل فحص التجزئة" /></label>
@@ -390,8 +390,8 @@ export default function AuditIntelligence(props: Props) {
         {fileError && <p className="audit-warning" role="alert">{fileError}</p>}
         {importedJournal && journalAnalysis && <>
           <div className="audit-intel-kpis audit-intel-kpis-small">
-            <Kpi label="الصفوف المفحوصة" value={journalAnalysis.scannedCount.toLocaleString('ar-JO')} note="جميع الصفوف المقروءة" />
-            <Kpi label="مجموع مؤشرات الفحص" value={journalAnalysis.issueCount.toLocaleString('ar-JO')} note="قد يتكرر الصف عبر أكثر من قاعدة" />
+            <Kpi label="الصفوف المفحوصة" value={journalAnalysis.scannedCount.toLocaleString('ar-JO-u-nu-latn')} note="جميع الصفوف المقروءة" />
+            <Kpi label="مجموع مؤشرات الفحص" value={journalAnalysis.issueCount.toLocaleString('ar-JO-u-nu-latn')} note="قد يتكرر الصف عبر أكثر من قاعدة" />
             <Kpi label="مؤشرات الشهر الأخير" value={journalAnalysis.monthEndSignals} note="إشارة للفحص لا مخالفة بحد ذاتها" />
             <Kpi label="الأعمدة المكتشفة" value={importedJournal.fieldsDetected.length} note="من الصف الأول" />
           </div>
