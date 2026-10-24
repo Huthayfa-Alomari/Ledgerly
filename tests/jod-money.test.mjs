@@ -41,6 +41,8 @@ test('parses decimal dots, three JOD decimals, Arabic digits, and currency label
   assert.equal(parseJodAmount('١٢.٣٤٥'), 12.345);
   assert.equal(parseJodAmount('د.أ 12.345'), 12.345);
   assert.equal(parseJodAmount('1,234.567'), 1234.567);
+  assert.equal(parseJodAmount('1,234'), null, 'single comma with three trailing digits is ambiguous');
+  assert.equal(parseJodAmount('1,234,567'), 1234567);
 });
 
 test('treats blank cells as zero and rejects malformed values rather than coercing them to zero', () => {
