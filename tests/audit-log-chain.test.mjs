@@ -57,3 +57,13 @@ test('rejects sequence gaps or reordered sequence metadata', async () => {
   assert.equal(result.valid, false);
   assert.equal(result.reason, 'sequence-mismatch');
 });
+
+
+test('audit-chain CSV export protects spreadsheet formula strings in event details', async () => {
+  const malicious = event('xss-csv', '2026-10-23T10:00:00.000Z');
+  malicious.details = '=HYPERLINK("https://example.invalid","open")';
+  const sealed = await sealNewAuditEvents([malicious]);
+  const output = await auditChainCsv(sealed.events);
+  assert.ok(output.includes("'=HYPERLINK"));
+  assert.ok(output.includes('""https://example.invalid""'));
+});
