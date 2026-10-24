@@ -1,3 +1,5 @@
+import { parseJodAmount } from './jod-money.mjs';
+
 const TOLERANCE = 0.001; // JOD is carried to three decimal places (fils).
 
 function cleanText(value) {
@@ -27,34 +29,12 @@ function firstMatch(headers, aliases) {
   return undefined;
 }
 
-export function parseAuditAmount(input) {
-  if (typeof input === 'number') return Number.isFinite(input) ? input : null;
-  if (input === null || input === undefined || String(input).trim() === '') return null;
-  let value = String(input).replace(/\u066C/g, ',').replace(/\u066B/g, '.').replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
-    .replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).trim();
-  const negative = /^\s*\(.*\)\s*$/.test(value) || /-$/.test(value);
-  value = value.replace(/[()]/g, '').replace(/-/g, '').replace(/[^\d,.\s]/g, '').replace(/\s/g, '');
-  if (!value) return null;
-  const lastComma = value.lastIndexOf(',');
-  const lastDot = value.lastIndexOf('.');
-  if (lastComma >= 0 && lastDot >= 0) {
-    if (lastComma > lastDot) value = value.replace(/\./g, '').replace(',', '.');
-    else value = value.replace(/,/g, '');
-  } else if (lastComma >= 0) {
-    const decimals = value.length - lastComma - 1;
-    value = decimals > 0 && decimals <= 2 ? value.replace(',', '.') : value.replace(/,/g, '');
-  } else {
-    const dots = (value.match(/\./g) || []).length;
-    if (dots > 1) {
-      const last = value.lastIndexOf('.');
-      value = value.slice(0, last).replace(/\./g, '') + value.slice(last);
-    }
-  }
-  const amount = Number(value);
-  if (!Number.isFinite(amount)) return null;
-  return negative ? -Math.abs(amount) : amount;
+export function parseAuditAmount(input, options = {}) {
+  return parseJodAmount(input, {
+    blankAsZero: false,
+    onWarning: typeof options.onWarning === 'function' ? options.onWarning : undefined,
+  });
 }
-
 function parseDate(value) {
   const formatParts = (year, month, day) => {
     if (![year, month, day].every(Number.isInteger) || year < 1 || year > 9999 || month < 1 || month > 12 || day < 1 || day > 31) return '';
@@ -108,9 +88,15 @@ export function normalizeJournalRows(records) {
 
   const rows = records.map((raw, index) => {
     const get = h => h ? raw?.[h] : undefined;
-    let debit = debitH ? parseAuditAmount(get(debitH)) : null;
-    let credit = creditH ? parseAuditAmount(get(creditH)) : null;
-    const amount = amountH ? parseAuditAmount(get(amountH)) : null;
+    const numericWarnings = [];
+    const parseCell = (header, field) => parseAuditAmount(get(header), {
+      onWarning: warning => numericWarnings.push({
+        field, reason: warning.reason, rawValue: String(get(header) ?? ''),
+      }),
+    });
+    let debit = debitH ? parseCell(debitH, 'debit') : null;
+    let credit = creditH ? parseCell(creditH, 'credit') : null;
+    const amount = amountH ? parseCell(amountH, 'amount') : null;
     const invalidAmountFields = [];
     const hasRawValue = header => Boolean(header) && get(header) !== undefined && get(header) !== null && String(get(header)).trim() !== '';
     if (debitH && hasRawValue(debitH) && debit === null) invalidAmountFields.push('debit');
@@ -147,10 +133,16 @@ export function normalizeJournalRows(records) {
       credit,
       amount,
       invalidAmountFields,
+      numericWarnings,
       classification,
       raw: { ...raw },
     };
   }).filter(row => Object.values(row.raw).some(value => String(value ?? '').trim() !== ''));
+  for (const row of rows) {
+    for (const warning of row.numericWarnings ?? []) {
+      warnings.push(`الصف ${row.rowNumber}: قيمة ${warning.field} غير صالحة أو ملتبسة (${warning.rawValue})؛ لم يخمّن Ledgerly قيمة بديلة.`);
+    }
+  }
   return {
     rows,
     sourceCount: rows.length,
