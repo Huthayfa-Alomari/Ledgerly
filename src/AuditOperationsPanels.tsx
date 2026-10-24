@@ -107,14 +107,17 @@ export default function AuditOperationsPanels(props: Props) {
   const [bankMapping, setBankMapping] = useState<Record<string, string>>({});
   const [bankNotice, setBankNotice] = useState('');
   const [ublInvoice, setUblInvoice] = useState<Row | null>(null);
+  const [ublSourceFile, setUblSourceFile] = useState<File | null>(null);
   const [ublError, setUblError] = useState('');
   const [ublWorkpaperRef, setUblWorkpaperRef] = useState('');
-  const [invoiceRegisterSource, setInvoiceRegisterSource] = useState<{ fileName: string; sheets: InvoiceSheet[] } | null>(null);
+  const [invoiceRegisterSource, setInvoiceRegisterSource] = useState<{ fileName: string; file: File; sheets: InvoiceSheet[] } | null>(null);
   const [invoiceSheetName, setInvoiceSheetName] = useState('');
   const [invoiceBusy, setInvoiceBusy] = useState(false);
   const [invoiceImportError, setInvoiceImportError] = useState('');
   const [invoiceImportNotice, setInvoiceImportNotice] = useState('');
   const [invoiceWorkpaperRefs, setInvoiceWorkpaperRefs] = useState<Record<string, string>>({});
+  const [invoiceSourceWorkpaperRef, setInvoiceSourceWorkpaperRef] = useState('');
+  const [invoiceSourceEvidenceId, setInvoiceSourceEvidenceId] = useState('');
   const [invoiceAddedKeys, setInvoiceAddedKeys] = useState<Record<string, boolean>>({});
   const [invoiceTolerance, setInvoiceTolerance] = useState('0.001');
   const [invoiceDateWindow, setInvoiceDateWindow] = useState('3');
@@ -332,6 +335,7 @@ export default function AuditOperationsPanels(props: Props) {
     try {
       const parsed = parseUblInvoiceXml(await file.text());
       setUblInvoice({ ...parsed, sourceName: file.name });
+      setUblSourceFile(file);
       setUblWorkpaperRef('');
     } catch (error) { setUblError(error instanceof Error ? error.message : 'تعذر تحليل ملف XML.'); }
   }
@@ -374,9 +378,11 @@ export default function AuditOperationsPanels(props: Props) {
         if (normalized.sourceCount) sheets.push({ name, rows });
       }
       if (!sheets.length) throw new Error('لم يتم العثور على ورقة فواتير قابلة للقراءة. تحقق من عناوين رقم الفاتورة والتاريخ والمورد والمبلغ.');
-      setInvoiceRegisterSource({ fileName: file.name, sheets });
+      setInvoiceRegisterSource({ fileName: file.name, file, sheets });
       setInvoiceSheetName(sheets[0].name);
       setInvoiceWorkpaperRefs({});
+      setInvoiceSourceWorkpaperRef('');
+      setInvoiceSourceEvidenceId('');
       setInvoiceAddedKeys({});
       setInvoiceImportNotice('تم استيراد عناوين وصفوف سجل الفواتير محليًا؛ اختر الورقة وراجع التعيين والمرشحين قبل ربط أي دليل.');
     } catch (error) {
