@@ -65,3 +65,6 @@ export interface InvoiceMatchResult {
 }
 export function normalizeInvoiceRegisterRows(records: Array<Record<string, unknown>>): InvoiceRegisterResult;
 export function matchInvoiceToJournal(invoice: Record<string, unknown>, journalRows?: any[], options?: { toleranceJod?: number; dateWindowDays?: number }): InvoiceMatchResult;
+
+export interface InvoiceRegisterBatchResult { invoiceCount: number; journalRowCount: number; matchedCandidateCount: number; conflictCount: number; unmatchedCount: number; statusCounts: Record<string, number>; results: Array<{ invoice: NormalizedInvoiceRecord | Record<string, unknown>; match: InvoiceMatchResult }>; disclaimer: string }
+export function matchInvoiceRegisterToJournal(invoices?: Array<NormalizedInvoiceRecord | Record<string, unknown>>, journalRows?: any[], options?: { toleranceJod?: number; dateWindowDays?: number }): InvoiceRegisterBatchResult;
