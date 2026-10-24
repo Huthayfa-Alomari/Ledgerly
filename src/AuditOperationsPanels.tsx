@@ -7,6 +7,7 @@ import {
 } from './lib/audit-operations-engine.mjs';
 import { buildDocxBytes } from './lib/docx-export.mjs';
 import { saveLocalEvidenceFile } from './lib/local-evidence-files';
+import { csvCell } from './lib/csv.mjs';
 import { fingerprintAccountMappings, fingerprintReportConfiguration, fingerprintTrialBalanceRows } from './lib/audit-intelligence.mjs';
 
 type Row = Record<string, any>;
@@ -33,7 +34,8 @@ const BANK_FIELDS = [
   ['amount', 'مبلغ واحد'], ['balance', 'الرصيد'], ['reference', 'المرجع'],
 ];
 function id(prefix: string) {
-  return prefix + '-' + (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 9));
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return prefix + '-' + crypto.randomUUID();
+  throw new Error('تعذّر إنشاء معرّف آمن؛ حدّث المتصفح أو تطبيق سطح المكتب قبل المتابعة.');
 }
 function money(value: unknown) {
   const amount = Number(value);
@@ -49,13 +51,8 @@ function downloadBlob(name: string, data: BlobPart | Uint8Array, type: string) {
   link.href = url; link.download = name; link.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 1200);
 }
-function csvValue(value: unknown) {
-  let item = String(value ?? '');
-  if (/^[\s]*[=+\-@]/.test(item)) item = "'" + item;
-  return '"' + item.replace(/"/g, '""').replace(/\r?\n/g, ' ') + '"';
-}
 function downloadCSV(name: string, rows: unknown[][]) {
-  downloadBlob(name, '\uFEFF' + rows.map(row => row.map(csvValue).join(',')).join('\r\n'), 'text/csv;charset=utf-8');
+  downloadBlob(name, '\uFEFF' + rows.map(row => row.map(csvCell).join(',')).join('\r\n'), 'text/csv;charset=utf-8');
 }
 function SignaturePad({ value, onChange }: { value: string; onChange: (data: string) => void }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
