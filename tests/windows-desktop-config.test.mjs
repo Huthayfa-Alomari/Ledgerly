@@ -33,6 +33,10 @@ test('Electron window disables Node integration and enables context isolation an
   assert.match(main, /sandbox: true/);
   assert.match(main, /webSecurity: true/);
   assert.match(main, /setWindowOpenHandler/);
+  assert.match(main, /setPermissionRequestHandler/);
+  assert.match(main, /permission === 'geolocation'/);
+  assert.match(main, /mediaTypes.includes\('video'\) && !mediaTypes.includes\('audio'\)/);
+  assert.match(main, /isTrustedPage/);
 });
 
 test('version tags publish the built installer as a permanent GitHub Release asset', () => {
@@ -56,14 +60,17 @@ test('GitHub Actions use Node 24-compatible action majors and pinned runner imag
   const ci = read('../.github/workflows/ci.yml');
   const release = read('../.github/workflows/windows-release.yml');
   assert.ok(ci.includes('runs-on: ubuntu-24.04'));
-  assert.ok(ci.includes('uses: actions/checkout@v7'));
-  assert.ok(ci.includes('uses: actions/setup-node@v7'));
+  assert.ok(ci.includes('uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'));
+  assert.ok(ci.includes('uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1'));
   assert.ok(!ci.includes('ubuntu-latest'));
   assert.ok(!ci.includes('actions/checkout@v4'));
   assert.ok(!ci.includes('actions/setup-node@v4'));
   assert.ok(release.includes('runs-on: windows-2025'));
-  assert.ok(release.includes('uses: actions/checkout@v7'));
-  assert.ok(release.includes('uses: actions/setup-node@v7'));
-  assert.ok(release.includes('uses: actions/upload-artifact@v7'));
+  assert.ok(release.includes('uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'));
+  assert.ok(release.includes('uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1'));
+  assert.ok(release.includes('uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9'));
+  assert.ok(release.includes('uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131'));
+  assert.ok(release.includes('npm ci --no-fund'));
+  assert.ok(release.includes('desktop/package-lock.json') === false);
   assert.ok(release.includes('uses: softprops/action-gh-release@v3'));
 });
