@@ -323,3 +323,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
  .audit-stat{padding:11px;min-height:98px}
  .audit-stat>strong{font-size:23px}
 }
+
+.muted-copy,.audit-card-head p,.form-hint{color:#52645a}
+.audit-intel-kpi strong{color:#1c4935}
+.audit-intel-kpi small{color:#4d6155;line-height:1.75}
+.table-sub{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;line-height:1.8}
+.tb-issues-table td.money-cell{text-align:right;direction:ltr}
