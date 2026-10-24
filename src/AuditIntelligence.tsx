@@ -406,7 +406,7 @@ export default function AuditIntelligence(props: Props) {
             <div className="audit-card-head"><div><h4>خريطة الدليل — Source → Test → Evidence → Workpaper → Finding → Review</h4><p className="muted-copy">يربط النظام الصفوف المختبرة بالنتيجة، ثم يبحث عن دليل يحمل مرجع المستند نفسه حرفيًا بعد التطبيع. لا ينشئ روابط تخمينية.</p></div><span className="soft-tag">Exact-reference lineage</span></div>
             <div className="audit-intel-kpis audit-intel-kpis-small">
               <Kpi label="صفوف المصدر" value={journalEvidenceGraph.sourceRowCount} note="من الورقة المحددة" />
-              <Kpi label="صفوف دخلت اختبارًا" value={journalEvidenceGraph.testedSourceRowCount} note="صفوف ذكرتها قاعدة واحدة أو أكثر" />
+              <Kpi label="صفوف دخلت اختبارًا" value={journalEvidenceGraph.sourceRowCount} note="صفوف ذكرتها قاعدة واحدة أو أكثر" />
               <Kpi label="استثناءات لها دليل مطابق" value={journalEvidenceGraph.issuesWithEvidenceCount} note="مطابقة مرجع مستند حرفية" />
               <Kpi label="استثناءات بلا دليل مفهرس" value={journalEvidenceGraph.issuesWithoutEvidenceCount} note="تحتاج ربطًا أو تفسيرًا" />
               <Kpi label="ملاحظات مرتبطة بالكامل" value={journalEvidenceGraph.findingsFullyLinked} note="مرجع ورقة عمل ودليل متوافق" />
