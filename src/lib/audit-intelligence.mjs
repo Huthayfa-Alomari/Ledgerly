@@ -617,6 +617,59 @@ export function buildAuditEvidenceGraph({ sourceName = '', journalRows = [], jou
   };
 }
 
+/**
+ * Produces a minimized account-level summary for the AI Copilot.
+ * It includes only mapped account labels, balances, comparative values and source row references.
+ */
+export function summarizeTrialBalanceForCopilot(rows, accountMappings = {}, engagementId = '', limit = 80) {
+  const source = Array.isArray(rows) ? rows : [];
+  const mappingSet = accountMappings && typeof accountMappings === 'object' ? accountMappings : {};
+  const cap = Number.isFinite(Number(limit)) ? Math.max(1, Math.min(100, Math.trunc(Number(limit)))) : 80;
+  const numberOrNull = value => value !== null && value !== undefined && String(value).trim() !== '' && Number.isFinite(Number(value)) ? Number(value) : null;
+  const summarized = source.map(row => {
+    const openingDebit = numberOrNull(row.openingDebit);
+    const openingCredit = numberOrNull(row.openingCredit);
+    const debit = numberOrNull(row.debit);
+    const credit = numberOrNull(row.credit);
+    const closingDebit = numberOrNull(row.closingDebit);
+    const closingCredit = numberOrNull(row.closingCredit);
+    const openingNetJod = openingDebit === null || openingCredit === null ? null : roundMoney(openingDebit - openingCredit);
+    const movementNetJod = debit === null || credit === null ? null : roundMoney(debit - credit);
+    const closingNetJod = closingDebit === null || closingCredit === null ? null : roundMoney(closingDebit - closingCredit);
+    const key = String(engagementId || row.engagementId || '') + '::' + String(row.code ?? '');
+    const mapping = mappingSet[key] && typeof mappingSet[key] === 'object' ? mappingSet[key] : {};
+    const comparativeNetJod = numberOrNull(mapping.comparativeJod);
+    const varianceJod = comparativeNetJod === null || closingNetJod === null ? null : roundMoney(closingNetJod - comparativeNetJod);
+    const variancePercent = comparativeNetJod === null || comparativeNetJod === 0 || varianceJod === null ? null : roundMoney((varianceJod / Math.abs(comparativeNetJod)) * 100);
+    const magnitude = Math.max(
+      Math.abs(varianceJod ?? 0),
+      Math.abs(movementNetJod ?? 0),
+      Math.abs(closingNetJod ?? 0)
+    );
+    return {
+      accountCode: String(row.code ?? '').trim(),
+      accountName: String(row.name ?? '').trim().slice(0, 100),
+      sourceRowNumber: Number.isInteger(Number(row.sourceRowNumber)) && Number(row.sourceRowNumber) >= 2 ? Number(row.sourceRowNumber) : null,
+      openingNetJod,
+      periodDebitJod: debit,
+      periodCreditJod: credit,
+      movementNetJod,
+      closingNetJod,
+      comparativeNetJod,
+      varianceJod,
+      variancePercent,
+      statementLineKey: String(mapping.lineKey ?? '').trim().slice(0, 80),
+      magnitude,
+    };
+  }).filter(row => row.accountCode || row.accountName)
+    .sort((a, b) => b.magnitude - a.magnitude || a.accountCode.localeCompare(b.accountCode) || a.accountName.localeCompare(b.accountName))
+    .slice(0, cap);
+  return summarized.map((row, index) => {
+    const { magnitude, ...account } = row;
+    return { ref: 'ACC-' + String(index + 1).padStart(3, '0'), ...account };
+  });
+}
+
 /** Deterministic change detection only; this is not a cryptographic integrity control. */
 export function fingerprintTrialBalanceRows(rows) {
   if (!Array.isArray(rows) || rows.length === 0) return '';
