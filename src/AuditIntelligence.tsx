@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import AuditOperationsPanels from './AuditOperationsPanels';
 import { buildWhatsappReminder, suggestRiskPbcRequestsFromRisks } from './lib/audit-operations-engine.mjs';
 import * as XLSX from 'xlsx';
+import { csvCell } from './lib/csv.mjs';
 import {
   analyzeJournalEntries,
   buildEvidenceLineage,
@@ -65,11 +66,6 @@ function downloadFile(name: string, content: string, mime = 'text/plain;charset=
   link.download = name;
   link.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 1500);
-}
-function csvCell(value: unknown) {
-  let text = String(value ?? '');
-  if (/^[\s]*[=+\-@]/.test(text)) text = "'" + text;
-  return '"' + text.replace(/"/g, '""').replace(/\r?\n/g, ' ') + '"';
 }
 function downloadCsv(name: string, rows: unknown[][]) {
   downloadFile(name, '\uFEFF' + rows.map(row => row.map(csvCell).join(',')).join('\r\n'), 'text/csv;charset=utf-8');
