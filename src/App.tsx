@@ -6,6 +6,7 @@ import AuditIntelligence from './AuditIntelligence';
 import { analyzeTrialBalance } from './lib/trial-balance-analytics.mjs';
 import CloudAuthPanel, { type CloudSession } from './CloudAuthPanel';
 import './styles.css';
+import { SERVICE_REGISTRY, type ServiceId } from './service-registry';
 import { readSupabaseBrowserConfig } from './lib/supabase-config';
 import { loadLocalData, localDataShapeIssue } from './lib/local-db-storage.mjs';
 import { encryptedVaultBackup, hasEncryptedLocalVault, migrateLegacyEvidenceIfNeeded, persistEncryptedLocalVault, restoreEncryptedVaultBackup, unlockOrInitializeLocalVault } from './lib/secure-local-vault';
@@ -28,7 +29,7 @@ type Finding = { id: string; engagementId: string; title: string; criteria: stri
 type Evidence = { id: string; engagementId: string; title: string; type: string; reference: string; workpaperRef: string; notes: string; addedAt: string; attachmentId?: string; fileName?: string; fileType?: string; fileSize?: number };
 type TBRow = { id: string; engagementId: string; code: string; name: string; openingDebit: number; openingCredit: number; debit: number; credit: number; closingDebit: number; closingCredit: number; source: string; sourceRowNumber?: number; sourceFinancialFields?: string[] };
 type AuditEvent = { id: string; at: string; action: string; entity: string; details: string; engagementId?: string; actorId?: string; sequence?: number; prevHash?: string; hash?: string }; 
-type Module = 'dashboard'|'clients'|'engagements'|'planning'|'trial-balance'|'workpapers'|'evidence'|'findings'|'reports'|'reconciliation'|'ai-assistant'|'intelligence'|'settings';
+type Module = 'dashboard'|'services'|'clients'|'engagements'|'planning'|'trial-balance'|'workpapers'|'evidence'|'findings'|'reports'|'reconciliation'|'ai-assistant'|'intelligence'|'settings';
 type AuditOperations = {
  clientRequests: Array<Record<string, any>>;
  samplingRuns: Array<Record<string, any>>;
@@ -62,7 +63,7 @@ type DB = { clients: Client[]; engagements: Engagement[]; risks: Risk[]; workpap
 const KEY = 'brp.audit-platform.v1';
 const emptyDB: DB = { clients: [], engagements: [], risks: [], workpapers: [], findings: [], evidence: [], trialBalance: [], auditLog: [], completionChecks: {}, operations: emptyAuditOperations };
 const modules: {id:Module; label:string; en:string; icon:string}[] = [
- {id:'dashboard',label:'لوحة المتابعة',en:'Dashboard',icon:'▦'}, {id:'clients',label:'العملاء',en:'Clients',icon:'♙'},
+ {id:'dashboard',label:'لوحة المتابعة',en:'Dashboard',icon:'▦'}, {id:'services',label:'الخدمات المهنية',en:'Professional Services',icon:'▣'}, {id:'clients',label:'العملاء',en:'Clients',icon:'♙'},
  {id:'engagements',label:'ملفات التدقيق',en:'Engagements',icon:'▤'}, {id:'planning',label:'التخطيط والمخاطر',en:'Planning & Risks',icon:'◎'},
  {id:'trial-balance',label:'ميزان المراجعة',en:'Trial Balance',icon:'≋'}, {id:'workpapers',label:'أوراق العمل',en:'Workpapers',icon:'▧'},
  {id:'evidence',label:'الأدلة والمرفقات',en:'Evidence',icon:'⌁'}, {id:'findings',label:'الملاحظات والتوصيات',en:'Findings',icon:'⚑'},
@@ -148,6 +149,7 @@ function App() {
  const [vaultRawBackupDownloaded,setVaultRawBackupDownloaded] = useState(false);
  const [auditChainHealth,setAuditChainHealth] = useState<{valid:boolean;checked:number;unsealed:number;reason:string}>({valid:true,checked:0,unsealed:0,reason:'loading'});
  const [module,setModule] = useState<Module>('dashboard');
+ const [selectedService,setSelectedService] = useState<ServiceId>('external_audit');
  const [selectedEngagement,setSelectedEngagement] = useState('');
  const [query,setQuery] = useState('');
  const [notice,setNotice] = useState('');
@@ -394,6 +396,7 @@ function App() {
   setNotice('بدأت مساحة محلية فارغة بعد حفظ نسخة الإنقاذ الخام.');
  }
  const title=modules.find(m=>m.id===module)?.label||'لوحة المتابعة';
+ const selectedServiceDefinition=SERVICE_REGISTRY.find(service=>service.id===selectedService);
  const noEngagement=module!=='dashboard'&&module!=='clients'&&module!=='engagements'&&module!=='settings'&&module!=='reconciliation'&&module!=='intelligence'&&!activeEngagement;
  function headerActions(){ return <div className="audit-actions">{(module==='clients'||module==='engagements'||module==='planning'||module==='workpapers'||module==='evidence'||module==='findings')&&<button className="audit-primary" onClick={()=>startForm(module==='engagements'?{year:String(new Date().getFullYear()),type:'تدقيق سنوي',framework:'IFRS'}:module==='planning'?{likelihood:'متوسط',impact:'متوسط'}:module==='findings'?{severity:'متوسطة'}:{})}>＋ إضافة جديد</button>}{module==='reports'&&<button className="audit-primary" onClick={()=>download('ledgerly-backup.json',JSON.stringify(db,null,2))}>تصدير نسخة احتياطية</button>}</div>; }
  if(!vaultUnlocked){
@@ -434,6 +437,7 @@ function App() {
   <main className="audit-main"><header className="audit-topbar"><div><div className="audit-breadcrumb">مساحة العمل / {title}</div><h1>{title}</h1></div><div className="audit-top-actions"><label className="engagement-picker"><span>ملف التدقيق الحالي</span><select value={activeEngagement?.id||''} onChange={e=>setSelectedEngagement(e.target.value)}><option value="">اختر ملفًا</option>{db.engagements.map(e=><option key={e.id} value={e.id}>{db.clients.find(c=>c.id===e.clientId)?.name||'عميل'} · {e.year}</option>)}</select></label><button className="audit-icon-button" title="تصدير نسخة احتياطية" onClick={()=>{if(!window.confirm('سيصدر ملف JSON غير مشفّر. احفظه خارج المجلدات المشتركة فقط. هل تريد المتابعة؟'))return;download('ledgerly-backup-plaintext.json',JSON.stringify(db,null,2));}}>⇩</button></div></header>
    {storageError&&<div className="audit-warning" role="alert"><strong>تعذّر حفظ البيانات محليًا؛ قد تبقى تعديلاتك الحالية في الذاكرة فقط.</strong><p>نزّل نسخة استعادة من أحدث حالة موجودة في الذاكرة قبل إغلاق التطبيق. سبب الخطأ: {storageError}</p><div className="stack-actions"><button className="audit-primary" onClick={()=>downloadRecoverySnapshot(db)}>تنزيل أحدث نسخة للاستعادة</button><button className="audit-secondary" onClick={()=>{void persistEncryptedLocalVault(vaultPassphrase,db).then(error=>{setStorageError(error||'');if(!error)setNotice('نجح حفظ المخزن المشفّر مجددًا.');});}}>إعادة محاولة الحفظ</button></div></div>}
    {notice&&<div className="audit-toast">✓ {notice}</div>}
+   {module==='services'&&<><SectionIntro text="دليل الخدمات المهنية في Ledgerly. اختر خدمة لمراجعة نطاقها ومسارها الأولي وحالة جاهزيتها الحالية."/><div className="service-catalog-grid">{SERVICE_REGISTRY.map(service=><button type="button" key={service.id} className={`service-catalog-card ${selectedService===service.id?'selected':''}`} aria-pressed={selectedService===service.id} onClick={()=>setSelectedService(service.id)}><div className="service-catalog-card-top"><span className="service-catalog-icon">{service.id==='external_audit'?'✓':service.id==='internal_audit'?'◇':service.id==='bookkeeping'?'≋':service.id==='tax_advisory'?'٪':service.id==='training_development'?'▤':'⌁'}</span><span className={`service-readiness ${service.readiness}`}>{service.readinessLabel}</span></div><strong>{service.label}</strong><small>{service.labelEn}</small><p>{service.summary}</p><span className="service-open-hint">عرض مسار الخدمة ←</span></button>)}</div>{selectedServiceDefinition&&<section className="audit-card service-detail-card"><div className="audit-card-head"><div><span className="soft-tag">{selectedServiceDefinition.labelEn}</span><h3 style={{marginTop:8}}>{selectedServiceDefinition.label}</h3><p>{selectedServiceDefinition.summary}</p></div><span className={`service-readiness ${selectedServiceDefinition.readiness}`}>{selectedServiceDefinition.readinessLabel}</span></div><h4>المسار الأولي</h4><ol className="service-workflow">{selectedServiceDefinition.firstWorkflow.map((step,index)=><li key={step}><span>{String(index+1).padStart(2,'0')}</span>{step}</li>)}</ol><p className="audit-warning">{selectedServiceDefinition.caution}</p><div className="stack-actions">{selectedService==='external_audit'?<button className="audit-primary" onClick={()=>setModule('engagements')}>فتح ملفات التدقيق الحالية</button>:<button className="audit-secondary" onClick={()=>setNotice(`تم تحديد خدمة «${selectedServiceDefinition.label}». مسار العمل والحفظ المتخصص لهذه الوحدة لم يُفعّل بعد؛ لم تُنشأ أي بيانات.`)}>تأكيد اختيار الخدمة</button>}<button className="audit-secondary" onClick={()=>setModule('settings')}>إعدادات المكتب</button></div><p className="muted-copy">مهم: هذه الصفحة تعرض نطاق الخدمة وخطتها الأولية. لا تعني أن إجراءاتها المتخصصة أو نماذجها المهنية قد اكتملت أو أصبحت معتمدة.</p></section>}</>}
    {module==='dashboard'&&<>
     <section className="audit-welcome"><div><span className="audit-kicker">نظام إدارة أعمال التدقيق</span><h2>من قبول العميل إلى إقفال ملف التدقيق.</h2><p>مساحة عمل موحدة لإدارة ملفات التدقيق، المخاطر، أوراق العمل، الأدلة والملاحظات. ابدأ بإنشاء عميل ثم افتح ملف تدقيق للسنة المالية.</p></div><div className="welcome-mark">L<span>LEDGERLY</span></div></section>
     <div className="audit-stats"><Stat label="العملاء النشطون" value={stats.clients} hint="سجل العملاء" icon="♙"/><Stat label="ملفات تدقيق مفتوحة" value={stats.open} hint="كل السنوات المالية" icon="▤"/><Stat label="أوراق بانتظار الاعتماد" value={stats.workpapers} hint="تحتاج إلى مراجعة" icon="▧"/><Stat label="ملاحظات غير مغلقة" value={stats.findings} hint="نتائج التدقيق" icon="⚑"/></div>
