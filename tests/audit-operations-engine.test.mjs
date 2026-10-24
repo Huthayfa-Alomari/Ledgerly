@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildDraftFinancialStatements, buildWhatsappReminder, calculateOfficeMetrics,
-  inferBankColumns, normalizeInvoiceRegisterRows, matchInvoiceToJournal, parseUblInvoiceXml, rollForwardWorkpapers, runAdvancedJournalTests,
+  inferBankColumns, normalizeInvoiceRegisterRows, matchInvoiceToJournal, matchInvoiceRegisterToJournal, parseUblInvoiceXml, rollForwardWorkpapers, runAdvancedJournalTests,
   selectAuditSample, validateLocalWorkpaperTransition, suggestRiskPbcRequestsFromRisks,
 } from '../src/lib/audit-operations-engine.mjs';
 
@@ -166,4 +166,32 @@ test('invoice matcher flags exact reference conflicts rather than falling throug
   );
   assert.equal(result.status, 'reference-conflict');
   assert.equal(result.candidates[0].amountOk, false);
+});
+
+
+test('indexed invoice register matcher links exact references and suggests same-amount/date candidates', () => {
+  const invoices = normalizeInvoiceRegisterRows([
+    { 'Invoice No': 'INV-77', 'Invoice Date': '2026-09-30', Supplier: 'Demo Supplier', 'Invoice Total': '14.375', Currency: 'JOD' },
+    { 'Invoice No': 'INV-78', 'Invoice Date': '2026-10-01', Supplier: 'Acme Ltd', 'Invoice Total': '22.000', Currency: 'JOD' },
+  ]).rows;
+  const ledger = [
+    journal({ rowNumber: 9, date: '2026-09-30', reference: 'INV-77', accountCode: '5000', description: 'Invoice INV-77', counterparty: 'Demo Supplier', debit: 14.375, credit: 0 }),
+    journal({ rowNumber: 10, date: '2026-09-30', reference: 'INV-77', accountCode: '2000', description: 'Invoice INV-77', counterparty: 'Demo Supplier', debit: 0, credit: 14.375 }),
+    journal({ rowNumber: 15, date: '2026-10-02', reference: 'PV-8', accountCode: '5000', description: 'Acme Ltd payment', counterparty: 'Acme Ltd', debit: 22, credit: 0 }),
+  ];
+  const result = matchInvoiceRegisterToJournal(invoices, ledger, { toleranceJod: 0.001, dateWindowDays: 3 });
+  assert.equal(result.invoiceCount, 2);
+  assert.equal(result.journalRowCount, 3);
+  assert.equal(result.results[0].match.status, 'reference-amount-candidate');
+  assert.equal(result.results[1].match.status, 'possible-match-needs-review');
+  assert.deepEqual(result.results[0].match.candidates[0].rowNumbers, [9, 10]);
+  assert.match(result.disclaimer, /ليست إثباتًا/);
+});
+
+test('indexed invoice matcher does not treat a repeated exact reference with conflicting amount as a fallback match', () => {
+  const invoices = [{ invoiceId: 'INV-77', issueDate: '2026-09-30', supplierName: 'Demo Supplier', currency: 'JOD', payableAmount: 20 }];
+  const ledger = [journal({ date: '2026-09-30', reference: 'INV-77', debit: 14.375, credit: 0 })];
+  const result = matchInvoiceRegisterToJournal(invoices, ledger);
+  assert.equal(result.results[0].match.status, 'reference-conflict');
+  assert.equal(result.conflictCount, 1);
 });
