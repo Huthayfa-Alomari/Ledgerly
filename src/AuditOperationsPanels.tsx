@@ -108,6 +108,7 @@ export default function AuditOperationsPanels(props: Props) {
   const [bankNotice, setBankNotice] = useState('');
   const [ublInvoice, setUblInvoice] = useState<Row | null>(null);
   const [ublSourceFile, setUblSourceFile] = useState<File | null>(null);
+  const [ublSaving, setUblSaving] = useState(false);
   const [ublError, setUblError] = useState('');
   const [ublWorkpaperRef, setUblWorkpaperRef] = useState('');
   const [invoiceRegisterSource, setInvoiceRegisterSource] = useState<{ fileName: string; file: File; sheets: InvoiceSheet[] } | null>(null);
@@ -400,19 +401,67 @@ export default function AuditOperationsPanels(props: Props) {
     return matches.length === 1 ? matches[0] : undefined;
   }
 
-  function addUblAsEvidence() {
-    if (!ublInvoice || !engagementId) return;
+  async function addUblAsEvidence() {
+    if (!ublInvoice || !engagementId || ublSaving) return;
     const linkedWorkpaper = resolveUniqueWorkpaper(ublWorkpaperRef);
     if (!linkedWorkpaper) { setUblError('اختر مرجع ورقة عمل موجودًا وفريدًا في هذا الملف قبل فهرسة الفاتورة.'); return; }
-    const entry: Evidence = {
-      id: id('evidence-ubl'), engagementId, title: 'ملخص فاتورة UBL: ' + (ublInvoice.invoiceId || ublInvoice.sourceName),
-      type: 'بيانات فاتورة مستخرجة', reference: String(ublInvoice.invoiceId || ublInvoice.sourceName || ''),
-      workpaperRef: linkedWorkpaper.ref,
-      notes: JSON.stringify({ invoice: ublInvoice, suggestedMatch: ublMatch ? { status: ublMatch.status, candidates: ublMatch.candidates.slice(0, 3) } : null, source: 'local UBL XML parser' }, null, 2),
-      addedAt: new Date().toISOString(),
-    };
-    onAddEvidence(entry);
-    setUblError('فُهرس ملخص UBL وربط بورقة العمل المختارة. المرشح ليس تأكيدًا لمطابقة الفاتورة، ويجب الاحتفاظ بالأصل والتحقق منه يدويًا.');
+    if (!ublSourceFile) { setUblError('أعد اختيار ملف XML الأصلي قبل فهرسته.'); return; }
+    setUblSaving(true); setUblError('');
+    try {
+      const attachment = await saveLocalEvidenceFile(ublSourceFile, vaultPassphrase);
+      const entry: Evidence = {
+        id: id('evidence-ubl'), engagementId, title: 'فاتورة UBL أصلية: ' + (ublInvoice.invoiceId || ublInvoice.sourceName),
+        type: 'فاتورة مورد / UBL XML', reference: String(ublInvoice.invoiceId || ublInvoice.sourceName || ''),
+        workpaperRef: linkedWorkpaper.ref,
+        notes: JSON.stringify({ invoice: ublInvoice, suggestedMatch: ublMatch ? { status: ublMatch.status, statusLabel: ublMatch.statusLabel, message: ublMatch.message, candidates: ublMatch.candidates.slice(0, 3) } : null, source: 'local UBL XML parser', note: 'تحليل أولي فقط، وليس تصديقًا ضريبيًا أو تحققًا من التوقيع أو تأكيدًا من المورد.' }, null, 2),
+        addedAt: new Date().toISOString(),
+        attachmentId: attachment.id, fileName: attachment.fileName, fileType: attachment.fileType, fileSize: attachment.fileSize,
+      };
+      onAddEvidence(entry);
+      setUblError('حُفظ ملف XML الأصلي مشفرًا محليًا وربط بورقة العمل المختارة. مرشح المطابقة يحتاج مراجعة مستقلة.');
+    } catch (error) {
+      setUblError(error instanceof Error ? error.message : 'تعذر حفظ XML الأصلي في مخزن الأدلة المشفر.');
+    } finally { setUblSaving(false); }
+  }
+
+  async function archiveInvoiceRegisterSource() {
+    if (!invoiceRegisterSource || !engagementId || invoiceSourceEvidenceId) return;
+    const linkedWorkpaper = resolveUniqueWorkpaper(invoiceSourceWorkpaperRef);
+    if (!linkedWorkpaper) { setInvoiceImportError('اختر ورقة عمل ذات مرجع فريد لحفظ سجل الفواتير الأصلي.'); return; }
+    setInvoiceImportError(''); setInvoiceImportNotice('');
+    try {
+      const attachment = await saveLocalEvidenceFile(invoiceRegisterSource.file, vaultPassphrase);
+      const evidence: Evidence = {
+        id: id('evidence-invoice-register'), engagementId,
+        title: 'سجل فواتير أصلي: ' + invoiceRegisterSource.fileName,
+        type: 'سجل مصدر فواتير',
+        reference: invoiceRegisterSource.fileName + (invoiceSheetName ? ' · ' + invoiceSheetName : ''),
+        workpaperRef: linkedWorkpaper.ref,
+        notes: JSON.stringify({
+          sourceFile: invoiceRegisterSource.fileName,
+          selectedSheet: invoiceSheetName,
+          importedInvoiceRows: invoiceRegisterData?.sourceCount ?? 0,
+          detectedFields: invoiceRegisterData?.fieldsDetected ?? [],
+          importWarnings: invoiceRegisterData?.warnings ?? [],
+          matchingSummary: invoiceRegisterMatches ? {
+            invoiceCount: invoiceRegisterMatches.invoiceCount,
+            journalRowCount: invoiceRegisterMatches.journalRowCount,
+            matchedCandidateCount: invoiceRegisterMatches.matchedCandidateCount,
+            conflictCount: invoiceRegisterMatches.conflictCount,
+            unmatchedCount: invoiceRegisterMatches.unmatchedCount,
+            statusCounts: invoiceRegisterMatches.statusCounts,
+          } : null,
+          note: 'السجل الأصلي محفوظ كمرفق مشفر. نتائج المطابقة مجرد مرشحين ولا تمثل اعتمادًا تلقائيًا.',
+        }, null, 2),
+        addedAt: new Date().toISOString(),
+        attachmentId: attachment.id, fileName: attachment.fileName, fileType: attachment.fileType, fileSize: attachment.fileSize,
+      };
+      onAddEvidence(evidence);
+      setInvoiceSourceEvidenceId(attachment.id);
+      setInvoiceImportNotice('حُفظ أصل سجل الفواتير مشفرًا وربط بورقة العمل ' + linkedWorkpaper.ref + '. استخدم رقم الصف والمرجع للتحقق من كل مرشح.');
+    } catch (error) {
+      setInvoiceImportError(error instanceof Error ? error.message : 'تعذر حفظ سجل الفواتير الأصلي مشفرًا.');
+    }
   }
 
   function addInvoiceRegisterEvidence(invoice: { invoiceId: string; issueDate: string; issueDateRaw: string; supplierName: string; supplierTaxId: string; currency: string; payableAmount: number | null; taxAmount: number | null; sourceRowNumber: number; sourceFields: Record<string, string>; invalidAmount: boolean }, match: Row) {
