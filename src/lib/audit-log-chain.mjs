@@ -26,14 +26,39 @@ function byTimestamp(events) {
   return events.slice().sort((a, b) =>
     String(a.at ?? '').localeCompare(String(b.at ?? '')) || String(a.id ?? '').localeCompare(String(b.id ?? '')));
 }
+function orderLegacyChainByLinks(events) {
+  const legacy = events.filter(event => Boolean(event.hash));
+  if (!legacy.length) return [];
+  const starts = legacy.filter(event => String(event.prevHash ?? '') === GENESIS_HASH);
+  // A well-formed historical chain has exactly one GENESIS successor. For malformed
+  // histories, retain a deterministic fallback order so verification reports the break.
+  if (starts.length !== 1) return byTimestamp(legacy);
+
+  const ordered = [];
+  const seenHashes = new Set();
+  let current = starts[0];
+  while (current && !seenHashes.has(String(current.hash))) {
+    ordered.push(current);
+    seenHashes.add(String(current.hash));
+    const next = legacy.filter(event =>
+      !seenHashes.has(String(event.hash)) && String(event.prevHash ?? '') === String(current.hash));
+    if (next.length !== 1) break;
+    current = next[0];
+  }
+  const leftovers = legacy.filter(event => !seenHashes.has(String(event.hash)));
+  return [...ordered, ...byTimestamp(leftovers)];
+}
+
 function chainOrder(events) {
   const input = Array.isArray(events) ? events : [];
-  const legacy = input.filter(event => !(Number.isSafeInteger(event.sequence) && event.sequence > 0));
-  const sequenced = input.filter(event => Number.isSafeInteger(event.sequence) && event.sequence > 0)
+  const hashed = input.filter(event => Boolean(event.hash));
+  const legacy = hashed.filter(event => !(Number.isSafeInteger(event.sequence) && event.sequence > 0));
+  const sequenced = hashed.filter(event => Number.isSafeInteger(event.sequence) && event.sequence > 0)
     .sort((a, b) => a.sequence - b.sequence || String(a.id ?? '').localeCompare(String(b.id ?? '')));
-  // Legacy hashes predate sequence metadata; preserve their original chronology first.
-  // All newly sealed events carry a sequence and are always ordered by it, not by clock time.
-  return [...byTimestamp(legacy), ...sequenced];
+  const unsealed = byTimestamp(input.filter(event => !event.hash));
+  // For old records, follow authenticated prevHash links. Timestamps are presentation
+  // metadata and may be wrong after clock drift; new records use explicit sequence numbers.
+  return [...orderLegacyChainByLinks(legacy), ...sequenced, ...unsealed];
 }
 function sealingOrder(events) {
   const input = Array.isArray(events) ? events : [];
