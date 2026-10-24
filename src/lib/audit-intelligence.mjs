@@ -589,6 +589,7 @@ export function buildAuditEvidenceGraph({ sourceName = '', journalRows = [], jou
       rowNumbers,
       sourceRecords,
       evidenceMatches: matches,
+      linkedEvidence: uniqueEvidence,
       linkedEvidenceCount: uniqueEvidence.length,
       linkedWorkpapers,
       linkedFindings: linkedFindings.map(link => link.finding),
