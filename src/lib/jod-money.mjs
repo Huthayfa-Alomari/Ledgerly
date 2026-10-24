@@ -73,7 +73,7 @@ export function parseJodAmount(value, options = {}) {
 
   // Only known currency prefixes are allowed. Unknown suffixes such as "CR"
   // are rejected rather than stripped to a plausible-looking number.
-  text = text.replace(/^(?:JOD|JD|USD|EUR|د\.أ|د\.ا|ر\.د|[$€£])\s*/iu, '').trim();
+  text = text.replace(/^(?:JOD|JD|د\.أ|د\.ا|ر\.د)\s*/iu, '').trim();
   if (!text) return invalid('missing-numeric-value');
 
   const plainDecimal = /^[+-]?(?:\d+(?:\.\d{1,3})?|\.\d{1,3})$/;
