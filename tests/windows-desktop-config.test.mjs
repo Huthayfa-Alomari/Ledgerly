@@ -51,7 +51,7 @@ test('Windows release uses explicit public cloud variables and fails on high-sev
   assert.match(workflow, /VITE_SUPABASE_ANON_KEY: \$\{\{ vars\.VITE_SUPABASE_ANON_KEY \}\}/);
   assert.match(workflow, /npm audit --audit-level=high/);
 });
-test('GitHub Actions use Node 24-compatible action majors and pinned runner images', () => {
+test('GitHub Actions use immutable action SHAs, pinned runner images and least privilege', () => {
   const ci = read('../.github/workflows/ci.yml');
   const release = read('../.github/workflows/windows-release.yml');
   assert.ok(ci.includes('runs-on: ubuntu-24.04'));
@@ -59,7 +59,11 @@ test('GitHub Actions use Node 24-compatible action majors and pinned runner imag
   assert.ok(ci.includes('uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1'));
   assert.ok(!ci.includes('ubuntu-latest'));
   assert.ok(!ci.includes('actions/checkout@v4'));
+  assert.ok(!ci.includes('actions/checkout@v7'));
   assert.ok(!ci.includes('actions/setup-node@v4'));
+  assert.ok(!ci.includes('actions/setup-node@v7'));
+  assert.ok(ci.includes('working-directory: desktop\n        run: npm ci --no-fund'));
+  assert.ok(ci.includes('working-directory: desktop\n        run: npm audit --audit-level=high'));
   assert.ok(release.includes('runs-on: windows-2025'));
   assert.ok(release.includes('uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'));
   assert.ok(release.includes('uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1'));
