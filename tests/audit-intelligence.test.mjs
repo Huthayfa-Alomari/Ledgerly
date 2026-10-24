@@ -26,7 +26,7 @@ const tbRow = (overrides = {}) => ({
 test('parses Arabic digits and common JOD amount formats safely', () => {
   assert.equal(parseAuditAmount('١٬٢٣٤٫٥٠'), 1234.5);
   assert.equal(parseAuditAmount('1,234.50'), 1234.5);
-  assert.equal(parseAuditAmount('1.234,50'), 1234.5);
+  assert.equal(parseAuditAmount('1.234,50'), null, 'ambiguous European separators are rejected');
   assert.equal(parseAuditAmount('(250.00)'), -250);
   assert.equal(parseAuditAmount('not-a-number'), null);
 });
@@ -511,4 +511,22 @@ test('Copilot account summaries disclose current/comparative variance and exact 
   assert.equal(summaries[0].comparativeNetJod, 9000);
   assert.equal(summaries[0].varianceJod, 3000);
   assert.equal(summaries[0].variancePercent, 33.333);
+});
+
+
+test('journal amount parsing rejects ambiguous formats and returns warnings with source rows', () => {
+  const warning = [];
+  assert.equal(parseAuditAmount('1,5', { onWarning: value => warning.push(value) }), null);
+  assert.equal(parseAuditAmount('1.234,567', { onWarning: value => warning.push(value) }), null);
+  assert.equal(parseAuditAmount('100 CR', { onWarning: value => warning.push(value) }), null);
+  assert.equal(warning.length, 3);
+
+  const imported = normalizeJournalRows([
+    { Date: '2026-10-21', Description: 'Ambiguous decimal', Account: '5100', Debit: '1,5', Credit: '0' },
+    { Date: '2026-10-22', Description: 'Credit suffix', Account: '5100', Debit: '100 CR', Credit: '0' },
+  ]);
+  assert.deepEqual(imported.rows[0].invalidAmountFields, ['debit']);
+  assert.deepEqual(imported.rows[0].numericWarnings.map(item => item.rawValue), ['1,5']);
+  assert.ok(imported.warnings.some(message => message.includes('الصف 2') && message.includes('1,5')));
+  assert.ok(imported.warnings.some(message => message.includes('الصف 3') && message.includes('100 CR')));
 });
