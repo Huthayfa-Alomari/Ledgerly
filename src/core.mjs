@@ -127,6 +127,7 @@ export function validateRows(rows) {
 
 /** Convert normalized debit/credit columns to a signed cash-flow amount. */
 export function signedAmount(row) {
+  if (row?.numericWarnings?.length || row?.invalidAmountFields?.length) return null;
   const debit = typeof row.debit === 'number' && Number.isFinite(row.debit) ? row.debit : 0;
   const credit = typeof row.credit === 'number' && Number.isFinite(row.credit) ? row.credit : 0;
   if (row.debit == null && row.credit == null) return null;
