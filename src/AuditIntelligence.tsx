@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx';
 import {
   analyzeJournalEntries,
   buildEvidenceLineage,
+  buildAuditEvidenceGraph,
   buildPartnerDashboard,
   buildQualityShield,
   normalizeJournalRows,
@@ -101,6 +102,8 @@ export default function AuditIntelligence(props: Props) {
   const [sourceWorkbook, setSourceWorkbook] = useState<{ filename: string; workbook: XLSX.WorkBook; sheetNames: string[] } | null>(null);
   const [approvalThreshold, setApprovalThreshold] = useState('');
   const [splitWindowDays, setSplitWindowDays] = useState('1');
+  const [expectedSourceRows, setExpectedSourceRows] = useState('');
+  const [sourceControlTotals, setSourceControlTotals] = useState<Record<string, string>>({ openingDebit: '', openingCredit: '', debit: '', credit: '', closingDebit: '', closingCredit: '' });
   const [fileBusy, setFileBusy] = useState(false);
   const [fileError, setFileError] = useState('');
   const [customRequest, setCustomRequest] = useState('');
@@ -126,7 +129,15 @@ export default function AuditIntelligence(props: Props) {
   const currentRisks = scoped(risks);
   const currentSourceFingerprint = useMemo(() => fingerprintTrialBalanceRows(currentTB), [currentTB]);
   const unmappedAccountCodes = useMemo(() => currentTB.filter(row => !String(operations.accountMappings?.[`${engagementId}::${row.code}`]?.lineKey ?? '').trim()).map(row => String(row.code ?? '').trim()).filter(Boolean), [currentTB, operations.accountMappings, engagementId]);
-  const dataTrust = useMemo(() => runDataTrustChecks(currentTB, { unmappedAccountCodes }), [currentTB, unmappedAccountCodes]);
+  const dataTrustOptions = useMemo(() => {
+    const options: Record<string, any> = { unmappedAccountCodes };
+    const expected = expectedSourceRows.trim() === '' ? null : Number(expectedSourceRows);
+    if (expected !== null && Number.isInteger(expected) && expected >= 0) options.expectedRowCount = expected;
+    const totals = Object.fromEntries(Object.entries(sourceControlTotals).filter(([key, value]) => value.trim() !== '' && Number.isFinite(Number(value))).map(([key, value]) => [key, Number(value)]));
+    if (Object.keys(totals).length) options.sourceTotals = totals;
+    return options;
+  }, [unmappedAccountCodes, expectedSourceRows, sourceControlTotals]);
+  const dataTrust = useMemo(() => runDataTrustChecks(currentTB, dataTrustOptions), [currentTB, dataTrustOptions]);
   const lineage = useMemo(() => buildEvidenceLineage(currentWorkpapers, currentEvidence, currentFindings), [currentWorkpapers, currentEvidence, currentFindings]);
   const currentReportDrafts = (operations.reportDrafts || []).filter(row => row.engagementId === engagementId);
   const quality = useMemo(() => buildQualityShield({
@@ -139,8 +150,10 @@ export default function AuditIntelligence(props: Props) {
     accountMappings: operations.accountMappings,
     engagementId,
     currentSourceFingerprint,
-  }), [currentWorkpapers, currentEvidence, currentFindings, currentRisks, currentTB, currentReportDrafts, operations.accountMappings, engagementId, currentSourceFingerprint]);
+    dataTrustOptions,
+  }), [currentWorkpapers, currentEvidence, currentFindings, currentRisks, currentTB, currentReportDrafts, operations.accountMappings, engagementId, currentSourceFingerprint, dataTrustOptions]);
   const journalAnalysis = useMemo(() => importedJournal ? analyzeJournalEntries(importedJournal.rows, { approvalThreshold: Number(approvalThreshold), splitWindowDays: Number(splitWindowDays) }) : null, [importedJournal, approvalThreshold, splitWindowDays]);
+  const journalEvidenceGraph = useMemo(() => importedJournal && journalAnalysis ? buildAuditEvidenceGraph({ sourceName: importedJournal.filename + ' · ' + importedJournal.sheetName, journalRows: importedJournal.rows, journalAnalysis, workpapers: currentWorkpapers, evidence: currentEvidence, findings: currentFindings }) : null, [importedJournal, journalAnalysis, currentWorkpapers, currentEvidence, currentFindings]);
   const portfolio = useMemo(() => buildPartnerDashboard(engagements, clients, {
     workpapers, evidence, findings, risks, trialBalance,
   } as DBShape, operations), [engagements, clients, workpapers, evidence, findings, risks, trialBalance, operations]);
@@ -214,6 +227,8 @@ export default function AuditIntelligence(props: Props) {
       disclaimer: 'قائمة استثناءات وفحوص إدارية مساعدة؛ ليست رأيًا تدقيقيًا ولا إثباتًا للاحتيال ولا بديلًا عن الحكم المهني.',
       engagement: engagement ? { client: client?.name, year: engagement.year, type: engagement.type, framework: engagement.framework } : null,
       dataTrust,
+      dataTrustControls: dataTrustOptions,
+      journalEvidenceGraph,
       journalFile: importedJournal ? { filename: importedJournal.filename, scannedCount: importedJournal.rows.length, warnings: importedJournal.warnings, analysis: journalAnalysis } : null,
       evidenceLineage: lineage,
       qualityShield: quality,
@@ -335,6 +350,21 @@ export default function AuditIntelligence(props: Props) {
           <Kpi label="فرق حركة الفترة" value={dataTrust.movementDifference === null ? "—" : formatMoney(dataTrust.movementDifference)} note={dataTrust.movementDifference === null ? "غير متاح في ملف المصدر" : "صافي المدين ناقص الدائن للحركة"} />
           <Kpi label="فرق المدين والدائن" value={dataTrust.closingDifference === null ? "—" : formatMoney(dataTrust.closingDifference)} note={dataTrust.closingDifference === null ? "غير متاح في ملف المصدر" : "المتوقع أن يقترب من الصفر"} />
         </div>
+        <section className="audit-intel-source-controls" aria-label="Source control totals">
+          <div className="audit-card-head"><div><h4>مطابقة إجماليات المصدر — Source Control Totals</h4><p className="muted-copy">اختياري: أدخل عدد الصفوف وإجماليات الملف كما تظهر في المصدر المحاسبي. إذا تُرك الحقل فارغًا، لا يخترع Ledgerly إجماليًا مرجعيًا.</p></div></div>
+          <label className="audit-field"><span>عدد الصفوف المتوقع (دون العناوين)</span><input type="number" min="0" step="1" value={expectedSourceRows} onChange={event => setExpectedSourceRows(event.target.value)} placeholder="مثال: 1,250" /></label>
+          <div className="audit-intel-screening-options">
+            {([
+              ['openingDebit', 'مدين افتتاحي'],
+              ['openingCredit', 'دائن افتتاحي'],
+              ['debit', 'مدين الحركة'],
+              ['credit', 'دائن الحركة'],
+              ['closingDebit', 'مدين ختامي'],
+              ['closingCredit', 'دائن ختامي'],
+            ] as const).map(([field, label]) => <label className="audit-field" key={field}><span>{label} (د.أ)</span><input type="number" min="0" step="0.001" value={sourceControlTotals[field] || ''} onChange={event => setSourceControlTotals(previous => ({ ...previous, [field]: event.target.value }))} placeholder="غير محدد" /></label>)}
+          </div>
+          <div className="stack-actions"><button className="audit-secondary" onClick={() => { setExpectedSourceRows(''); setSourceControlTotals({ openingDebit: '', openingCredit: '', debit: '', credit: '', closingDebit: '', closingCredit: '' }); }}>مسح إجماليات الضبط</button></div>
+        </section>
         {dataTrust.issues.length ? <div className="audit-intel-issue-list">{dataTrust.issues.map(item => <article className="audit-intel-issue" key={item.id}>
           <div className="audit-intel-issue-top"><strong>{item.title}</strong><span className={'audit-pill ' + severityClass(item.severity)}>{severityName(item.severity)} · {item.count}</span></div>
           <p>{item.detail}</p><small><b>الخطوة المقترحة:</b> {item.action}</small>{(item.rowNumbers ?? []).length > 0 && <small className="audit-intel-rowlist">صفوف المصدر: {(item.rowNumbers ?? []).slice(0, 15).join('، ')}{(item.rowNumbers ?? []).length > 15 ? ' …' : ''}</small>}
@@ -372,6 +402,28 @@ export default function AuditIntelligence(props: Props) {
             {(item.rowNumbers ?? []).length > 0 && <small className="audit-intel-rowlist">أمثلة الصفوف: {(item.rowNumbers ?? []).slice(0, 15).join('، ')}{(item.rowNumbers ?? []).length > 15 ? ' …' : ''}</small>}
             {item.clusters?.slice(0, 10).map((cluster, index) => <small className="audit-intel-rowlist" key={`${item.id}-cluster-${index}`}>مجموعة محتملة {index + 1}: الصفوف {cluster.rowNumbers.join('، ')} · الإجمالي {formatMoney(cluster.totalAmount)} · {cluster.partyOrDescription}</small>)}
           </article>)}</div> : <div className="audit-intel-clear">✓ لم تظهر مؤشرات وفق القواعد الحالية. راجع صلاحية الاختبارات وملاءمتها للمهمة.</div>}
+          {journalEvidenceGraph && <section className="audit-card audit-intel-lineage-graph">
+            <div className="audit-card-head"><div><h4>خريطة الدليل — Source → Test → Evidence → Workpaper → Finding → Review</h4><p className="muted-copy">يربط النظام الصفوف المختبرة بالنتيجة، ثم يبحث عن دليل يحمل مرجع المستند نفسه حرفيًا بعد التطبيع. لا ينشئ روابط تخمينية.</p></div><span className="soft-tag">Exact-reference lineage</span></div>
+            <div className="audit-intel-kpis audit-intel-kpis-small">
+              <Kpi label="صفوف المصدر" value={journalEvidenceGraph.sourceRowCount} note="من الورقة المحددة" />
+              <Kpi label="صفوف دخلت اختبارًا" value={journalEvidenceGraph.testedSourceRowCount} note="صفوف ذكرتها قاعدة واحدة أو أكثر" />
+              <Kpi label="استثناءات لها دليل مطابق" value={journalEvidenceGraph.issuesWithEvidenceCount} note="مطابقة مرجع مستند حرفية" />
+              <Kpi label="استثناءات بلا دليل مفهرس" value={journalEvidenceGraph.issuesWithoutEvidenceCount} note="تحتاج ربطًا أو تفسيرًا" />
+              <Kpi label="ملاحظات مرتبطة بالكامل" value={journalEvidenceGraph.findingsFullyLinked} note="مرجع ورقة عمل ودليل متوافق" />
+            </div>
+            {journalEvidenceGraph.issueNodes.length > 0 ? <div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>اختبار / نتيجة</th><th>صفوف المصدر</th><th>مراجع المصدر</th><th>الأدلة المطابقة</th><th>أوراق العمل</th><th>الملاحظات</th><th>المراجعة</th></tr></thead><tbody>
+              {journalEvidenceGraph.issueNodes.slice(0, 30).map(node => <tr key={node.id}>
+                <td className="cell-strong">{node.title}<small className="table-sub">{node.severity} · {node.traceStatus}</small></td>
+                <td>{node.rowNumbers.join('، ') || '—'}</td>
+                <td>{node.sourceRecords.map(row => row.reference).filter(Boolean).filter((value, index, array) => array.indexOf(value) === index).join('، ') || 'لا يوجد مرجع'}</td>
+                <td>{node.linkedEvidence.map(item => item.title || item.fileName || item.reference).join('، ') || 'لا يوجد دليل مطابق'}</td>
+                <td>{node.linkedWorkpapers.map(item => item.ref + ' — ' + item.title).join('، ') || 'غير مرتبط'}</td>
+                <td>{node.linkedFindings.map(item => item.title).join('، ') || '—'}</td>
+                <td>{node.approvals.map(item => item.approved ? 'اعتماد مسجل: ' + item.workpaperRef + (item.reviewer ? ' / ' + item.reviewer : '') : 'يحتاج مراجعة: ' + item.workpaperRef).join('، ') || 'لا يوجد اعتماد مرتبط'}</td>
+              </tr>)}
+            </tbody></table></div> : <p className="muted-copy">لا توجد نتائج اختبار لربطها بصفوف المصدر حتى الآن.</p>}
+            <p className="audit-intel-footnote">المرجع المطابق إداري فقط ولا يثبت كفاية أو أصالة المستند. تأكد من صحة الملف المرفق والموافقة وسلامة سلسلة الحيازة بصورة مستقلة.</p>
+          </section>}
           <div className="stack-actions">
             <button className="audit-primary" onClick={() => downloadFile('ledgerly-journal-screening.json', JSON.stringify({ filename: importedJournal.filename, sourceSheet: importedJournal.sheetName, warnings: importedJournal.warnings, screeningParameters: { approvalThreshold: Number(approvalThreshold) > 0 ? Number(approvalThreshold) : null, splitWindowDays: Number(splitWindowDays) }, scannedCount: journalAnalysis.scannedCount, results: journalAnalysis }, null, 2), 'application/json;charset=utf-8')}>تصدير نتائج الفحص</button>
             <button className="audit-secondary" onClick={() => downloadCsv('ledgerly-journal-exceptions.csv', [
