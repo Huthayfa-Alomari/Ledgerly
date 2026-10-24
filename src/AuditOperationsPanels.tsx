@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import {
   runAdvancedJournalTests, selectAuditSample, financialStatementLines,
   buildDraftFinancialStatements, parseUblInvoiceXml, calculateOfficeMetrics, inferBankColumns,
+  normalizeInvoiceRegisterRows, matchInvoiceToJournal, matchInvoiceRegisterToJournal,
 } from './lib/audit-operations-engine.mjs';
 import { buildDocxBytes } from './lib/docx-export.mjs';
 import { saveLocalEvidenceFile } from './lib/local-evidence-files';
@@ -18,10 +19,12 @@ type Engagement = { id: string; clientId: string; year: string; type: string; fr
 type Client = { id: string; name: string; contact?: string };
 type TBRow = { id: string; engagementId: string; code: string; name: string; openingDebit: number; openingCredit: number; debit: number; credit: number; closingDebit: number; closingCredit: number; source?: string };
 type Evidence = { id: string; engagementId: string; title: string; type: string; reference: string; workpaperRef: string; notes: string; addedAt: string; attachmentId?: string; fileName?: string; fileType?: string; fileSize?: number };
-type JournalRow = { rowNumber: number; date: string; dateRaw: string; description: string; accountCode: string; reference: string; debit: number | null; credit: number | null; amount: number | null; classification: string; raw: Record<string, unknown> };
+type JournalRow = { rowNumber: number; date: string; dateRaw: string; description: string; accountCode: string; reference: string; counterparty?: string; debit: number | null; credit: number | null; amount: number | null; classification: string; raw: Record<string, unknown> };
+type WorkpaperOption = { id: string; engagementId: string; ref: string; title: string; status: string };
+type InvoiceSheet = { name: string; rows: Array<Record<string, unknown>> };
 type Props = {
   engagementId?: string; engagement?: Engagement; client?: Client; trialBalance: TBRow[];
-  journalRows?: JournalRow[]; journalFileName?: string; operations: Operations; vaultPassphrase: string;
+  journalRows?: JournalRow[]; journalFileName?: string; workpapers?: WorkpaperOption[]; operations: Operations; vaultPassphrase: string;
   onOperationsChange: (value: Operations) => void; onAddEvidence: (row: Evidence) => void; onOpenReconciliation: () => void;
 };
 
@@ -92,7 +95,7 @@ function SignaturePad({ value, onChange }: { value: string; onChange: (data: str
 }
 
 export default function AuditOperationsPanels(props: Props) {
-  const { engagementId, engagement, client, trialBalance, journalRows = [], journalFileName = '', operations, vaultPassphrase, onOperationsChange, onAddEvidence, onOpenReconciliation } = props;
+  const { engagementId, engagement, client, trialBalance, journalRows = [], journalFileName = '', workpapers = [], operations, vaultPassphrase, onOperationsChange, onAddEvidence, onOpenReconciliation } = props;
   const [sampleMethod, setSampleMethod] = useState<'random' | 'systematic' | 'mus'>('random');
   const [sampleSize, setSampleSize] = useState('25');
   const [sampleSeed, setSampleSeed] = useState('20261023');
@@ -105,6 +108,16 @@ export default function AuditOperationsPanels(props: Props) {
   const [bankNotice, setBankNotice] = useState('');
   const [ublInvoice, setUblInvoice] = useState<Row | null>(null);
   const [ublError, setUblError] = useState('');
+  const [ublWorkpaperRef, setUblWorkpaperRef] = useState('');
+  const [invoiceRegisterSource, setInvoiceRegisterSource] = useState<{ fileName: string; sheets: InvoiceSheet[] } | null>(null);
+  const [invoiceSheetName, setInvoiceSheetName] = useState('');
+  const [invoiceBusy, setInvoiceBusy] = useState(false);
+  const [invoiceImportError, setInvoiceImportError] = useState('');
+  const [invoiceImportNotice, setInvoiceImportNotice] = useState('');
+  const [invoiceWorkpaperRefs, setInvoiceWorkpaperRefs] = useState<Record<string, string>>({});
+  const [invoiceAddedKeys, setInvoiceAddedKeys] = useState<Record<string, boolean>>({});
+  const [invoiceTolerance, setInvoiceTolerance] = useState('0.001');
+  const [invoiceDateWindow, setInvoiceDateWindow] = useState('3');
   const [hours, setHours] = useState('1');
   const [hourlyRate, setHourlyRate] = useState('15.000');
   const [timeDescription, setTimeDescription] = useState('');
@@ -132,6 +145,11 @@ export default function AuditOperationsPanels(props: Props) {
   const currentTime = (operations.timeEntries || []).filter(row => row.engagementId === engagementId);
   const currentInvoices = (operations.officeInvoices || []).filter(row => row.engagementId === engagementId);
   const currentConfirmations = (operations.externalConfirmations || []).filter(row => row.engagementId === engagementId);
+  const currentWorkpapers = useMemo(() => (workpapers || []).filter(row => row.engagementId === engagementId && String(row.ref ?? '').trim()), [workpapers, engagementId]);
+  const selectedInvoiceSheet = useMemo(() => invoiceRegisterSource?.sheets.find(sheet => sheet.name === invoiceSheetName) || null, [invoiceRegisterSource, invoiceSheetName]);
+  const invoiceRegisterData = useMemo(() => selectedInvoiceSheet ? normalizeInvoiceRegisterRows(selectedInvoiceSheet.rows) : null, [selectedInvoiceSheet]);
+  const invoiceRegisterMatches = useMemo(() => invoiceRegisterData ? matchInvoiceRegisterToJournal(invoiceRegisterData.rows, journalRows, { toleranceJod: Number(invoiceTolerance), dateWindowDays: Number(invoiceDateWindow) }) : null, [invoiceRegisterData, journalRows, invoiceTolerance, invoiceDateWindow]);
+  const ublMatch = useMemo(() => ublInvoice ? matchInvoiceToJournal({ invoiceId: ublInvoice.invoiceId, issueDate: ublInvoice.issueDate, supplierName: ublInvoice.supplierName, supplierTaxId: ublInvoice.supplierTaxId, currency: ublInvoice.currency, payableAmount: ublInvoice.payableAmount }, journalRows, { toleranceJod: Number(invoiceTolerance), dateWindowDays: Number(invoiceDateWindow) }) : null, [ublInvoice, journalRows, invoiceTolerance, invoiceDateWindow]);
   const currentFieldRecords = (operations.fieldworkRecords || []).filter((row: Row) => row.engagementId === engagementId).slice(0, 12);
   const sampleHistory = (operations.samplingRuns || []).filter(row => row.engagementId === engagementId).slice(0, 8);
   const journalTests = useMemo(() => journalRows.length ? runAdvancedJournalTests(journalRows) : null, [journalRows]);
@@ -310,21 +328,110 @@ export default function AuditOperationsPanels(props: Props) {
   async function importUbl(file?: File) {
     setUblInvoice(null); setUblError('');
     if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { setUblError('ملف UBL يتجاوز حد 10 ميغابايت.'); return; }
     try {
       const parsed = parseUblInvoiceXml(await file.text());
       setUblInvoice({ ...parsed, sourceName: file.name });
+      setUblWorkpaperRef('');
     } catch (error) { setUblError(error instanceof Error ? error.message : 'تعذر تحليل ملف XML.'); }
+  }
+
+  async function importInvoiceRegister(file?: File) {
+    setInvoiceImportError(''); setInvoiceImportNotice('');
+    if (!file) return;
+    if (file.size > 30 * 1024 * 1024) { setInvoiceImportError('ملف الفواتير يتجاوز حد 30 ميغابايت.'); return; }
+    const extension = file.name.split('.').pop()?.toLowerCase();
+    if (!['csv', 'xlsx', 'xls'].includes(extension || '')) { setInvoiceImportError('اختر CSV أو Excel بصيغة XLSX/XLS.'); return; }
+    setInvoiceBusy(true);
+    try {
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true, raw: false });
+      const sheets: InvoiceSheet[] = [];
+      let totalSourceRows = 0;
+      for (const name of workbook.SheetNames) {
+        const worksheet = workbook.Sheets[name];
+        if (!worksheet || !worksheet['!ref']) continue;
+        const range = XLSX.utils.decode_range(worksheet['!ref']);
+        const estimatedDataRows = Math.max(0, range.e.r - range.s.r);
+        totalSourceRows += estimatedDataRows;
+        if (totalSourceRows > 10000) throw new Error('تجاوز ملف الفواتير حد 10,000 صف لهذا الاستيراد الآمن. قسّم السجل إلى ملفات أصغر.');
+        const matrix = XLSX.utils.sheet_to_json<unknown[]>(worksheet, { header: 1, defval: '', raw: false, blankrows: true });
+        if (matrix.length < 2) continue;
+        const usedHeaders = new Map<string, number>();
+        const headers = (matrix[0] || []).map((value, index) => {
+          const base = String(value ?? '').trim() || ('Column ' + (index + 1));
+          const count = (usedHeaders.get(base) || 0) + 1;
+          usedHeaders.set(base, count);
+          return count === 1 ? base : base + ' (' + count + ')';
+        });
+        if (!headers.some(header => /invoice|فاتورة|مبلغ|amount|total|الإجمالي|المستحق/i.test(header))) continue;
+        const rows: Array<Record<string, unknown>> = matrix.slice(1).map((values, rowIndex) => {
+          const record: Record<string, unknown> = {};
+          headers.forEach((header, index) => { record[header] = values?.[index] ?? ''; });
+          Object.defineProperty(record, '__sourceRowNumber', { value: range.s.r + rowIndex + 2, enumerable: false });
+          return record;
+        });
+        const normalized = normalizeInvoiceRegisterRows(rows);
+        if (normalized.sourceCount) sheets.push({ name, rows });
+      }
+      if (!sheets.length) throw new Error('لم يتم العثور على ورقة فواتير قابلة للقراءة. تحقق من عناوين رقم الفاتورة والتاريخ والمورد والمبلغ.');
+      setInvoiceRegisterSource({ fileName: file.name, sheets });
+      setInvoiceSheetName(sheets[0].name);
+      setInvoiceWorkpaperRefs({});
+      setInvoiceAddedKeys({});
+      setInvoiceImportNotice('تم استيراد عناوين وصفوف سجل الفواتير محليًا؛ اختر الورقة وراجع التعيين والمرشحين قبل ربط أي دليل.');
+    } catch (error) {
+      setInvoiceImportError(error instanceof Error ? error.message : 'تعذر قراءة سجل الفواتير.');
+    } finally { setInvoiceBusy(false); }
+  }
+
+  function normalizedInvoiceRowKey(invoice: { sourceRowNumber?: number; invoiceId?: string }) {
+    return String(invoice.sourceRowNumber ?? '') + '::' + String(invoice.invoiceId ?? '');
+  }
+
+  function resolveUniqueWorkpaper(ref: string) {
+    const normalized = String(ref ?? '').trim().toLocaleLowerCase();
+    const matches = currentWorkpapers.filter(paper => String(paper.ref ?? '').trim().toLocaleLowerCase() === normalized);
+    return matches.length === 1 ? matches[0] : undefined;
   }
 
   function addUblAsEvidence() {
     if (!ublInvoice || !engagementId) return;
+    const linkedWorkpaper = resolveUniqueWorkpaper(ublWorkpaperRef);
+    if (!linkedWorkpaper) { setUblError('اختر مرجع ورقة عمل موجودًا وفريدًا في هذا الملف قبل فهرسة الفاتورة.'); return; }
     const entry: Evidence = {
       id: id('evidence-ubl'), engagementId, title: 'ملخص فاتورة UBL: ' + (ublInvoice.invoiceId || ublInvoice.sourceName),
-      type: 'بيانات مستخرجة', reference: String(ublInvoice.invoiceId || ublInvoice.sourceName || ''),
-      workpaperRef: '', notes: JSON.stringify(ublInvoice, null, 2), addedAt: new Date().toISOString(),
+      type: 'بيانات فاتورة مستخرجة', reference: String(ublInvoice.invoiceId || ublInvoice.sourceName || ''),
+      workpaperRef: linkedWorkpaper.ref,
+      notes: JSON.stringify({ invoice: ublInvoice, suggestedMatch: ublMatch ? { status: ublMatch.status, candidates: ublMatch.candidates.slice(0, 3) } : null, source: 'local UBL XML parser' }, null, 2),
+      addedAt: new Date().toISOString(),
     };
     onAddEvidence(entry);
-    setUblError('أضيف ملخص حقول XML كدليل مفهرس. يجب إرفاق المستند الأصلي والتحقق من سلامته يدويًا أيضًا.');
+    setUblError('فُهرس ملخص UBL وربط بورقة العمل المختارة. المرشح ليس تأكيدًا لمطابقة الفاتورة، ويجب الاحتفاظ بالأصل والتحقق منه يدويًا.');
+  }
+
+  function addInvoiceRegisterEvidence(invoice: { invoiceId: string; issueDate: string; issueDateRaw: string; supplierName: string; supplierTaxId: string; currency: string; payableAmount: number | null; taxAmount: number | null; sourceRowNumber: number; sourceFields: Record<string, string>; invalidAmount: boolean }, match: Row) {
+    if (!engagementId || !invoice.invoiceId.trim() || invoice.payableAmount === null || !Number.isFinite(invoice.payableAmount) || invoice.payableAmount <= 0) {
+      setInvoiceImportError('تعذر فهرسة هذه الفاتورة: صحح رقم الفاتورة والمبلغ أولًا.'); return;
+    }
+    const key = normalizedInvoiceRowKey(invoice);
+    const linkedWorkpaper = resolveUniqueWorkpaper(invoiceWorkpaperRefs[key] || '');
+    if (!linkedWorkpaper) { setInvoiceImportError('اختر ورقة عمل موجودة ذات مرجع فريد لفاتورة ' + invoice.invoiceId + '.'); return; }
+    const entry: Evidence = {
+      id: id('evidence-invoice'), engagementId,
+      title: 'فاتورة مورد: ' + invoice.invoiceId,
+      type: 'فاتورة مورد / سجل مستورد',
+      reference: invoice.invoiceId,
+      workpaperRef: linkedWorkpaper.ref,
+      notes: JSON.stringify({
+        invoice: { ...invoice, sourceFile: invoiceRegisterSource?.fileName || '', sourceSheet: invoiceSheetName },
+        suggestedLedgerMatch: { status: match.status, statusLabel: match.statusLabel, message: match.message, candidates: match.candidates.slice(0, 5) },
+        note: 'اقتراح ربط فقط؛ لا يمثل تأكيدًا من المورد أو اعتمادًا ضريبيًا أو تسوية تلقائية.',
+      }, null, 2),
+      addedAt: new Date().toISOString(),
+    };
+    onAddEvidence(entry);
+    setInvoiceAddedKeys(previous => ({ ...previous, [key]: true }));
+    setInvoiceImportNotice('تم فهرسة الفاتورة ' + invoice.invoiceId + ' وربطها بورقة العمل ' + linkedWorkpaper.ref + '. يجب مطابقة الأصل والمبلغ والعملة بصورة مستقلة.');
   }
 
   function addTimeEntry() {
