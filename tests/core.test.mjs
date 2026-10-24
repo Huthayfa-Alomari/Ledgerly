@@ -107,7 +107,7 @@ test('rounds negative and positive sub-fils symmetrically in signed amount calcu
 });
 
 test('parses three-decimal Jordanian fils without treating a 0.004 difference as a match', () => {
-  assert.equal(parseAmount('0,004'), 0.004);
+  assert.equal(parseAmount('0.004'), 0.004);
   const result = matchTransactions(
     [{ date: '2026-10-14', description: 'Bank receipt', debit: null, credit: 10.004 }],
     [{ date: '2026-10-14', description: 'Ledger receipt', debit: null, credit: 10.000 }]
@@ -250,4 +250,16 @@ test('strict shared amount parser rejects ambiguous separators and unknown suffi
   assert.equal(parseAmount('1,234.567'), 1234.567);
   assert.equal(parseAmount('12.004'), 12.004);
   assert.equal(parseAmount('0,004'), null);
+});
+
+
+test('normalized statement rows retain source-field warnings for invalid financial strings', () => {
+  const rows = normalizeRows([
+    { date: '2026-10-01', description: 'Ambiguous transaction', debit: '1,5', credit: '' },
+    { date: '2026-10-02', description: 'Credit suffix', debit: '100 CR', credit: '' },
+  ], { date: 0, description: 1, debit: 2, credit: 3 });
+  const warnings = validateRows(rows);
+  assert.ok(warnings.some(item => item.row === 2 && item.field === 'debit' && item.rawValue === '1,5'));
+  assert.ok(warnings.some(item => item.row === 3 && item.field === 'debit' && item.rawValue === '100 CR'));
+  assert.ok(warnings.every(item => item.message !== ''));
 });
