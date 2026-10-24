@@ -41,6 +41,8 @@ test('parses decimal dots, three JOD decimals, Arabic digits, and currency label
   assert.equal(parseJodAmount('١٢.٣٤٥'), 12.345);
   assert.equal(parseJodAmount('د.أ 12.345'), 12.345);
   assert.equal(parseJodAmount('1,234.567'), 1234.567);
+  assert.equal(parseJodAmount('1,234'), null, 'single comma with three trailing digits is ambiguous');
+  assert.equal(parseJodAmount('1,234,567'), 1234567);
 });
 
 test('treats blank cells as zero and rejects malformed values rather than coercing them to zero', () => {
@@ -56,5 +58,21 @@ test('treats blank cells as zero and rejects malformed values rather than coerci
 
 test('supports parenthesized negative amounts', () => {
   assert.equal(parseJodAmount('(12.345)'), -12.345);
-  assert.equal(parseJodAmount('($1,234.567)'), -1234.567);
+  assert.equal(parseJodAmount('(JOD 1,234.567)'), -1234.567);
+  assert.equal(parseJodAmount('USD 100'), null);
+  assert.equal(parseJodAmount('$100'), null);
+});
+
+
+test('strict JOD parser never guesses separator conventions or strips unknown suffixes', () => {
+  const warnings = [];
+  assert.equal(parseJodAmount('1,5', { onWarning: value => warnings.push(value) }), null);
+  assert.equal(parseJodAmount('1.234,567', { onWarning: value => warnings.push(value) }), null);
+  assert.equal(parseJodAmount('100 CR', { onWarning: value => warnings.push(value) }), null);
+  assert.equal(warnings.length, 3);
+  assert.equal(parseJodAmount('1,234.567'), 1234.567);
+  assert.equal(parseJodAmount('JOD 12.004'), 12.004);
+  assert.equal(parseJodAmount('(12.345)'), -12.345);
+  assert.equal(parseJodAmount(''), 0);
+  assert.equal(parseJodAmount('', { blankAsZero: false }), null);
 });

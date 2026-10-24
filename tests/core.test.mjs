@@ -23,7 +23,7 @@ test('detects Arabic and English statement columns', () => {
 
 test('parses amount formats with commas, decimals, parentheses and Arabic digits', () => {
   assert.equal(parseAmount('1,234.56'), 1234.56);
-  assert.equal(parseAmount('1.234,56'), 1234.56);
+  assert.equal(parseAmount('1.234,56'), null, 'European separator format is rejected until the source locale is explicit');
   assert.equal(parseAmount('(125.50)'), -125.5);
   assert.equal(parseAmount('١٢٣٫٤٥'), 123.45);
   assert.equal(parseAmount('not-a-number'), null);
@@ -107,7 +107,7 @@ test('rounds negative and positive sub-fils symmetrically in signed amount calcu
 });
 
 test('parses three-decimal Jordanian fils without treating a 0.004 difference as a match', () => {
-  assert.equal(parseAmount('0,004'), 0.004);
+  assert.equal(parseAmount('0.004'), 0.004);
   const result = matchTransactions(
     [{ date: '2026-10-14', description: 'Bank receipt', debit: null, credit: 10.004 }],
     [{ date: '2026-10-14', description: 'Ledger receipt', debit: null, credit: 10.000 }]
@@ -237,4 +237,47 @@ test('indexed matching handles a large set of unique same-date transactions', ()
   assert.equal(result.summary.matchedCount, 5000);
   assert.equal(result.summary.ambiguousCount, 0);
   assert.equal(result.unmatchedBank.length, 0);
+});
+
+
+test('strict shared amount parser rejects ambiguous separators and unknown suffixes', () => {
+  const warnings = [];
+  assert.equal(parseAmount('1,5', { onWarning: warning => warnings.push(warning) }), null);
+  assert.equal(parseAmount('1.234,567', { onWarning: warning => warnings.push(warning) }), null);
+  assert.equal(parseAmount('100 CR', { onWarning: warning => warnings.push(warning) }), null);
+  assert.equal(warnings.length, 3);
+  assert.ok(warnings.every(warning => warning.reason === 'ambiguous-or-malformed-number'));
+  assert.equal(parseAmount('1,234.567'), 1234.567);
+  assert.equal(parseAmount('12.004'), 12.004);
+  assert.equal(parseAmount('0,004'), null);
+});
+
+
+test('normalized statement rows retain source-field warnings for invalid financial strings', () => {
+  const rows = normalizeRows([
+    { date: '2026-10-01', description: 'Ambiguous transaction', debit: '1,5', credit: '' },
+    { date: '2026-10-02', description: 'Credit suffix', debit: '100 CR', credit: '' },
+  ], { date: 0, description: 1, debit: 2, credit: 3 });
+  const warnings = validateRows(rows);
+  assert.ok(warnings.some(item => item.row === 2 && item.field === 'debit' && item.rawValue === '1,5'));
+  assert.ok(warnings.some(item => item.row === 3 && item.field === 'debit' && item.rawValue === '100 CR'));
+  assert.ok(warnings.every(item => item.message !== ''));
+});
+
+
+test('rows with ambiguous or malformed numeric fields cannot enter reconciliation as zero amounts', () => {
+  const rows = normalizeRows([
+    ['2026-10-14', 'Ambiguous debit', '1,5', ''],
+    ['2026-10-15', 'Credit suffix', '', '100 CR'],
+  ], { date: 0, description: 1, debit: 2, credit: 3 });
+  assert.equal(rows[0].debit, null);
+  assert.equal(rows[0].numericWarnings.length, 1);
+  assert.equal(signedAmount(rows[0]), null);
+  assert.equal(signedAmount(rows[1]), null);
+  const result = matchTransactions(rows, [
+    { date: '2026-10-14', description: 'Ambiguous debit', debit: null, credit: 0 },
+    { date: '2026-10-15', description: 'Credit suffix', debit: 0, credit: null },
+  ]);
+  assert.equal(result.matches.length, 0);
+  assert.deepEqual(result.unmatchedBank, [0, 1]);
 });

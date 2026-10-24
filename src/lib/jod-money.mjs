@@ -36,39 +36,59 @@ export function formatJod(value) {
  * Parse a user/import-supplied JOD amount without confusing decimal dots with
  * currency punctuation. Blank cells mean zero; malformed/non-finite values return null.
  */
-export function parseJodAmount(value) {
+/**
+ * Strict shared JOD parser.
+ * Accepts unambiguous dot-decimal numbers and correctly grouped comma thousands,
+ * plus a small allow-list of currency prefixes. Ambiguous/unknown strings return
+ * null and optionally call onWarning({ rawValue, reason }). Blank handling is explicit.
+ */
+export function parseJodAmount(value, options = {}) {
+  const blankAsZero = options.blankAsZero !== false;
+  const onWarning = typeof options.onWarning === 'function' ? options.onWarning : null;
+  const invalid = (reason) => {
+    try { onWarning?.({ rawValue: value, reason }); } catch { /* diagnostics must not break import */ }
+    return null;
+  };
+
   if (typeof value === 'number') {
-    if (!Number.isFinite(value)) return null;
-    try { return roundJod(value); } catch { return null; }
+    if (!Number.isFinite(value)) return invalid('non-finite-number');
+    try { return roundJod(value); } catch { return invalid('amount-out-of-range'); }
   }
 
   let text = String(value ?? '')
     .replace(/[٠-٩]/g, digit => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
     .replace(/[۰-۹]/g, digit => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))
-    .trim().replace(/٫/g, '.');
-
-  if (!text) return 0;
-
-  text = text
-    .replace(/(?:JOD|د\.ا|د\.أ|ر\.د)/gi, '')
-    .replace(/[$€£]/g, '')
-    .replace(/[٬,]/g, '')
-    .replace(/[\s\u00a0]/g, '')
+    .replace(/٫/g, '.')
+    .replace(/٬/g, ',')
     .trim();
 
-  if (!text) return 0;
+  if (!text) return blankAsZero ? 0 : null;
 
-  const parenthesized = /^\(.*\)$/.test(text);
-  if (/[()]/.test(text) && !parenthesized) return null;
-  if (parenthesized) text = text.slice(1, -1);
+  let parenthesized = false;
+  if (text.startsWith('(') || text.endsWith(')')) {
+    if (!/^\(.*\)$/.test(text)) return invalid('unbalanced-parentheses');
+    parenthesized = true;
+    text = text.slice(1, -1).trim();
+  }
 
-  if (!/^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/.test(text)) return null;
-  const amount = Number(text);
-  if (!Number.isFinite(amount)) return null;
+  // Only known currency prefixes are allowed. Unknown suffixes such as "CR"
+  // are rejected rather than stripped to a plausible-looking number.
+  text = text.replace(/^(?:JOD|JD|د\.أ|د\.ا|ر\.د)\s*/iu, '').trim();
+  if (!text) return invalid('missing-numeric-value');
+
+  const plainDecimal = /^[+-]?(?:\d+(?:\.\d{1,3})?|\.\d{1,3})$/;
+  const groupedInteger = /^[+-]?[1-9]\d{0,2}(?:,\d{3}){2,}$/;
+  const groupedDecimal = /^[+-]?[1-9]\d{0,2}(?:,\d{3})+\.\d{1,3}$/;
+  const canonical = plainDecimal.test(text) || groupedInteger.test(text) || groupedDecimal.test(text);
+  if (!canonical) return invalid('ambiguous-or-malformed-number');
+
+  const numericText = text.replace(/,/g, '');
+  const amount = Number(numericText);
+  if (!Number.isFinite(amount)) return invalid('non-finite-number');
 
   try {
     return roundJod(parenthesized ? -Math.abs(amount) : amount);
   } catch {
-    return null;
+    return invalid('amount-out-of-range');
   }
 }

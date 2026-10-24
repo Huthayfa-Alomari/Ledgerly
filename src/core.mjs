@@ -1,3 +1,5 @@
+import { parseJodAmount } from './lib/jod-money.mjs';
+
 export const FIELD_ALIASES = {
   date: ['date', 'transaction date', 'posting date', 'value date', 'التاريخ', 'تاريخ الحركة', 'تاريخ القيد', 'تاريخ العملية', 'تاريخ الاستحقاق'],
   description: ['description', 'details', 'narration', 'particulars', 'memo', 'بيان', 'البيان', 'التفاصيل', 'الوصف', 'شرح الحركة', 'الشرح'],
@@ -39,28 +41,12 @@ export function detectColumns(headers) {
   return result;
 }
 
-export function parseAmount(input) {
-  if (input === null || input === undefined || input === '') return null;
-  let s = normalizeDigits(input).trim();
-  if (!s) return null;
-  const negativeByParens = /^\(.*\)$/.test(s);
-  s = s.replace(/[٬،]/g, ',').replace(/[٫]/g, '.');
-  s = s.replace(/[^\d,.\-+]/g, '');
-  if (s.includes(',') && s.includes('.')) {
-    // Last separator is treated as the decimal separator.
-    if (s.lastIndexOf('.') > s.lastIndexOf(',')) s = s.replace(/,/g, '');
-    else s = s.replace(/\./g, '').replace(',', '.');
-  } else if (s.includes(',')) {
-    const parts = s.split(',');
-    // JOD is commonly shown to three decimals. Accept 0,004 as fils while keeping 1,234 as a thousands separator.
-    const zeroLeadingFils = parts.length === 2 && Number(parts[0]) === 0 && parts[1].length === 3;
-    s = parts.length === 2 && (parts[1].length <= 2 || zeroLeadingFils) ? `${parts[0]}.${parts[1]}` : parts.join('');
-  }
-  const n = Number(s);
-  if (!Number.isFinite(n)) return null;
-  return negativeByParens ? -Math.abs(n) : n;
+export function parseAmount(input, options = {}) {
+  return parseJodAmount(input, {
+    blankAsZero: false,
+    onWarning: typeof options.onWarning === 'function' ? options.onWarning : undefined,
+  });
 }
-
 export function parseDate(input) {
   if (input === null || input === undefined || input === '') return null;
   if (input instanceof Date && !Number.isNaN(input.getTime())) return input.toISOString().slice(0, 10);
@@ -91,11 +77,15 @@ export function normalizeRows(rows, mapping) {
       if (mapping[field] === undefined) return null;
       return Array.isArray(row) ? row[mapping[field]] : Object.values(row)[mapping[field]];
     };
-    const rawAmount = parseAmount(cell('amount'));
-    const debit = parseAmount(cell('debit'));
-    const credit = parseAmount(cell('credit'));
+    const numericWarnings = [];
+    const parseCell = field => parseAmount(cell(field), {
+      onWarning: warning => numericWarnings.push({ field, reason: warning.reason, rawValue: String(cell(field) ?? '') }),
+    });
+    const rawAmount = parseCell('amount');
+    const debit = parseCell('debit');
+    const credit = parseCell('credit');
     const description = cell('description') == null ? '' : String(cell('description')).trim();
-    const balance = parseAmount(cell('balance'));
+    const balance = parseCell('balance');
     const date = parseDate(cell('date'));
     const openingBalanceLabel = /^(opening(?: balance)?|beginning(?: balance)?|initial balance|b\s*\/\s*f|b f|brought forward|balance brought forward|رصيد افتتاحي|الرصيد الافتتاحي|رصيد مرحل|رصيد اول المدة|رصيد سابق)$/i.test(normalizeHeader(description));
     const noMovement = debit === null && credit === null && rawAmount === null;
@@ -108,6 +98,7 @@ export function normalizeRows(rows, mapping) {
       credit: credit === null && rawAmount !== null && rawAmount >= 0 ? rawAmount : credit,
       balance,
       isOpeningBalance,
+      numericWarnings,
       raw: row,
     };
   });
@@ -117,6 +108,15 @@ export function validateRows(rows) {
   const warnings = [];
   rows.forEach((row, i) => {
     if (!row.date) warnings.push({ row: row.sourceRow ?? i + 2, field: 'date', message: 'Missing or unrecognized date' });
+    for (const numericWarning of row.numericWarnings ?? []) {
+      warnings.push({
+        row: row.sourceRow ?? i + 2,
+        field: numericWarning.field,
+        message: 'Ambiguous or invalid numeric value; it was not guessed.',
+        reason: numericWarning.reason,
+        rawValue: numericWarning.rawValue,
+      });
+    }
     if (!row.description) warnings.push({ row: row.sourceRow ?? i + 2, field: 'description', message: 'Empty description' });
     if (row.debit === null && row.credit === null && !row.isOpeningBalance) warnings.push({ row: row.sourceRow ?? i + 2, field: 'amount', message: 'No debit/credit amount detected' });
     if (row.debit !== null && row.debit < 0) warnings.push({ row: row.sourceRow ?? i + 2, field: 'debit', message: 'Debit is negative; verify sign convention' });
@@ -127,6 +127,7 @@ export function validateRows(rows) {
 
 /** Convert normalized debit/credit columns to a signed cash-flow amount. */
 export function signedAmount(row) {
+  if (row?.numericWarnings?.length || row?.invalidAmountFields?.length) return null;
   const debit = typeof row.debit === 'number' && Number.isFinite(row.debit) ? row.debit : 0;
   const credit = typeof row.credit === 'number' && Number.isFinite(row.credit) ? row.credit : 0;
   if (row.debit == null && row.credit == null) return null;

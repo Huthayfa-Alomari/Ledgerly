@@ -7,18 +7,21 @@ on:
     tags:
       - "ledgerly-v*"
 
+# Default permissions are read-only. GitHub permissions are scoped to jobs, not individual steps.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-windows:
     runs-on: windows-2025
     timeout-minutes: 30
+    permissions:
+      contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: npm
@@ -31,9 +34,9 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
-      - name: Install desktop packaging tools
+      - name: Install locked desktop packaging dependencies
         working-directory: desktop
-        run: npm install --no-fund
+        run: npm ci --no-fund
       - name: Audit desktop packaging dependencies
         working-directory: desktop
         run: npm audit --audit-level=high
@@ -73,7 +76,7 @@ jobs:
         env:
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
       - name: Upload installer artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Ledgerly-Windows-Installer
           path: |
@@ -81,11 +84,25 @@ jobs:
             desktop/release/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 30
+
+  publish-release:
+    if: startsWith(github.ref, 'refs/tags/ledgerly-v')
+    needs: build-windows
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # Write permission exists only in the isolated release-publishing job.
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified installer artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: Ledgerly-Windows-Installer
+          path: release
       - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/ledgerly-v')
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           name: Ledgerly ${{ github.ref_name }}
           generate_release_notes: true
           fail_on_unmatched_files: true
-          files: desktop/release/*.exe
+          files: release/*.exe

@@ -1,7 +1,7 @@
 import { deserializeJodVaultPayload, serializeJodVaultPayload } from './jod-vault-format.mjs';
 type VaultRecord = {
   id: 'workspace';
-  version: 1;
+  version: 1 | 2;
   salt: number[];
   iv: number[];
   ciphertext: ArrayBuffer;
@@ -11,7 +11,8 @@ type VaultRecord = {
 const DATABASE_NAME = 'ledgerly-secure-local-vault-v1';
 const STORE_NAME = 'encrypted-records';
 const RECORD_ID = 'workspace';
-const PBKDF2_ITERATIONS = 310_000;
+const LEGACY_PBKDF2_ITERATIONS = 310_000;
+const CURRENT_PBKDF2_ITERATIONS = 600_000;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 let writeQueue: Promise<unknown> = Promise.resolve();
@@ -75,11 +76,11 @@ function requireCrypto(): SubtleCrypto {
   return crypto.subtle;
 }
 
-async function deriveKey(passphrase: string, salt: Uint8Array): Promise<CryptoKey> {
+async function deriveKey(passphrase: string, salt: Uint8Array, recordVersion: VaultRecord['version'] = 2): Promise<CryptoKey> {
   const subtle = requireCrypto();
   const baseKey = await subtle.importKey('raw', toOwnedArrayBuffer(encoder.encode(passphrase)), 'PBKDF2', false, ['deriveKey']);
   return subtle.deriveKey(
-    { name: 'PBKDF2', salt: toOwnedArrayBuffer(salt), iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
+    { name: 'PBKDF2', salt: toOwnedArrayBuffer(salt), iterations: recordVersion === 1 ? LEGACY_PBKDF2_ITERATIONS : CURRENT_PBKDF2_ITERATIONS, hash: 'SHA-256' },
     baseKey,
     { name: 'AES-GCM', length: 256 },
     false,
@@ -104,7 +105,7 @@ async function encryptValue(passphrase: string, value: unknown, salt?: Uint8Arra
   );
   return {
     id: RECORD_ID,
-    version: 1,
+    version: 2,
     salt: Array.from(resolvedSalt),
     iv: Array.from(iv),
     ciphertext,
@@ -114,7 +115,7 @@ async function encryptValue(passphrase: string, value: unknown, salt?: Uint8Arra
 
 async function decryptRecord(passphrase: string, record: VaultRecord): Promise<unknown> {
   try {
-    const key = await deriveKey(passphrase, new Uint8Array(record.salt));
+    const key = await deriveKey(passphrase, new Uint8Array(record.salt), record.version);
     const plaintext = await requireCrypto().decrypt(
       { name: 'AES-GCM', iv: toOwnedArrayBuffer(new Uint8Array(record.iv)) },
       key,
@@ -148,15 +149,41 @@ export async function unlockOrInitializeLocalVault<T>(
   legacyRaw: string | null,
   fallback: T,
   arrayKeys: string[],
-): Promise<{ value: T; wasNew: boolean; migratedLegacy: boolean }> {
+): Promise<{ value: T; wasNew: boolean; migratedLegacy: boolean; migratedKdf?: boolean }> {
   if (passphrase.length < 12) throw new Error('كلمة مرور المخزن المحلي يجب أن تكون 12 حرفًا على الأقل. احتفظ بها في مكان آمن؛ لا توجد آلية استرجاع إذا فُقدت.');
   requireCrypto();
   const existing = await readRecord();
   if (existing) {
-    const value = await decryptRecord(passphrase, existing);
+    let value = await decryptRecord(passphrase, existing);
     const issue = shapeIssue(value, arrayKeys);
     if (issue) throw new Error('المخزن المشفّر لا يحتوي بنية بيانات متوافقة: ' + issue);
-    return { value: value as T, wasNew: false, migratedLegacy: false };
+    let migratedKdf = false;
+    if (existing.version === 1) {
+      // Decrypt with the historical work factor, then atomically replace with a
+      // verified record encrypted using the current 600,000-iteration KDF.
+      const upgraded = await encryptValue(passphrase, value);
+      const inMemoryUpgrade = await decryptRecord(passphrase, upgraded);
+      if (JSON.stringify(inMemoryUpgrade) !== JSON.stringify(value)) {
+        throw new Error('فشل التحقق من البيانات بعد تشفيرها بمعامل الحماية الجديد؛ لم نستبدل المخزن القديم.');
+      }
+      // Only replace the legacy record after the new ciphertext has passed a
+      // decrypt-and-compare round trip. The IndexedDB write itself is atomic.
+      await storeRecord(upgraded);
+      const verifiedUpgrade = await readRecord();
+      if (!verifiedUpgrade || verifiedUpgrade.version !== 2) {
+        // Best-effort recovery of the prior usable record if read-after-write fails.
+        try { await storeRecord(existing); } catch { /* surface the original migration failure */ }
+        throw new Error('تعذر التحقق من ترقية حماية المخزن؛ احتفظ بنسختك الاحتياطية وأعد المحاولة.');
+      }
+      const upgradedValue = await decryptRecord(passphrase, verifiedUpgrade);
+      if (JSON.stringify(upgradedValue) !== JSON.stringify(value)) {
+        try { await storeRecord(existing); } catch { /* surface the original migration failure */ }
+        throw new Error('لم تتطابق البيانات بعد ترقية حماية المخزن؛ احتفظ بنسختك الاحتياطية وأعد المحاولة.');
+      }
+      value = upgradedValue;
+      migratedKdf = true;
+    }
+    return { value: value as T, wasNew: false, migratedLegacy: false, migratedKdf };
   }
 
   let initial: unknown = fallback;
@@ -210,6 +237,7 @@ export async function encryptedVaultBackup(passphrase: string): Promise<Blob> {
   const backup = {
     format: 'ledgerly-encrypted-vault-v1',
     version: 1,
+    kdfVersion: record.version,
     salt: record.salt,
     iv: record.iv,
     ciphertextBase64: btoa(binary),
@@ -232,7 +260,7 @@ export async function restoreEncryptedVaultBackup(passphrase: string, fileText: 
   const ciphertext = Uint8Array.from(binary, char => char.charCodeAt(0)).buffer;
   const record: VaultRecord = {
     id: RECORD_ID,
-    version: 1,
+    version: payload.kdfVersion === 2 ? 2 : 1,
     salt: payload.salt as number[],
     iv: payload.iv as number[],
     ciphertext,
@@ -241,8 +269,14 @@ export async function restoreEncryptedVaultBackup(passphrase: string, fileText: 
   const value = await decryptRecord(passphrase, record);
   const issue = shapeIssue(value, arrayKeys);
   if (issue) throw new Error('النسخة الاحتياطية لا تحتوي بنية مساحة عمل صالحة: ' + issue);
-  await storeRecord(record);
-  return value;
+  // Restores from older backup KDF versions are upgraded as part of the restore.
+  const upgradedRecord = await encryptValue(passphrase, value);
+  await storeRecord(upgradedRecord);
+  const verifiedRecord = await readRecord();
+  if (!verifiedRecord || verifiedRecord.version !== 2) throw new Error('تعذر التحقق من المخزن المستعاد بعد ترقية الحماية.');
+  const verifiedValue = await decryptRecord(passphrase, verifiedRecord);
+  if (JSON.stringify(verifiedValue) !== JSON.stringify(value)) throw new Error('فشل التحقق من بيانات المخزن بعد الاستعادة.');
+  return verifiedValue;
 }
 
 export async function migrateLegacyEvidenceIfNeeded(passphrase: string): Promise<number> {

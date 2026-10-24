@@ -10,7 +10,9 @@ test('local save failure exposes recovery export and an explicit retry', () => {
   assert.match(app, /ledgerly-recovery-current\.json/);
   assert.match(app, /إعادة محاولة الحفظ/);
   assert.match(app, /persistEncryptedLocalVault\(vaultPassphrase,db\)/);
-  assert.match(app, /AES-GCM-256/);
+  assert.match(app, /AES-GCM بمفتاح 256 بت/);
+  assert.match(app, /vault-critical-warning/);
+  assert.match(app, /إظهار كلمة المرور/);
 });
 
 test('settings distinguish cloud-enabled features from local-mode and release-gate limitations', () => {
