@@ -162,13 +162,22 @@ export async function unlockOrInitializeLocalVault<T>(
       // Decrypt with the historical work factor, then atomically replace with a
       // verified record encrypted using the current 600,000-iteration KDF.
       const upgraded = await encryptValue(passphrase, value);
+      const inMemoryUpgrade = await decryptRecord(passphrase, upgraded);
+      if (JSON.stringify(inMemoryUpgrade) !== JSON.stringify(value)) {
+        throw new Error('فشل التحقق من البيانات بعد تشفيرها بمعامل الحماية الجديد؛ لم نستبدل المخزن القديم.');
+      }
+      // Only replace the legacy record after the new ciphertext has passed a
+      // decrypt-and-compare round trip. The IndexedDB write itself is atomic.
       await storeRecord(upgraded);
       const verifiedUpgrade = await readRecord();
       if (!verifiedUpgrade || verifiedUpgrade.version !== 2) {
-        throw new Error('تعذر التحقق من ترقية حماية المخزن؛ لم نتابع فتح مساحة العمل.');
+        // Best-effort recovery of the prior usable record if read-after-write fails.
+        try { await storeRecord(existing); } catch { /* surface the original migration failure */ }
+        throw new Error('تعذر التحقق من ترقية حماية المخزن؛ احتفظ بنسختك الاحتياطية وأعد المحاولة.');
       }
       const upgradedValue = await decryptRecord(passphrase, verifiedUpgrade);
       if (JSON.stringify(upgradedValue) !== JSON.stringify(value)) {
+        try { await storeRecord(existing); } catch { /* surface the original migration failure */ }
         throw new Error('لم تتطابق البيانات بعد ترقية حماية المخزن؛ احتفظ بنسختك الاحتياطية وأعد المحاولة.');
       }
       value = upgradedValue;
