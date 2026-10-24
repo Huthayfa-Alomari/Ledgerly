@@ -597,17 +597,19 @@ export function buildAuditEvidenceGraph({ sourceName = '', journalRows = [], jou
       traceStatus: sourceRecords.length === 0 ? 'test-without-row-level-source' : uniqueEvidence.length === 0 ? 'source-without-indexed-evidence' : linkedWorkpapers.length === 0 ? 'evidence-without-workpaper' : linkedFindings.length === 0 ? 'workpaper-without-finding' : approvals.some(item => item.approved) ? 'trace-with-review-history' : 'trace-needs-review',
     };
   });
-  const rowNumbersCoveredByTests = new Set(issueNodes.flatMap(node => node.rowNumbers));
-  const sourceRowsWithoutTest = rows.filter(row => !rowNumbersCoveredByTests.has(Number(row.rowNumber)));
+  const rowNumbersWithIssue = new Set(issueNodes.flatMap(node => node.rowNumbers));
+  const sourceRowsWithoutDetectedIssue = rows.filter(row => !rowNumbersWithIssue.has(Number(row.rowNumber)));
+  const scannedSourceRowCount = Number.isFinite(Number(journalAnalysis?.scannedCount)) ? Math.min(rows.length, Number(journalAnalysis.scannedCount)) : rows.length;
   const issueNodesWithEvidence = issueNodes.filter(node => node.linkedEvidenceCount > 0).length;
   const evidenceWithNoWorkpaper = lineage.links.filter(link => link.linked && (!link.workpaper || link.workpaper.status !== 'معتمد')).length;
   const findingsFullyLinked = lineage.fullyLinkedFindings;
   return {
     sourceName,
     sourceRowCount: rows.length,
-    testedSourceRowCount: rowNumbersCoveredByTests.size,
-    sourceRowsWithoutTestCount: sourceRowsWithoutTest.length,
-    sourceRowsWithoutTest: sourceRowsWithoutTest.slice(0, 100),
+    scannedSourceRowCount,
+    sourceRowsWithIssueCount: rowNumbersWithIssue.size,
+    sourceRowsWithoutDetectedIssueCount: sourceRowsWithoutDetectedIssue.length,
+    sourceRowsWithoutDetectedIssue: sourceRowsWithoutDetectedIssue.slice(0, 100),
     issueCount: issues.length,
     issuesWithEvidenceCount: issueNodesWithEvidence,
     issuesWithoutEvidenceCount: issueNodes.filter(node => node.sourceRecords.length > 0 && node.linkedEvidenceCount === 0).length,
