@@ -34,6 +34,7 @@ export default function App() {
       : Number(value).toLocaleString(lang === 'ar' ? 'ar-JO-u-nu-latn' : 'en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
   const formatMovement = (row: ReturnType<typeof normalizeRows>[number] | undefined) => {
     if (!row) return '—';
+    if (row.numericWarnings?.length) return t('مبلغ غير صالح — يحتاج تصحيحًا', 'Invalid amount — correction required');
     const debit = row.debit;
     const credit = row.credit;
     if (debit != null && credit != null) {
@@ -52,7 +53,7 @@ export default function App() {
       const now = new Date();
       const exportedAt = now.toLocaleString(lang === 'ar' ? 'ar-JO-u-nu-latn' : 'en-US');
       const signedMovement = (row: ReturnType<typeof normalizeRows>[number] | undefined): number | string =>
-        !row || (row.debit == null && row.credit == null)
+        !row || row.numericWarnings?.length || (row.debit == null && row.credit == null)
           ? ''
           : Number(((row.credit ?? 0) - (row.debit ?? 0)).toFixed(3));
       const makeSheet = (
