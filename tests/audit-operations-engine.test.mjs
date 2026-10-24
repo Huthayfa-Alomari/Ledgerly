@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildDraftFinancialStatements, buildWhatsappReminder, calculateOfficeMetrics,
-  inferBankColumns, parseUblInvoiceXml, rollForwardWorkpapers, runAdvancedJournalTests,
+  inferBankColumns, normalizeInvoiceRegisterRows, matchInvoiceToJournal, parseUblInvoiceXml, rollForwardWorkpapers, runAdvancedJournalTests,
   selectAuditSample, validateLocalWorkpaperTransition, suggestRiskPbcRequestsFromRisks,
 } from '../src/lib/audit-operations-engine.mjs';
 
@@ -118,4 +118,52 @@ test('risk-based PBC requests produce traceable suggestions and ignore closed ri
   assert.ok(suggestions.some(item => item.sourceRiskId === 'risk-revenue' && /فواتير مبيعات|المبيعات/.test(item.title)));
   assert.ok(suggestions.some(item => item.sourceRiskId === 'risk-bank' && /بنكي|مطابقة البنك|مصادقة بنك/.test(item.title)));
   assert.ok(!suggestions.some(item => item.sourceRiskId === 'risk-closed'));
+});
+
+
+test('invoice register normalizer reads Arabic headers, Arabic numerals and three-decimal JOD', () => {
+  const result = normalizeInvoiceRegisterRows([
+    { 'رقم الفاتورة': 'INV-AR-01', 'تاريخ الفاتورة': '23/10/2026', 'اسم المورد': 'شركة تجريبية', 'الرقم الضريبي': '123456789', 'الإجمالي المستحق': '١٢٣٫٤٥٦', 'العملة': 'JOD' },
+  ]);
+  assert.equal(result.sourceCount, 1);
+  assert.equal(result.rows[0].invoiceId, 'INV-AR-01');
+  assert.equal(result.rows[0].issueDate, '2026-10-23');
+  assert.equal(result.rows[0].supplierName, 'شركة تجريبية');
+  assert.equal(result.rows[0].payableAmount, 123.456);
+  assert.equal(result.rows[0].currency, 'JOD');
+  assert.deepEqual(result.warnings, []);
+});
+
+test('invoice matching proposes exact reference, amount and date candidates but never verifies invoices', () => {
+  const invoice = { invoiceId: 'INV-77', issueDate: '2026-09-30', supplierName: 'Demo Supplier', currency: 'JOD', payableAmount: 14.375 };
+  const journalRows = [
+    journal({ rowNumber: 9, date: '2026-09-30', reference: 'INV-77', accountCode: '5000', description: 'Demo Supplier invoice INV-77', counterparty: 'Demo Supplier', debit: 14.375, credit: 0 }),
+    journal({ rowNumber: 10, date: '2026-09-30', reference: 'INV-77', accountCode: '2000', description: 'Demo Supplier invoice INV-77', counterparty: 'Demo Supplier', debit: 0, credit: 14.375 }),
+  ];
+  const result = matchInvoiceToJournal(invoice, journalRows);
+  assert.equal(result.status, 'reference-amount-candidate');
+  assert.equal(result.statusLabel.includes('مقترح'), true);
+  assert.equal(result.candidates.length, 1);
+  assert.deepEqual(result.candidates[0].rowNumbers, [9, 10]);
+  assert.equal(result.candidates[0].amountDifferenceJod, 0);
+  assert.match(result.message, /راجع المستند الأصلي/);
+});
+
+test('invoice matching refuses unsupported currencies and invalid amounts', () => {
+  const journalRows = [journal({ date: '2026-09-30', reference: 'INV-77', debit: 14.375, credit: 0 })];
+  const foreign = matchInvoiceToJournal({ invoiceId: 'INV-77', issueDate: '2026-09-30', currency: 'USD', payableAmount: 14.375 }, journalRows);
+  assert.equal(foreign.status, 'unsupported-currency');
+  assert.equal(foreign.candidates.length, 0);
+  const invalid = matchInvoiceToJournal({ invoiceId: 'INV-77', issueDate: '2026-09-30', currency: 'JOD', payableAmount: 'bad' }, journalRows);
+  assert.equal(invalid.status, 'invalid-invoice-amount');
+  assert.equal(invalid.candidates.length, 0);
+});
+
+test('invoice matcher flags exact reference conflicts rather than falling through to loose matching', () => {
+  const result = matchInvoiceToJournal(
+    { invoiceId: 'INV-77', issueDate: '2026-09-30', supplierName: 'Demo Supplier', currency: 'JOD', payableAmount: 20 },
+    [journal({ date: '2026-09-30', reference: 'INV-77', debit: 14.375, credit: 0 })],
+  );
+  assert.equal(result.status, 'reference-conflict');
+  assert.equal(result.candidates[0].amountOk, false);
 });
