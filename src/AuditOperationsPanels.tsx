@@ -693,17 +693,85 @@ export default function AuditOperationsPanels(props: Props) {
     </section>
 
     <section className="audit-card audit-operations-section">
-      <div className="audit-card-head"><div><h3>16. فحص فاتورة XML بصيغة UBL 2.1</h3><p className="muted-copy">قراءة محلية لحقول الفاتورة وملخص المبلغ والضريبة. لا يوجد اتصال بنظام الفوترة الوطني ولا إرسال لبيانات JoFotara.</p></div><span className="soft-tag">UBL XML · Local only</span></div>
-      <label className="audit-secondary audit-intel-file">اختيار XML لفحص الحقول<input type="file" accept=".xml,text/xml,application/xml" onChange={event => { void importUbl(event.target.files?.[0]); event.currentTarget.value = ''; }} /></label>
-      {ublError && <p className="muted-copy" role="status">{ublError}</p>}
-      {ublInvoice && <><div className="summary-lines">
-        <div className="summary-line"><span>رقم الفاتورة</span><strong>{ublInvoice.invoiceId || 'غير موجود'}</strong></div>
-        <div className="summary-line"><span>تاريخ الإصدار</span><strong>{ublInvoice.issueDate || 'غير موجود'}</strong></div>
-        <div className="summary-line"><span>المورد / Supplier</span><strong>{ublInvoice.supplierName || 'غير محدد'}</strong></div>
-        <div className="summary-line"><span>الرقم الضريبي</span><strong>{ublInvoice.supplierTaxId || 'غير موجود'}</strong></div>
-        <div className="summary-line"><span>الإجمالي المستحق</span><strong>{money(ublInvoice.payableAmount)}</strong></div>
-        <div className="summary-line"><span>ضريبة</span><strong>{money(ublInvoice.taxAmount)}</strong></div>
-      </div><p className="audit-intel-banner">{ublInvoice.note} {ublInvoice.validation?.readyForHumanReview ? 'الحقول الأولية موجودة للمراجعة.' : 'توجد حقول أساسية ناقصة.'}</p><button className="audit-primary" onClick={addUblAsEvidence}>إضافة ملخص XML إلى الأدلة</button></>}
+      <div className="audit-card-head"><div><h3>16. مطابقة فواتير الموردين مع دفتر الأستاذ</h3><p className="muted-copy">قراءة UBL محليًا واستيراد سجل فواتير CSV/Excel، ثم اقتراح المرشحين من دفتر الأستاذ المستورد. كل نتيجة تحتاج مراجعة بشرية؛ لا يوجد اتصال بـ JoFotara أو تحقق ضريبي آلي.</p></div><span className="soft-tag">Local UBL · Invoice register · JOD</span></div>
+
+      <section className="audit-invoice-match-subsection">
+        <h4>أ. فحص فاتورة أصلية بصيغة UBL 2.1</h4>
+        <label className="audit-secondary audit-intel-file">اختيار XML لفحص الحقول والمطابقة<input type="file" accept=".xml,text/xml,application/xml" onChange={event => { void importUbl(event.target.files?.[0]); event.currentTarget.value = ''; }} /></label>
+        {ublError && <p className="muted-copy" role="status">{ublError}</p>}
+        {ublInvoice && <>
+          <div className="summary-lines">
+            <div className="summary-line"><span>رقم الفاتورة</span><strong>{ublInvoice.invoiceId || 'غير موجود'}</strong></div>
+            <div className="summary-line"><span>تاريخ الإصدار</span><strong>{ublInvoice.issueDate || 'غير موجود'}</strong></div>
+            <div className="summary-line"><span>المورد / Supplier</span><strong>{ublInvoice.supplierName || 'غير محدد'}</strong></div>
+            <div className="summary-line"><span>الرقم الضريبي</span><strong>{ublInvoice.supplierTaxId || 'غير موجود'}</strong></div>
+            <div className="summary-line"><span>الإجمالي المستحق</span><strong>{ublInvoice.payableAmount === null ? 'غير متاح' : money(ublInvoice.payableAmount)}</strong></div>
+            <div className="summary-line"><span>الضريبة</span><strong>{ublInvoice.taxAmount === null ? 'غير متاح' : money(ublInvoice.taxAmount)}</strong></div>
+          </div>
+          <p className="audit-intel-banner">{ublInvoice.note} {ublInvoice.validation?.readyForHumanReview ? 'الحقول الأولية موجودة للمراجعة.' : 'توجد حقول أساسية ناقصة.'}</p>
+          {ublMatch && <div className="audit-invoice-match-result">
+            <div className="audit-invoice-match-status"><strong>اقتراح الربط بدفتر الأستاذ</strong><span className={'audit-pill ' + (['reference-conflict','unsupported-currency','invalid-invoice-amount'].includes(ublMatch.status) ? 'risk-pill' : '')}>{ublMatch.statusLabel}</span></div>
+            <p>{ublMatch.message}</p>
+            {ublMatch.candidates.length > 0 && <div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>طريقة الاقتراح</th><th>صفوف دفتر الأستاذ</th><th>المراجع</th><th>التاريخ</th><th>المبلغ المقارن</th><th>فرق المبلغ</th><th>فرق الأيام</th></tr></thead><tbody>{ublMatch.candidates.slice(0, 5).map((candidate, index) => <tr key={candidate.method + '-' + candidate.rowNumbers.join(',') + '-' + index}><td>{candidate.method}</td><td>{candidate.rowNumbers.join('، ') || '—'}</td><td>{candidate.journalReference || '—'}</td><td>{candidate.transactionDate || '—'}</td><td>{money(candidate.comparisonAmountJod)}</td><td>{money(candidate.amountDifferenceJod)}</td><td>{candidate.dateDifferenceDays ?? 'غير متاح'}</td></tr>)}</tbody></table></div>}
+            {!journalRows.length && <p className="muted-copy">استورد دفتر الأستاذ/القيود في «مركز ذكاء التدقيق» حتى تتوفر بيانات للمقارنة.</p>}
+          </div>}
+          <label className="audit-field"><span>ورقة العمل المرتبطة بهذا الدليل *</span><select value={ublWorkpaperRef} onChange={event => setUblWorkpaperRef(event.target.value)}><option value="">— اختر مرجعًا فريدًا —</option>{currentWorkpapers.map(paper => <option key={paper.id} value={paper.ref}>{paper.ref} · {paper.title} · {paper.status}</option>)}</select></label>
+          <button className="audit-primary" disabled={ublSaving || !resolveUniqueWorkpaper(ublWorkpaperRef)} onClick={() => void addUblAsEvidence()}>{ublSaving ? 'جارٍ تشفير الأصل...' : 'حفظ XML الأصلي مشفّرًا وربطه بالدليل'}</button>
+        </>}
+        {!currentWorkpapers.length && <p className="muted-copy">أنشئ ورقة عمل في ملف التدقيق أولًا؛ لا يسمح Ledgerly بفهرسة الفاتورة دون مرجع ورقة عمل فريد.</p>}
+      </section>
+
+      <section className="audit-invoice-match-subsection">
+        <h4>ب. استيراد سجل فواتير كامل (CSV / Excel)</h4>
+        <p className="muted-copy">يُقرأ السجل في المتصفح فقط، حتى 10,000 صف لكل استيراد. تُستخدم مراجع الفواتير والمبالغ والتواريخ والطرف المقابل لتكوين مرشحين؛ تُحفظ نسخة المصدر المشفّرة فقط عند الضغط على زر الحفظ أدناه.</p>
+        <label className="audit-secondary audit-intel-file">اختيار سجل الفواتير<input type="file" accept=".csv,.xlsx,.xls" onChange={event => { void importInvoiceRegister(event.target.files?.[0]); event.currentTarget.value = ''; }} /></label>
+        {invoiceBusy && <p className="muted-copy">جارٍ قراءة الفواتير وإنشاء فهرس المقارنة المحلي…</p>}
+        {invoiceImportError && <p className="audit-warning" role="alert">{invoiceImportError}</p>}
+        {invoiceImportNotice && <p className="muted-copy" role="status">{invoiceImportNotice}</p>}
+        {invoiceRegisterSource && <>
+          <p className="muted-copy">{invoiceRegisterSource.fileName} · {invoiceRegisterSource.sheets.length} ورقة متاحة</p>
+          <div className="audit-intel-screening-options">
+            <label className="audit-field"><span>ورقة المصدر</span><select value={invoiceSheetName} onChange={event => { setInvoiceSheetName(event.target.value); setInvoiceAddedKeys({}); }}>{invoiceRegisterSource.sheets.map(sheet => <option key={sheet.name} value={sheet.name}>{sheet.name}</option>)}</select></label>
+            <label className="audit-field"><span>هامش فرق المبلغ (د.أ)</span><select value={invoiceTolerance} onChange={event => setInvoiceTolerance(event.target.value)}><option value="0">0.000 — تطابق دقيق</option><option value="0.001">0.001</option><option value="0.005">0.005</option><option value="0.01">0.010</option><option value="0.05">0.050</option></select></label>
+            <label className="audit-field"><span>نافذة فرق التاريخ</span><select value={invoiceDateWindow} onChange={event => setInvoiceDateWindow(event.target.value)}><option value="0">نفس اليوم</option><option value="1">± يوم</option><option value="3">± 3 أيام</option><option value="7">± 7 أيام</option><option value="30">± 30 يومًا</option></select></label>
+          </div>
+          {invoiceRegisterData && invoiceRegisterMatches && <>
+            <div className="audit-intel-kpis audit-intel-kpis-small">
+              <div className="audit-intel-kpi"><span>صفوف فواتير قابلة للقراءة</span><strong>{invoiceRegisterData.sourceCount}</strong><small>في الورقة المختارة</small></div>
+              <div className="audit-intel-kpi"><span>مرشحات بها اقتراح</span><strong>{invoiceRegisterMatches.matchedCandidateCount}</strong><small>ليست مطابقة معتمدة</small></div>
+              <div className="audit-intel-kpi"><span>تعارضات / عملة غير مدعومة</span><strong>{invoiceRegisterMatches.conflictCount}</strong><small>تحتاج تحققًا</small></div>
+              <div className="audit-intel-kpi"><span>بلا مرشح</span><strong>{invoiceRegisterMatches.unmatchedCount}</strong><small>تحقق من المصدر والنطاق</small></div>
+            </div>
+            {invoiceRegisterData.warnings.length > 0 && <div className="audit-warning"><strong>ملاحظات تعيين الأعمدة</strong><ul>{invoiceRegisterData.warnings.map((warning, index) => <li key={index + '-' + warning}>{warning}</li>)}</ul></div>}
+            {!journalRows.length && <p className="audit-warning">لا يوجد دفتر أستاذ مستورد للمقارنة. استورد ملف القيود في مركز ذكاء التدقيق حتى تبدأ المطابقة.</p>}
+            {invoiceRegisterMatches.results.length > 0 && <div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>صف المصدر / الفاتورة</th><th>التاريخ</th><th>المورد</th><th>العملة والمبلغ</th><th>مرشح دفتر الأستاذ</th><th>فرق المبلغ</th><th>ورقة العمل</th><th>فهرسة الدليل</th></tr></thead><tbody>
+              {invoiceRegisterMatches.results.slice(0, 100).map(({ invoice: invoiceValue, match }, index) => {
+                const invoice = invoiceValue as any;
+                const key = normalizedInvoiceRowKey(invoice);
+                const candidate = match.candidates[0];
+                const alreadyAdded = Boolean(invoiceAddedKeys[key]);
+                return <tr key={key + '-' + index}>
+                  <td className="cell-strong">{invoice.invoiceId || 'بدون رقم'}<small className="table-sub">صف المصدر {invoice.sourceRowNumber ?? '—'}</small></td>
+                  <td>{invoice.issueDate || invoice.issueDateRaw || '—'}</td>
+                  <td>{invoice.supplierName || '—'}<small className="table-sub">{invoice.supplierTaxId || ''}</small></td>
+                  <td>{invoice.currency || 'عملة غير محددة'}<small className="table-sub">{invoice.payableAmount === null ? 'مبلغ غير صالح/ناقص' : money(invoice.payableAmount)}</small></td>
+                  <td><span className={'audit-pill ' + (['reference-conflict','unsupported-currency','invalid-invoice-amount'].includes(match.status) ? 'risk-pill' : '')}>{match.statusLabel}</span><small className="table-sub">{candidate ? 'الصفوف: ' + candidate.rowNumbers.join('، ') + (candidate.journalReference ? ' · ' + candidate.journalReference : '') : match.message}</small></td>
+                  <td>{candidate ? money(candidate.amountDifferenceJod) : '—'}</td>
+                  <td><select aria-label={'ورقة العمل للفاتورة ' + invoice.invoiceId} value={invoiceWorkpaperRefs[key] || ''} onChange={event => setInvoiceWorkpaperRefs(previous => ({ ...previous, [key]: event.target.value }))}><option value="">— اختيار —</option>{currentWorkpapers.map(paper => <option key={paper.id} value={paper.ref}>{paper.ref} · {paper.status}</option>)}</select></td>
+                  <td><button className="audit-text-button" disabled={alreadyAdded || !resolveUniqueWorkpaper(invoiceWorkpaperRefs[key] || '') || invoice.payableAmount === null} onClick={() => addInvoiceRegisterEvidence(invoice, match)}>{alreadyAdded ? 'فُهرست' : 'فهرسة مرشح'}</button></td>
+                </tr>;
+              })}
+            </tbody></table></div>}
+            {invoiceRegisterMatches.results.length > 100 && <p className="muted-copy">تم فحص جميع {invoiceRegisterMatches.results.length} سجلًا؛ الجدول يعرض أول 100 صف فقط لتبقى الواجهة سريعة.</p>}
+            <div className="stack-actions">
+              <button className="audit-secondary" onClick={() => downloadCSV('ledgerly-invoice-ledger-match.csv', [['invoice_id','source_row','invoice_date','supplier','currency','invoice_amount_jod','status','status_label','candidate_row_numbers','journal_reference','candidate_amount_jod','amount_difference_jod','date_difference_days'], ...invoiceRegisterMatches.results.map(({ invoice: invoiceValue, match }) => { const invoice = invoiceValue as any; const candidate = match.candidates[0]; return [invoice.invoiceId, invoice.sourceRowNumber, invoice.issueDate, invoice.supplierName, invoice.currency, invoice.payableAmount, match.status, match.statusLabel, candidate?.rowNumbers.join(';') || '', candidate?.journalReference || '', candidate?.comparisonAmountJod ?? '', candidate?.amountDifferenceJod ?? '', candidate?.dateDifferenceDays ?? '']; })])}>تصدير نتائج المرشحين CSV</button>
+              <label className="audit-field"><span>ورقة العمل لأصل السجل *</span><select value={invoiceSourceWorkpaperRef} onChange={event => setInvoiceSourceWorkpaperRef(event.target.value)}><option value="">— اختر ورقة العمل —</option>{currentWorkpapers.map(paper => <option key={paper.id} value={paper.ref}>{paper.ref} · {paper.title} · {paper.status}</option>)}</select></label>
+              <button className="audit-primary" disabled={Boolean(invoiceSourceEvidenceId) || !resolveUniqueWorkpaper(invoiceSourceWorkpaperRef) || !invoiceRegisterSource} onClick={() => void archiveInvoiceRegisterSource()}>{invoiceSourceEvidenceId ? 'حُفظ أصل السجل مشفّرًا' : 'حفظ أصل سجل الفواتير مشفّرًا وربطه'}</button>
+            </div>
+          </>}
+        </>}
+        <p className="audit-intel-footnote">{invoiceRegisterMatches?.disclaimer || 'استيراد الفواتير محلي فقط؛ لا يوجد اتصال بنظام JoFotara أو تأكيد خارجي من المورد.'} يُحفظ أصل سجل الفواتير مرفقًا مشفرًا فقط عند الضغط على زر الحفظ. لا تغيّر أي اقتراحات قيودًا أو أرصدة، ولا تثبت صحة فاتورة أو كفاية الدليل.</p>
+      </section>
     </section>
 
     <section className="audit-card audit-operations-section">
