@@ -1,3 +1,5 @@
+import { parseJodAmount } from './lib/jod-money.mjs';
+
 export const FIELD_ALIASES = {
   date: ['date', 'transaction date', 'posting date', 'value date', 'التاريخ', 'تاريخ الحركة', 'تاريخ القيد', 'تاريخ العملية', 'تاريخ الاستحقاق'],
   description: ['description', 'details', 'narration', 'particulars', 'memo', 'بيان', 'البيان', 'التفاصيل', 'الوصف', 'شرح الحركة', 'الشرح'],
@@ -39,28 +41,12 @@ export function detectColumns(headers) {
   return result;
 }
 
-export function parseAmount(input) {
-  if (input === null || input === undefined || input === '') return null;
-  let s = normalizeDigits(input).trim();
-  if (!s) return null;
-  const negativeByParens = /^\(.*\)$/.test(s);
-  s = s.replace(/[٬،]/g, ',').replace(/[٫]/g, '.');
-  s = s.replace(/[^\d,.\-+]/g, '');
-  if (s.includes(',') && s.includes('.')) {
-    // Last separator is treated as the decimal separator.
-    if (s.lastIndexOf('.') > s.lastIndexOf(',')) s = s.replace(/,/g, '');
-    else s = s.replace(/\./g, '').replace(',', '.');
-  } else if (s.includes(',')) {
-    const parts = s.split(',');
-    // JOD is commonly shown to three decimals. Accept 0,004 as fils while keeping 1,234 as a thousands separator.
-    const zeroLeadingFils = parts.length === 2 && Number(parts[0]) === 0 && parts[1].length === 3;
-    s = parts.length === 2 && (parts[1].length <= 2 || zeroLeadingFils) ? `${parts[0]}.${parts[1]}` : parts.join('');
-  }
-  const n = Number(s);
-  if (!Number.isFinite(n)) return null;
-  return negativeByParens ? -Math.abs(n) : n;
+export function parseAmount(input, options = {}) {
+  return parseJodAmount(input, {
+    blankAsZero: false,
+    onWarning: typeof options.onWarning === 'function' ? options.onWarning : undefined,
+  });
 }
-
 export function parseDate(input) {
   if (input === null || input === undefined || input === '') return null;
   if (input instanceof Date && !Number.isNaN(input.getTime())) return input.toISOString().slice(0, 10);
