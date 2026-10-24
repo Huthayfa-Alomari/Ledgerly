@@ -143,3 +143,12 @@ test('invoice matching UI requires unique workpaper links and supports encrypted
   assert.match(panel, /كل نتيجة تحتاج مراجعة بشرية/);
   assert.match(panel, /10,000 صف/);
 });
+
+
+test('mobile 390px layout reduces hero space and keeps the selected nav obvious', () => {
+  assert.match(css, /@media\(max-width:400px\)/);
+  assert.match(css, /\.welcome-mark\{display:none\}/);
+  assert.match(css, /\.audit-sidebar nav button\.active\{background:#244f3c;color:#fff/);
+  assert.match(css, /\.audit-table td\{overflow-wrap:anywhere;word-break:normal/);
+  assert.match(css, /\.stat-hint\{color:#53635a\}/);
+});
