@@ -8,7 +8,9 @@ test('local workspace waits for encrypted-vault unlock before persisting data', 
   assert.match(app, /const loaded=loadLocalData\(\(\)=>localStorage,KEY,emptyDB\)/);
   assert.match(app, /if\(loaded\.error==='invalid-json'\)/);
   assert.match(app, /useState\(false\)/);
-  assert.match(app, /مخزن Ledgerly المحلي المشفّر/);
+  assert.match(app, /خزنة بيانات Ledgerly/);
+  assert.match(app, /تفاصيل الحماية التقنية/);
+  assert.match(app, /vault-critical-warning/);
   assert.match(app, /unlockOrInitializeLocalVault/);
   assert.match(app, /if\(!storagePersistenceEnabled\|\|!vaultUnlocked\)return/);
   assert.match(app, /persistEncryptedLocalVault\(vaultPassphrase,db\)/);
