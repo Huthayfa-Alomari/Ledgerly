@@ -1,9 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
-
 test('application metadata uses Ledgerly branding', () => {
   const html = read('../index.html');
   assert.match(html, /<title>Ledgerly<\/title>/);
@@ -12,13 +10,11 @@ test('application metadata uses Ledgerly branding', () => {
   assert.match(html, /object-src 'none'/);
   assert.match(html, /connect-src 'self'/);
 });
-
 test('Vite emits relative asset paths for file-based desktop loading', () => {
   const vite = read('../vite.config.ts');
   assert.match(vite, /base: '\.\/'/);
   assert.match(vite, /plugins:\s*\[\s*react\(\)\s*\]/);
 });
-
 test('Windows package creates a named NSIS installer without deleting local data on uninstall', () => {
   const pkg = JSON.parse(read('../desktop/package.json'));
   assert.equal(pkg.build.productName, 'Ledgerly');
@@ -29,7 +25,6 @@ test('Windows package creates a named NSIS installer without deleting local data
   assert.equal(pkg.build.nsis.createDesktopShortcut, true);
   assert.equal(pkg.build.win.target[0].target, 'nsis');
 });
-
 test('Electron window disables Node integration and enables context isolation and sandbox', () => {
   const main = read('../desktop/main.cjs');
   assert.match(main, /nodeIntegration: false/);
@@ -42,24 +37,20 @@ test('Electron window disables Node integration and enables context isolation an
   assert.match(main, /mediaTypes.includes\('video'\) && !mediaTypes.includes\('audio'\)/);
   assert.match(main, /isTrustedPage/);
 });
-
 test('version tags publish the built installer as a permanent GitHub Release asset', () => {
   const workflow = read('../.github/workflows/windows-release.yml');
   assert.match(workflow, /tags:\s*\n\s*- "ledgerly-v\*"/);
   assert.match(workflow, /permissions:\s*\n\s*contents: write/);
   assert.match(workflow, /if: startsWith\(github\.ref, 'refs\/tags\/ledgerly-v'\)/);
-  assert.match(workflow, /uses: softprops\/action-gh-release@v3/);
-  assert.match(workflow, /files: desktop\/release\/\*\.exe/);
+  assert.ok(workflow.includes('uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64'));
+  assert.ok(workflow.includes('files: release/*.exe'));
 });
-
 test('Windows release uses explicit public cloud variables and fails on high-severity dependency issues', () => {
   const workflow = read('../.github/workflows/windows-release.yml');
   assert.match(workflow, /VITE_SUPABASE_URL: \$\{\{ vars\.VITE_SUPABASE_URL \}\}/);
   assert.match(workflow, /VITE_SUPABASE_ANON_KEY: \$\{\{ vars\.VITE_SUPABASE_ANON_KEY \}\}/);
   assert.match(workflow, /npm audit --audit-level=high/);
 });
-
-
 test('GitHub Actions use Node 24-compatible action majors and pinned runner images', () => {
   const ci = read('../.github/workflows/ci.yml');
   const release = read('../.github/workflows/windows-release.yml');
@@ -77,8 +68,6 @@ test('GitHub Actions use Node 24-compatible action majors and pinned runner imag
   assert.ok(release.includes('npm ci --no-fund'));
   assert.ok(release.includes('uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64'));
 });
-
-
 test('desktop packaging uses a checked-in compatible npm lockfile and npm ci', () => {
   const pkg = JSON.parse(read('../desktop/package.json'));
   const lock = JSON.parse(read('../desktop/package-lock.json'));
@@ -87,14 +76,13 @@ test('desktop packaging uses a checked-in compatible npm lockfile and npm ci', (
   assert.equal(lock.packages[''].devDependencies['electron-builder'], pkg.devDependencies['electron-builder']);
   assert.ok(!JSON.stringify(lock).includes('npmmirror.com'));
   const workflow = read('../.github/workflows/windows-release.yml');
-  assert.match(workflow, /working-directory: desktop\\s+run: npm ci --no-fund/);
+  assert.ok(workflow.includes('working-directory: desktop\n        run: npm ci --no-fund'));
 });
-
 test('vault uses 600000 PBKDF2 iterations and migrates v1 records without rewriting until verification', () => {
   const vault = read('../src/lib/secure-local-vault.ts');
-  assert.match(vault, /LEGACY_PBKDF2_ITERATIONS = 310_000/);
-  assert.match(vault, /CURRENT_PBKDF2_ITERATIONS = 600_000/);
-  assert.match(vault, /recordVersion === 1 \? LEGACY_PBKDF2_ITERATIONS : CURRENT_PBKDF2_ITERATIONS/);
-  assert.match(vault, /existing.version === 1/);
+  assert.ok(vault.includes('LEGACY_PBKDF2_ITERATIONS = 310_000'));
+  assert.ok(vault.includes('CURRENT_PBKDF2_ITERATIONS = 600_000'));
+  assert.ok(vault.includes('recordVersion === 1 ? LEGACY_PBKDF2_ITERATIONS : CURRENT_PBKDF2_ITERATIONS'));
+  assert.ok(vault.includes('existing.version === 1'));
   assert.ok(vault.indexOf('const inMemoryUpgrade = await decryptRecord') < vault.indexOf('await storeRecord(upgraded)'));
 });
