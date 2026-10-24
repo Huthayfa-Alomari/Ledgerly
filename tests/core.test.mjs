@@ -263,3 +263,21 @@ test('normalized statement rows retain source-field warnings for invalid financi
   assert.ok(warnings.some(item => item.row === 3 && item.field === 'debit' && item.rawValue === '100 CR'));
   assert.ok(warnings.every(item => item.message !== ''));
 });
+
+
+test('rows with ambiguous or malformed numeric fields cannot enter reconciliation as zero amounts', () => {
+  const rows = normalizeRows([
+    ['2026-10-14', 'Ambiguous debit', '1,5', ''],
+    ['2026-10-15', 'Credit suffix', '', '100 CR'],
+  ], { date: 0, description: 1, debit: 2, credit: 3 });
+  assert.equal(rows[0].debit, null);
+  assert.equal(rows[0].numericWarnings.length, 1);
+  assert.equal(signedAmount(rows[0]), null);
+  assert.equal(signedAmount(rows[1]), null);
+  const result = matchTransactions(rows, [
+    { date: '2026-10-14', description: 'Ambiguous debit', debit: null, credit: 0 },
+    { date: '2026-10-15', description: 'Credit suffix', debit: 0, credit: null },
+  ]);
+  assert.equal(result.matches.length, 0);
+  assert.deepEqual(result.unmatchedBank, [0, 1]);
+});
