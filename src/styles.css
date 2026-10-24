@@ -264,3 +264,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 
 /* Bank reconciliation report export action. */
 .match-export-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:-4px 0 16px}.match-export-actions .muted{font-size:11px;line-height:1.6}
+
+.ai-context-accounts{margin:12px 0;padding:12px;border:1px solid var(--audit-border,#dedbd4);border-radius:10px;background:var(--audit-surface-soft,#faf9f6)}
+.ai-context-accounts>summary{cursor:pointer;font-weight:600;color:var(--audit-text,#24312b);padding:4px 0}
+.ai-context-accounts .audit-table-wrap{margin-top:10px;max-height:320px;overflow:auto}
+.ai-context-accounts .audit-table{min-width:760px}
+.ai-context-accounts .table-sub{display:block}
