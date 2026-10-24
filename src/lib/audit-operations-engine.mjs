@@ -464,6 +464,95 @@ export function matchInvoiceToJournal(invoice, journalRows = [], options = {}) {
   return { ...base, status, statusLabel, message, candidates: unique.slice(0, 8), exactReferenceRows: 0 };
 }
 
+
+/**
+ * Indexes the ledger once, then returns review suggestions for each invoice.
+ * No match is ever promoted to an approved reconciliation automatically.
+ */
+export function matchInvoiceRegisterToJournal(invoices = [], journalRows = [], options = {}) {
+  const bills = Array.isArray(invoices) ? invoices : [];
+  const ledger = Array.isArray(journalRows) ? journalRows : [];
+  const toleranceRaw = Number(options.toleranceJod);
+  const toleranceJod = Number.isFinite(toleranceRaw) && toleranceRaw >= 0 ? Math.min(toleranceRaw, 5) : 0.001;
+  const windowRaw = Number(options.dateWindowDays);
+  const dateWindowDays = Number.isFinite(windowRaw) ? Math.max(0, Math.min(60, Math.trunc(windowRaw))) : 3;
+  const byReference = new Map();
+  const byAmountFils = new Map();
+  const byPartyToken = new Map();
+  const rowAmounts = new Map();
+
+  const pushMap = (map, key, row) => {
+    if (!key) return;
+    const list = map.get(key) || [];
+    list.push(row); map.set(key, list);
+  };
+  const getAmount = row => {
+    const debit = parseJodAmount(row?.debit), credit = parseJodAmount(row?.credit), amount = parseJodAmount(row?.amount);
+    return Math.max(Math.abs(debit ?? 0), Math.abs(credit ?? 0), Math.abs(amount ?? 0));
+  };
+  for (const row of ledger) {
+    const reference = normalizedInvoiceReference(row?.reference);
+    if (reference) pushMap(byReference, reference, row);
+    const amount = getAmount(row);
+    if (Number.isFinite(amount) && amount > 0) {
+      const fils = Math.round(roundJod(amount) * 1000);
+      pushMap(byAmountFils, String(fils), row);
+      rowAmounts.set(row, amount);
+    }
+    const party = normText(row?.counterparty ?? row?.supplierName ?? '');
+    for (const token of new Set(party.split(/\s+/).filter(part => part.length >= 3))) pushMap(byPartyToken, token, row);
+  }
+
+  const results = bills.map(invoice => {
+    const reference = normalizedInvoiceReference(invoice?.invoiceId ?? invoice?.invoiceNo ?? invoice?.reference ?? '');
+    let candidates = reference ? (byReference.get(reference) || []) : [];
+    if (!candidates.length) {
+      const set = new Set();
+      const amountRaw = invoice?.payableAmount ?? invoice?.totalJod ?? invoice?.totalAmount ?? invoice?.amount;
+      const amount = amountRaw === null || amountRaw === undefined || String(amountRaw).trim() === '' ? null : parseJodAmount(amountRaw);
+      if (amount !== null && amount > 0 && Number.isFinite(amount)) {
+        const center = Math.round(roundJod(amount) * 1000);
+        const radius = Math.ceil(toleranceJod * 1000) + 1;
+        for (let delta = -radius; delta <= radius; delta += 1) {
+          for (const row of byAmountFils.get(String(center + delta)) || []) {
+            if (Math.abs((rowAmounts.get(row) ?? 0) - amount) <= toleranceJod + 0.000001) set.add(row);
+          }
+        }
+      }
+
+      const invoiceDate = normalizeInvoiceDate(invoice?.issueDate ?? invoice?.date);
+      if (invoiceDate && String(invoice?.supplierName ?? '').trim()) {
+        const tokens = [...new Set(normText(invoice.supplierName).split(/\s+/).filter(token => token.length >= 3))];
+        const parties = new Set(tokens.flatMap(token => byPartyToken.get(token) || []));
+        for (const row of parties) {
+          const date = normalizeInvoiceDate(row?.date);
+          if (!date) continue;
+          const delta = Math.abs((Date.parse(date + 'T00:00:00Z') - Date.parse(invoiceDate + 'T00:00:00Z')) / 86400000);
+          if (delta <= dateWindowDays) set.add(row);
+        }
+      }
+      candidates = [...set];
+    }
+
+    const match = matchInvoiceToJournal(invoice, candidates, { toleranceJod, dateWindowDays });
+    return { invoice, match };
+  });
+  const statusCounts = results.reduce((out, item) => {
+    out[item.match.status] = (out[item.match.status] || 0) + 1;
+    return out;
+  }, {});
+  return {
+    invoiceCount: bills.length,
+    journalRowCount: ledger.length,
+    matchedCandidateCount: results.filter(item => item.match.candidates.length > 0 && !['invalid-invoice-amount', 'unsupported-currency', 'reference-conflict'].includes(item.match.status)).length,
+    conflictCount: results.filter(item => ['reference-conflict', 'unsupported-currency', 'invalid-invoice-amount'].includes(item.match.status)).length,
+    unmatchedCount: results.filter(item => item.match.status === 'unmatched').length,
+    statusCounts,
+    results,
+    disclaimer: 'هذه مرشحات مطابقة محلية وليست إثباتًا من المورد أو اعتمادًا ضريبيًا أو تسوية تلقائية. راجع المستند الأصلي والقيد والعملات وفترة التسجيل قبل ربط الدليل أو اعتماد النتيجة.',
+  };
+}
+
 export function buildWhatsappReminder({ phone = '', firmName = 'مكتب التدقيق', clientName = 'العميل', requestTitle = '', dueDate = '' } = {}) {
   const message = 'مرحبًا، معك ' + firmName + '. نتابع طلب مستندات التدقيق الخاص بـ ' + clientName + ': ' + requestTitle + '.' +
     (dueDate ? ' الموعد المطلوب: ' + dueDate + '.' : '') + ' يرجى إرسال المستند عبر القناة الآمنة المعتمدة لدى المكتب. شكرًا.';
