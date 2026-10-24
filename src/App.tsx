@@ -27,7 +27,7 @@ type Workpaper = { id: string; engagementId: string; ref: string; title: string;
 type Finding = { id: string; engagementId: string; title: string; criteria: string; condition: string; effect: string; recommendation: string; severity: string; status: string; workpaperRef?: string; evidenceIds?: string[] };
 type Evidence = { id: string; engagementId: string; title: string; type: string; reference: string; workpaperRef: string; notes: string; addedAt: string; attachmentId?: string; fileName?: string; fileType?: string; fileSize?: number };
 type TBRow = { id: string; engagementId: string; code: string; name: string; openingDebit: number; openingCredit: number; debit: number; credit: number; closingDebit: number; closingCredit: number; source: string; sourceRowNumber?: number; sourceFinancialFields?: string[] };
-type AuditEvent = { id: string; at: string; action: string; entity: string; details: string; engagementId?: string; actorId?: string; prevHash?: string; hash?: string }; 
+type AuditEvent = { id: string; at: string; action: string; entity: string; details: string; engagementId?: string; actorId?: string; sequence?: number; prevHash?: string; hash?: string }; 
 type Module = 'dashboard'|'clients'|'engagements'|'planning'|'trial-balance'|'workpapers'|'evidence'|'findings'|'reports'|'reconciliation'|'ai-assistant'|'intelligence'|'settings';
 type AuditOperations = {
  clientRequests: Array<Record<string, any>>;
