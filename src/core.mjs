@@ -77,11 +77,15 @@ export function normalizeRows(rows, mapping) {
       if (mapping[field] === undefined) return null;
       return Array.isArray(row) ? row[mapping[field]] : Object.values(row)[mapping[field]];
     };
-    const rawAmount = parseAmount(cell('amount'));
-    const debit = parseAmount(cell('debit'));
-    const credit = parseAmount(cell('credit'));
+    const numericWarnings = [];
+    const parseCell = field => parseAmount(cell(field), {
+      onWarning: warning => numericWarnings.push({ field, reason: warning.reason, rawValue: String(cell(field) ?? '') }),
+    });
+    const rawAmount = parseCell('amount');
+    const debit = parseCell('debit');
+    const credit = parseCell('credit');
     const description = cell('description') == null ? '' : String(cell('description')).trim();
-    const balance = parseAmount(cell('balance'));
+    const balance = parseCell('balance');
     const date = parseDate(cell('date'));
     const openingBalanceLabel = /^(opening(?: balance)?|beginning(?: balance)?|initial balance|b\s*\/\s*f|b f|brought forward|balance brought forward|رصيد افتتاحي|الرصيد الافتتاحي|رصيد مرحل|رصيد اول المدة|رصيد سابق)$/i.test(normalizeHeader(description));
     const noMovement = debit === null && credit === null && rawAmount === null;
@@ -94,6 +98,7 @@ export function normalizeRows(rows, mapping) {
       credit: credit === null && rawAmount !== null && rawAmount >= 0 ? rawAmount : credit,
       balance,
       isOpeningBalance,
+      numericWarnings,
       raw: row,
     };
   });
@@ -103,6 +108,15 @@ export function validateRows(rows) {
   const warnings = [];
   rows.forEach((row, i) => {
     if (!row.date) warnings.push({ row: row.sourceRow ?? i + 2, field: 'date', message: 'Missing or unrecognized date' });
+    for (const numericWarning of row.numericWarnings ?? []) {
+      warnings.push({
+        row: row.sourceRow ?? i + 2,
+        field: numericWarning.field,
+        message: 'Ambiguous or invalid numeric value; it was not guessed.',
+        reason: numericWarning.reason,
+        rawValue: numericWarning.rawValue,
+      });
+    }
     if (!row.description) warnings.push({ row: row.sourceRow ?? i + 2, field: 'description', message: 'Empty description' });
     if (row.debit === null && row.credit === null && !row.isOpeningBalance) warnings.push({ row: row.sourceRow ?? i + 2, field: 'amount', message: 'No debit/credit amount detected' });
     if (row.debit !== null && row.debit < 0) warnings.push({ row: row.sourceRow ?? i + 2, field: 'debit', message: 'Debit is negative; verify sign convention' });
