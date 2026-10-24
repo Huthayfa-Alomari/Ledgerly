@@ -540,6 +540,7 @@ export default function AuditIntelligence(props: Props) {
       trialBalance={currentTB}
       journalRows={importedJournal?.rows || []}
       journalFileName={importedJournal?.filename || ''}
+      workpapers={currentWorkpapers}
       operations={operations}
       vaultPassphrase={vaultPassphrase}
       onOperationsChange={onOperationsChange}
