@@ -270,3 +270,16 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .ai-context-accounts .audit-table-wrap{margin-top:10px;max-height:320px;overflow:auto}
 .ai-context-accounts .audit-table{min-width:760px}
 .ai-context-accounts .table-sub{display:block}
+
+.audit-invoice-match-subsection{margin-top:18px;padding:14px;border:1px solid var(--audit-border,#ddd9d1);border-radius:12px;background:var(--audit-surface-soft,#faf9f6)}
+.audit-invoice-match-subsection h4{margin:0 0 12px;font-size:1rem}
+.audit-invoice-match-subsection .audit-field{max-width:100%;margin-bottom:10px}
+.audit-invoice-match-subsection .summary-lines{margin:12px 0}
+.audit-invoice-match-result{margin:14px 0;padding:12px;border:1px solid var(--audit-border,#dedbd4);border-radius:10px;background:var(--audit-surface,#fff)}
+.audit-invoice-match-status{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:8px}
+.audit-invoice-match-result .audit-table-wrap{margin-top:12px}
+.audit-invoice-match-result .audit-table{min-width:780px}
+.audit-invoice-match-subsection .audit-table{min-width:1100px}
+.audit-invoice-match-subsection .table-sub{display:block;max-width:280px;overflow-wrap:anywhere}
+.audit-invoice-match-subsection .audit-table td{vertical-align:top}
+@media(max-width:700px){.audit-invoice-match-subsection{padding:10px}.audit-invoice-match-subsection .audit-table{min-width:1100px}}
