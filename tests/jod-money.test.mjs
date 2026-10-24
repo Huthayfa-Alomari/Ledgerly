@@ -58,7 +58,9 @@ test('treats blank cells as zero and rejects malformed values rather than coerci
 
 test('supports parenthesized negative amounts', () => {
   assert.equal(parseJodAmount('(12.345)'), -12.345);
-  assert.equal(parseJodAmount('($1,234.567)'), -1234.567);
+  assert.equal(parseJodAmount('(JOD 1,234.567)'), -1234.567);
+  assert.equal(parseJodAmount('USD 100'), null);
+  assert.equal(parseJodAmount('$100'), null);
 });
 
 
