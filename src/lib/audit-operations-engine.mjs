@@ -478,7 +478,7 @@ export function matchInvoiceRegisterToJournal(invoices = [], journalRows = [], o
   const dateWindowDays = Number.isFinite(windowRaw) ? Math.max(0, Math.min(60, Math.trunc(windowRaw))) : 3;
   const byReference = new Map();
   const byAmountFils = new Map();
-  const byPartyToken = new Map();
+  const byTokenAndDate = new Map();
   const rowAmounts = new Map();
 
   const pushMap = (map, key, row) => {
@@ -499,8 +499,11 @@ export function matchInvoiceRegisterToJournal(invoices = [], journalRows = [], o
       pushMap(byAmountFils, String(fils), row);
       rowAmounts.set(row, amount);
     }
-    const party = normText(row?.counterparty ?? row?.supplierName ?? '');
-    for (const token of new Set(party.split(/\s+/).filter(part => part.length >= 3))) pushMap(byPartyToken, token, row);
+    const date = normalizeInvoiceDate(row?.date);
+    if (date) {
+      const partyAndDescription = normText(String(row?.counterparty ?? row?.supplierName ?? '') + ' ' + String(row?.description ?? ''));
+      for (const token of new Set(partyAndDescription.split(/\s+/).filter(part => part.length >= 3))) pushMap(byTokenAndDate, token + '|' + date, row);
+    }
   }
 
   const results = bills.map(invoice => {
@@ -523,12 +526,10 @@ export function matchInvoiceRegisterToJournal(invoices = [], journalRows = [], o
       const invoiceDate = normalizeInvoiceDate(invoice?.issueDate ?? invoice?.date);
       if (invoiceDate && String(invoice?.supplierName ?? '').trim()) {
         const tokens = [...new Set(normText(invoice.supplierName).split(/\s+/).filter(token => token.length >= 3))];
-        const parties = new Set(tokens.flatMap(token => byPartyToken.get(token) || []));
-        for (const row of parties) {
-          const date = normalizeInvoiceDate(row?.date);
-          if (!date) continue;
-          const delta = Math.abs((Date.parse(date + 'T00:00:00Z') - Date.parse(invoiceDate + 'T00:00:00Z')) / 86400000);
-          if (delta <= dateWindowDays) set.add(row);
+        const baseDate = Date.parse(invoiceDate + 'T00:00:00Z');
+        for (let offset = -dateWindowDays; offset <= dateWindowDays; offset += 1) {
+          const dateKey = new Date(baseDate + offset * 86400000).toISOString().slice(0, 10);
+          for (const token of tokens) for (const row of byTokenAndDate.get(token + '|' + dateKey) || []) set.add(row);
         }
       }
       candidates = [...set];
