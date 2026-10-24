@@ -23,7 +23,7 @@ test('detects Arabic and English statement columns', () => {
 
 test('parses amount formats with commas, decimals, parentheses and Arabic digits', () => {
   assert.equal(parseAmount('1,234.56'), 1234.56);
-  assert.equal(parseAmount('1.234,56'), 1234.56);
+  assert.equal(parseAmount('1.234,56'), null, 'European separator format is rejected until the source locale is explicit');
   assert.equal(parseAmount('(125.50)'), -125.5);
   assert.equal(parseAmount('١٢٣٫٤٥'), 123.45);
   assert.equal(parseAmount('not-a-number'), null);
@@ -237,4 +237,17 @@ test('indexed matching handles a large set of unique same-date transactions', ()
   assert.equal(result.summary.matchedCount, 5000);
   assert.equal(result.summary.ambiguousCount, 0);
   assert.equal(result.unmatchedBank.length, 0);
+});
+
+
+test('strict shared amount parser rejects ambiguous separators and unknown suffixes', () => {
+  const warnings = [];
+  assert.equal(parseAmount('1,5', { onWarning: warning => warnings.push(warning) }), null);
+  assert.equal(parseAmount('1.234,567', { onWarning: warning => warnings.push(warning) }), null);
+  assert.equal(parseAmount('100 CR', { onWarning: warning => warnings.push(warning) }), null);
+  assert.equal(warnings.length, 3);
+  assert.ok(warnings.every(warning => warning.reason === 'ambiguous-or-malformed-number'));
+  assert.equal(parseAmount('1,234.567'), 1234.567);
+  assert.equal(parseAmount('12.004'), 12.004);
+  assert.equal(parseAmount('0,004'), null);
 });
