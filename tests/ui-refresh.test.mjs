@@ -131,3 +131,15 @@ test('AI edge function allowlists context categories and fixed labels server-sid
   assert.match(edge, /title: allowedIssueTitles\[category\]/);
   assert.match(edge, /includes\(String\(x\.engagementType\)\)/);
 });
+
+
+test('invoice matching UI requires unique workpaper links and supports encrypted source archives', () => {
+  const panel = readFileSync(new URL('../src/AuditOperationsPanels.tsx', import.meta.url), 'utf8');
+  assert.match(panel, /matchInvoiceRegisterToJournal/);
+  assert.match(panel, /normalizeInvoiceRegisterRows/);
+  assert.match(panel, /resolveUniqueWorkpaper/);
+  assert.match(panel, /saveLocalEvidenceFile\(invoiceRegisterSource\.file/);
+  assert.match(panel, /حفظ XML الأصلي مشفّرًا/);
+  assert.match(panel, /كل نتيجة تحتاج مراجعة بشرية/);
+  assert.match(panel, /10,000 صف/);
+});
