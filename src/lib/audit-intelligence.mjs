@@ -382,7 +382,7 @@ export function analyzeJournalEntries(rows, options = {}) {
     const direction = debit > TOLERANCE && !(credit > TOLERANCE) ? 'debit'
       : credit > TOLERANCE && !(debit > TOLERANCE) ? 'credit' : '';
     const amount = direction === 'debit' ? debit : direction === 'credit' ? credit : 0;
-    if (!reference || !accountCode || !direction || !(amount > 0) || !Number.isFinite(amount) || !/^\\d{4}-\\d{2}-\\d{2}$/.test(String(row.date ?? ''))) continue;
+    if (!reference || !accountCode || !direction || !(amount > 0) || !Number.isFinite(amount) || !/^\d{4}-\d{2}-\d{2}$/.test(String(row.date ?? ''))) continue;
     const key = [reference, accountCode, roundMoney(amount).toFixed(3)].join('|');
     const group = reversalGroups.get(key) || [];
     group.push({ row, direction, amount, timestamp: Date.parse(String(row.date) + 'T00:00:00Z') });
