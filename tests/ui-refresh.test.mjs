@@ -145,6 +145,14 @@ test('AI edge function allowlists context categories and fixed labels server-sid
 });
 
 
+test('member invitation uses exact normalized email lookup and does not return provider errors', () => {
+  const invite = readFileSync(new URL('../supabase/functions/ledgerly-invite-member/index.ts', import.meta.url), 'utf8');
+  assert.match(invite, /\.eq\("email", email\)/);
+  assert.doesNotMatch(invite, /\.ilike\("email", email\)/);
+  assert.doesNotMatch(invite, /inviteError\?\.message/);
+  assert.doesNotMatch(invite, /error: recordError\.message/);
+});
+
 test('invoice matching UI requires unique workpaper links and supports encrypted source archives', () => {
   const panel = readFileSync(new URL('../src/AuditOperationsPanels.tsx', import.meta.url), 'utf8');
   assert.match(panel, /matchInvoiceRegisterToJournal/);
