@@ -278,11 +278,8 @@ function App() {
     severity:issue.severity,
     category:issue.category,
     title:issue.title,
-    amount:issue.amount,
-    accountCode:typeof issue.code==='string'?issue.code:'',
-    sourceRowNumber:db.trialBalance.find(row=>row.id===issue.rowId)?.sourceRowNumber??null
    })),
-   accounts:summarizeTrialBalanceForCopilot(scoped(db.trialBalance),db.operations.accountMappings,activeEngagement?.id||'',20)
+   accounts:[]
   }
  }),[db,activeEngagement,tbAnalytics,evidenceTraceability]);
  const dashboardSignals = useMemo(()=>{
