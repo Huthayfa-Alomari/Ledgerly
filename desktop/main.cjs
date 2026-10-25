@@ -46,7 +46,7 @@ async function handlePackagedAsset(request) {
     const target = path.resolve(packagedRoot, pathname);
     const relative = path.relative(packagedRoot, target);
     if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
-      if (relative !== 'index.html') return new Response('Not found', { status: 404 });
+      return new Response('Not found', { status: 404 });
     }
     const bytes = await readFile(target);
     const contentType = mimeTypes[path.extname(target).toLowerCase()] || 'application/octet-stream';
@@ -112,12 +112,12 @@ function createWindow() {
   if (isDev) {
     void win.loadURL(devOrigin);
   } else {
-    void protocol.handle('ledgerly', handlePackagedAsset);
     void win.loadURL('ledgerly://app/index.html');
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  if (!isDev) await protocol.handle('ledgerly', handlePackagedAsset);
   installPermissionPolicy();
   createWindow();
   app.on('activate', () => {
