@@ -18,6 +18,7 @@ type ImportedFile = { name: string; rows: Row[]; headers: string[]; mapping: Rec
 
 export default function App() {
   const [lang, setLang] = useState<'ar' | 'en'>('ar');
+  const [commaMode, setCommaMode] = useState<'strict' | 'thousands' | 'decimal'>('strict');
   const [file, setFile] = useState<ImportedFile | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -148,7 +149,7 @@ export default function App() {
     }
   }
 
-  const normalized = useMemo(() => file ? normalizeRows(file.rows, file.mapping) : [], [file]);
+  const normalized = useMemo(() => file ? normalizeRows(file.rows, file.mapping, { commaMode }) : [], [file, commaMode]);
   const warnings = useMemo(() => validateRows(normalized), [normalized]);
 
   async function handleFile(selected?: File) {
@@ -344,6 +345,7 @@ export default function App() {
         <div className="section-title mapping-heading"><div><span className="step">02</span><h2>{t('راجع تعيين الأعمدة', 'Review column mapping')}</h2></div><button className="secondary compact" type="button" onClick={redetectColumns}>{t('إعادة اكتشاف الأعمدة', 'Re-detect columns')}</button></div>
         <p className="helper">{t('التعيين تلقائي مبدئياً. تأكد من صحة كل عمود قبل اعتماد الاستيراد.', 'Auto-detection is a starting point. Verify every field before accepting the import.')}</p>
         <div className="mapping-grid">{FIELDS.map(field => <label className="map-field" key={field}><span>{LABELS[field][lang === 'ar' ? 0 : 1]}</span><select value={file.mapping[field] === undefined ? '' : String(file.mapping[field])} onChange={e => setMapping(field, e.target.value)}><option value="">{t('غير معيّن', 'Not mapped')}</option>{file.headers.map((h, i) => <option key={`${h}-${i}`} value={i}>{h || `Column ${i + 1}`}</option>)}</select></label>)}</div>
+        <label className="map-field amount-format-choice"><span>{t('صيغة الفاصلة في المبالغ', 'Comma convention for amounts')}</span><select value={commaMode} onChange={e => { setCommaMode(e.target.value as 'strict' | 'thousands' | 'decimal'); setBankData(null); setLedgerData(null); setMatchResult(null); setConfirmed(false); }}><option value="strict">{t('تلقائي محافظ — ارفض الملتبس', 'Strict auto — reject ambiguous')}</option><option value="thousands">{t('الفاصلة = آلاف (5,000 = 5000)', 'Comma = thousands (5,000 = 5000)')}</option><option value="decimal">{t('الفاصلة = عشرية (5,000 = 5.000)', 'Comma = decimal (5,000 = 5.000)')}</option></select><small>{t('اختر الصيغة المطابقة للملف قبل اعتماد كشف البنك أو دفتر الأستاذ.', 'Choose the source file convention before assigning the import as bank or ledger.')}</small></label>
         <div className="section-title preview-heading"><div><span className="step">03</span><h2>{t('معاينة البيانات', 'Data preview')}</h2></div><span className="muted">{t('أول 10 صفوف', 'First 10 rows')}</span></div>
         <div className="table-wrap"><table><thead><tr>{(['date', 'description', 'debit', 'credit', 'balance'] as Field[]).map(f => <th key={f}>{LABELS[f][lang === 'ar' ? 0 : 1]}</th>)}<th>{t('حالة التاريخ', 'Date status')}</th></tr></thead><tbody>{preview.map((r, i) => <tr key={i} className={r.isOpeningBalance ? 'opening-balance-row' : undefined}><td>{r.date ?? '—'}</td><td>{r.description || '—'}{r.isOpeningBalance && <small className="row-tag">{t('رصيد افتتاحي', 'Opening balance')}</small>}</td><td>{r.debit ?? '—'}</td><td>{r.credit ?? '—'}</td><td>{r.balance ?? '—'}</td><td>{r.isOpeningBalance ? t('رصيد وليس حركة', 'Balance, not transaction') : r.date ? t('مقروء', 'Parsed') : t('راجع التاريخ', 'Check date')}</td></tr>)}</tbody></table></div>
         <div className="validation">
