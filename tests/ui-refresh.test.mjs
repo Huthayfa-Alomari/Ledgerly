@@ -95,7 +95,7 @@ test('AI copilot requires explicit consent and submits only a minimized engageme
   assert.match(panel, /checked={consent}/);
   assert.match(panel, /if \(!consent\)/);
   assert.match(panel, /ledgerly-ai-assistant/);
-  assert.match(panel, /لا تُرسل أسماء العملاء أو أرقامهم الضريبية/);
+  assert.match(panel, /لن تُرسل ملفات الأدلة أو أسماء العملاء/);
   assert.match(panel, /sourceRefs: Array\.isArray/);
   assert.match(css, /\.ai-consent/);
 });
