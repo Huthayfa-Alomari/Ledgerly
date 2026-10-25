@@ -432,7 +432,36 @@ function App() {
   <main className="audit-main"><header className="audit-topbar"><div><div className="audit-breadcrumb">مساحة العمل / {title}</div><h1>{title}</h1></div><div className="audit-top-actions"><label className="engagement-picker"><span>ملف التدقيق الحالي</span><select value={activeEngagement?.id||''} onChange={e=>setSelectedEngagement(e.target.value)}><option value="">اختر ملفًا</option>{db.engagements.map(e=><option key={e.id} value={e.id}>{db.clients.find(c=>c.id===e.clientId)?.name||'عميل'} · {e.year}</option>)}</select></label><button className="audit-icon-button" title="تصدير نسخة احتياطية" onClick={()=>{if(!window.confirm('سيصدر ملف JSON غير مشفّر. احفظه خارج المجلدات المشتركة فقط. هل تريد المتابعة؟'))return;download('ledgerly-backup-plaintext.json',JSON.stringify(db,null,2));}}>⇩</button></div></header>
    {storageError&&<div className="audit-warning" role="alert"><strong>تعذّر حفظ البيانات محليًا؛ قد تبقى تعديلاتك الحالية في الذاكرة فقط.</strong><p>نزّل نسخة استعادة من أحدث حالة موجودة في الذاكرة قبل إغلاق التطبيق. سبب الخطأ: {storageError}</p><div className="stack-actions"><button className="audit-primary" onClick={()=>downloadRecoverySnapshot(db)}>تنزيل أحدث نسخة للاستعادة</button><button className="audit-secondary" onClick={()=>{void persistEncryptedLocalVault(vaultPassphrase,db).then(error=>{setStorageError(error||'');if(!error)setNotice('نجح حفظ المخزن المشفّر مجددًا.');});}}>إعادة محاولة الحفظ</button></div></div>}
    {notice&&<div className="audit-toast">✓ {notice}</div>}
-   {module==='services'&&<><SectionIntro text="دليل الخدمات المهنية في Ledgerly. اختر خدمة لمراجعة نطاقها ومسارها الأولي وحالة جاهزيتها الحالية."/><div className="service-catalog-grid">{SERVICE_REGISTRY.map(service=><button type="button" key={service.id} className={`service-catalog-card ${selectedService===service.id?'selected':''}`} aria-pressed={selectedService===service.id} onClick={()=>setSelectedService(service.id)}><div className="service-catalog-card-top"><span className="service-catalog-icon">{service.id==='external_audit'?'✓':service.id==='internal_audit'?'◇':service.id==='bookkeeping'?'≋':service.id==='tax_advisory'?'٪':service.id==='training_development'?'▤':'⌁'}</span><span className={`service-readiness ${service.readiness}`}>{service.readinessLabel}</span></div><strong>{service.label}</strong><small>{service.labelEn}</small><p>{service.summary}</p><span className="service-open-hint">عرض مسار الخدمة ←</span></button>)}</div>{selectedServiceDefinition&&<section className="audit-card service-detail-card"><div className="audit-card-head"><div><span className="soft-tag">{selectedServiceDefinition.labelEn}</span><h3 style={{marginTop:8}}>{selectedServiceDefinition.label}</h3><p>{selectedServiceDefinition.summary}</p></div><span className={`service-readiness ${selectedServiceDefinition.readiness}`}>{selectedServiceDefinition.readinessLabel}</span></div><h4>المسار الأولي</h4><ol className="service-workflow">{selectedServiceDefinition.firstWorkflow.map((step,index)=><li key={step}><span>{String(index+1).padStart(2,'0')}</span>{step}</li>)}</ol><p className="audit-warning">{selectedServiceDefinition.caution}</p><div className="stack-actions">{selectedService==='external_audit'?<button className="audit-primary" onClick={()=>setModule('engagements')}>فتح ملفات التدقيق الحالية</button>:<button className="audit-secondary" onClick={()=>setNotice(`تم تحديد خدمة «${selectedServiceDefinition.label}». مسار العمل والحفظ المتخصص لهذه الوحدة لم يُفعّل بعد؛ لم تُنشأ أي بيانات.`)}>تأكيد اختيار الخدمة</button>}<button className="audit-secondary" onClick={()=>setModule('settings')}>إعدادات المكتب</button></div><p className="muted-copy">مهم: هذه الصفحة تعرض نطاق الخدمة وخطتها الأولية. لا تعني أن إجراءاتها المتخصصة أو نماذجها المهنية قد اكتملت أو أصبحت معتمدة.</p></section>}</>}
+   {module==='services'&&<>
+   <SectionIntro text="دليل الخدمات المهنية في Ledgerly. اختر خدمة لمراجعة نطاقها ومسارها الأولي وحالة جاهزيتها الحالية."/>
+   <div className="service-catalog-grid">{SERVICE_REGISTRY.map(service=>
+   <button type="button" key={service.id} className={`service-catalog-card ${selectedService===service.id?'selected':''}`} aria-pressed={selectedService===service.id} onClick={()=>setSelectedService(service.id)}>
+   <div className="service-catalog-card-top">
+   <span className="service-catalog-icon">{service.id==='external_audit'?'✓':service.id==='internal_audit'?'◇':service.id==='bookkeeping'?'≋':service.id==='tax_advisory'?'٪':service.id==='training_development'?'▤':'⌁'}</span>
+   <span className={`service-readiness ${service.readiness}`}>{service.readinessLabel}</span>
+   </div>
+   <strong>{service.label}</strong>
+   <small>{service.labelEn}</small>
+   <p>{service.summary}</p>
+   <span className="service-open-hint">عرض مسار الخدمة ←</span>
+   </button>)}</div>{selectedServiceDefinition&&<section className="audit-card service-detail-card">
+   <div className="audit-card-head">
+   <div>
+   <span className="soft-tag">{selectedServiceDefinition.labelEn}</span>
+   <h3 style={{marginTop:8}}>{selectedServiceDefinition.label}</h3>
+   <p>{selectedServiceDefinition.summary}</p>
+   </div>
+   <span className={`service-readiness ${selectedServiceDefinition.readiness}`}>{selectedServiceDefinition.readinessLabel}</span>
+   </div>
+   <h4>المسار الأولي</h4>
+   <ol className="service-workflow">{selectedServiceDefinition.firstWorkflow.map((step,index)=>
+   <li key={step}>
+   <span>{String(index+1).padStart(2,'0')}</span>{step}</li>)}</ol>
+   <p className="audit-warning">{selectedServiceDefinition.caution}</p>
+   <div className="stack-actions">{selectedService==='external_audit'?<button className="audit-primary" onClick={()=>setModule('engagements')}>فتح ملفات التدقيق الحالية</button>:<button className="audit-secondary" onClick={()=>setNotice(`تم تحديد خدمة «${selectedServiceDefinition.label}». مسار العمل والحفظ المتخصص لهذه الوحدة لم يُفعّل بعد؛ لم تُنشأ أي بيانات.`)}>تأكيد اختيار الخدمة</button>}<button className="audit-secondary" onClick={()=>setModule('settings')}>إعدادات المكتب</button>
+   </div>
+   <p className="muted-copy">مهم: هذه الصفحة تعرض نطاق الخدمة وخطتها الأولية. لا تعني أن إجراءاتها المتخصصة أو نماذجها المهنية قد اكتملت أو أصبحت معتمدة.</p>
+   </section>}</>}
    {module==='dashboard'&&<>
     <section className="audit-welcome"><div><span className="audit-kicker">نظام إدارة أعمال التدقيق</span><h2>من قبول العميل إلى إقفال ملف التدقيق.</h2><p>مساحة عمل موحدة لإدارة ملفات التدقيق، المخاطر، أوراق العمل، الأدلة والملاحظات. ابدأ بإنشاء عميل ثم افتح ملف تدقيق للسنة المالية.</p></div><div className="welcome-mark">L<span>LEDGERLY</span></div></section>
     <div className="audit-stats"><Stat label="العملاء النشطون" value={stats.clients} hint="سجل العملاء" icon="♙"/><Stat label="ملفات تدقيق مفتوحة" value={stats.open} hint="كل السنوات المالية" icon="▤"/><Stat label="أوراق بانتظار الاعتماد" value={stats.workpapers} hint="تحتاج إلى مراجعة" icon="▧"/><Stat label="ملاحظات غير مغلقة" value={stats.findings} hint="نتائج التدقيق" icon="⚑"/></div>
@@ -444,21 +473,641 @@ function App() {
      {id:'evidence',title:'أدلة غير مرتبطة بورقة عمل',detail:'راجع مرجع ورقة العمل لكل سجل دليل',count:dashboardSignals.unlinkedEvidence.length,onOpen:()=>setModule('evidence')},
      {id:'findings',title:'ملاحظات غير مغلقة',detail:'تحقق من المعالجة والأثر والتوصية',count:dashboardSignals.openFindings.length,onOpen:()=>setModule('findings')}
     ]} />
-    <div className="audit-content-grid"><section className="audit-card"><div className="audit-card-head"><div><h3>مسار ملف التدقيق</h3><p>المراحل المقترحة لسير العمل</p></div><span className="soft-tag">Workflow</span></div><div className="workflow">{['قبول العميل والاستقلالية','التخطيط وتقييم المخاطر','استيراد ميزان المراجعة','تنفيذ إجراءات التدقيق','مراجعة أوراق العمل','معالجة الملاحظات','التقارير والإقفال'].map((s,i)=><div className="workflow-row" key={s}><span className="workflow-num">{String(i+1).padStart(2,'0')}</span><span>{s}</span><span className="workflow-state">{i===0&&db.clients.length?'جاهز للمتابعة':i===1&&db.engagements.length?'ابدأ المراجعة':'بانتظار التنفيذ'}</span></div>)}</div></section><section className="audit-card"><div className="audit-card-head"><div><h3>إجراءات سريعة</h3><p>ابدأ من أهم سجلات النظام</p></div></div><div className="quick-actions"><button className="demo-action" onClick={loadDemoData}>◈ تحميل بيانات تجريبية <span>إضافة عميل وملف تدقيق وسجلات وهمية دون حذف بياناتك الحالية</span></button><button onClick={()=>{setModule('clients');startForm({});}}>＋ إضافة عميل جديد <span>بيانات المنشأة والتواصل</span></button><button onClick={()=>{setModule('engagements');startForm({year:String(new Date().getFullYear()),framework:'IFRS',type:'تدقيق سنوي'});}}>＋ فتح ملف تدقيق <span>تحديد السنة ونوع المهمة</span></button><button onClick={()=>setModule('reconciliation')}>⇄ تشغيل المطابقة البنكية <span>مقارنة كشف البنك ودفتر الأستاذ</span></button><button onClick={()=>setModule('reports')}>▥ عرض التقارير والإقفال <span>مراجعة الجاهزية والتصدير</span></button></div></section></div>
+    <div className="audit-content-grid">
+   <section className="audit-card">
+   <div className="audit-card-head">
+   <div>
+   <h3>مسار ملف التدقيق</h3>
+   <p>المراحل المقترحة لسير العمل</p>
+   </div>
+   <span className="soft-tag">Workflow</span>
+   </div>
+   <div className="workflow">{['قبول العميل والاستقلالية','التخطيط وتقييم المخاطر','استيراد ميزان المراجعة','تنفيذ إجراءات التدقيق','مراجعة أوراق العمل','معالجة الملاحظات','التقارير والإقفال'].map((s,i)=>
+   <div className="workflow-row" key={s}>
+   <span className="workflow-num">{String(i+1).padStart(2,'0')}</span>
+   <span>{s}</span>
+   <span className="workflow-state">{i===0&&db.clients.length?'جاهز للمتابعة':i===1&&db.engagements.length?'ابدأ المراجعة':'بانتظار التنفيذ'}</span>
+   </div>)}</div>
+   </section>
+   <section className="audit-card">
+   <div className="audit-card-head">
+   <div>
+   <h3>إجراءات سريعة</h3>
+   <p>ابدأ من أهم سجلات النظام</p>
+   </div>
+   </div>
+   <div className="quick-actions">
+   <button className="demo-action" onClick={loadDemoData}>◈ تحميل بيانات تجريبية <span>إضافة عميل وملف تدقيق وسجلات وهمية دون حذف بياناتك الحالية</span>
+   </button>
+   <button onClick={()=>{setModule('clients');startForm({});}}>＋ إضافة عميل جديد <span>بيانات المنشأة والتواصل</span>
+   </button>
+   <button onClick={()=>{setModule('engagements');startForm({year:String(new Date().getFullYear()),framework:'IFRS',type:'تدقيق سنوي'});}}>＋ فتح ملف تدقيق <span>تحديد السنة ونوع المهمة</span>
+   </button>
+   <button onClick={()=>setModule('reconciliation')}>⇄ تشغيل المطابقة البنكية <span>مقارنة كشف البنك ودفتر الأستاذ</span>
+   </button>
+   <button onClick={()=>setModule('reports')}>▥ عرض التقارير والإقفال <span>مراجعة الجاهزية والتصدير</span>
+   </button>
+   </div>
+   </section>
+   </div>
     <section className="audit-card"><div className="audit-card-head"><div><h3>آخر ملفات التدقيق</h3><p>حسب آخر الملفات التي أُنشئت محليًا</p></div><button className="audit-text-button" onClick={()=>setModule('engagements')}>عرض الكل ←</button></div>{db.engagements.length?<div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>العميل</th><th>السنة المالية</th><th>نوع المهمة</th><th>الحالة</th><th></th></tr></thead><tbody>{db.engagements.slice(0,5).map(e=><tr key={e.id}><td>{db.clients.find(c=>c.id===e.clientId)?.name||'عميل محذوف'}</td><td>{e.year}</td><td>{e.type}</td><td><span className="audit-pill">{e.status}</span></td><td><button className="audit-text-button" onClick={()=>{setSelectedEngagement(e.id);setModule('workpapers');}}>فتح الملف</button></td></tr>)}</tbody></table></div>:<Empty text="لا توجد ملفات تدقيق بعد. أضف عميلًا ثم أنشئ ملف التدقيق الأول."/>}</section>
    </>}
-   {module==='clients'&&<><SectionIntro text="سجل مركزي للعملاء ومعلوماتهم الأساسية." action={headerActions()}/>{showForm&&<FormCard title="إضافة عميل" onCancel={()=>setShowForm(false)} onSave={submitForm}><Field label="اسم العميل *" value={form.name||''} onChange={v=>update('name',v)} placeholder="اسم المنشأة القانوني"/><Field label="القطاع" value={form.industry||''} onChange={v=>update('industry',v)} placeholder="تجارة، تصنيع، خدمات..."/><Field label="الرقم الضريبي" value={form.taxNumber||''} onChange={v=>update('taxNumber',v)}/><Field label="بيانات التواصل" value={form.contact||''} onChange={v=>update('contact',v)} placeholder="اسم الشخص / هاتف / بريد"/><SelectField label="قبول / استمرار العميل" value={form.acceptance||'بانتظار التقييم'} onChange={v=>update('acceptance',v)} options={['بانتظار التقييم','مقبول','استمرار','مرفوض']}/><SelectField label="فحص الاستقلالية مكتمل؟" value={form.independenceChecked||'لا'} onChange={v=>update('independenceChecked',v)} options={['لا','نعم']}/></FormCard>}<SearchBox value={query} onChange={setQuery} placeholder="ابحث باسم العميل أو القطاع"/><section className="audit-card"><div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>اسم العميل</th><th>القطاع</th><th>الرقم الضريبي</th><th>قبول / استمرار</th><th>الاستقلالية</th><th>تاريخ الإضافة</th><th>الحالة</th><th></th></tr></thead><tbody>{db.clients.filter(c=>`${c.name} ${c.industry} ${c.taxNumber}`.toLowerCase().includes(query.toLowerCase())).map(c=><tr key={c.id}><td className="cell-strong">{c.name}</td><td>{c.industry}</td><td>{c.taxNumber||'—'}</td><td>{c.acceptance||'بانتظار التقييم'}</td><td><span className={`audit-pill ${c.independenceChecked?'':'risk-pill'}`}>{c.independenceChecked?'مكتمل':'غير مكتمل'}</span></td><td>{c.createdAt}</td><td><span className="audit-pill">{c.status}</span></td><td><button className="audit-text-button danger-text" onClick={()=>remove('clients',c.id)}>أرشفة</button></td></tr>)}</tbody></table></div>{!db.clients.length&&<Empty text="لم تتم إضافة عملاء. أضف أول عميل للبدء."/>}</section></>}
-   {module==='engagements'&&<><SectionIntro text="كل مهمة تدقيق مرتبطة بعميل وسنة مالية ونطاق عمل محدد." action={headerActions()}/>{showForm&&<FormCard title="فتح ملف تدقيق" onCancel={()=>setShowForm(false)} onSave={submitForm}><SelectField label="العميل *" value={form.clientId||''} onChange={v=>update('clientId',v)} options={['|||— اختر العميل —',...db.clients.map(c=>`${c.id}|||${c.name}`)]}/>{form.clientId&&<p className="form-hint">العميل المحدد: {db.clients.find(c=>c.id===form.clientId)?.name}</p>}<Field label="السنة المالية *" value={form.year||''} onChange={v=>update('year',v)} type="number"/><SelectField label="نوع المهمة" value={form.type||'تدقيق سنوي'} onChange={v=>update('type',v)} options={['تدقيق سنوي','تدقيق مرحلي','مهمة خاصة','إجراءات متفق عليها']}/><SelectField label="الإطار المحاسبي" value={form.framework||'IFRS'} onChange={v=>update('framework',v)} options={['IFRS','IFRS for SMEs','معايير محلية','غير محدد']}/><Field label="الشريك المسؤول" value={form.partner||''} onChange={v=>update('partner',v)}/><Field label="الأهمية النسبية (قيمة تخطيطية)" value={form.materiality||''} onChange={v=>update('materiality',v)} type="number"/><label className="audit-field full-field"><span>نطاق المهمة</span><textarea value={form.scope||''} onChange={e=>update('scope',e.target.value)} rows={2} placeholder="الفترات، المواقع، الوحدات، الاستثناءات…"/></label><Field label="تاريخ البدء المخطط" value={form.plannedStart||''} onChange={v=>update('plannedStart',v)} type="date"/><Field label="تاريخ الانتهاء المخطط" value={form.plannedEnd||''} onChange={v=>update('plannedEnd',v)} type="date"/><Field label="الأتعاب المتفق عليها (د.أ)" value={form.feeJod||''} onChange={v=>update('feeJod',v)} type="number"/><Field label="ساعات العمل المخططة" value={form.budgetHours||''} onChange={v=>update('budgetHours',v)} type="number"/><Field label="فريق المهمة" value={form.team||''} onChange={v=>update('team',v)} placeholder="الاسم — الدور، مفصولًا بفواصل"/><SelectField label="تقييم الاستقلالية والإقرارات" value={form.independenceStatus||'غير مكتمل'} onChange={v=>update('independenceStatus',v)} options={['غير مكتمل','قيد المراجعة','مكتمل','مشكلة تستلزم المعالجة']}/><SelectField label="فحص تعارض المصالح" value={form.conflictCheck||'لم يُجرَ بعد'} onChange={v=>update('conflictCheck',v)} options={['لم يُجرَ بعد','لا يوجد تعارض معروف','تعارض محتمل — يتطلب تقييمًا','تعارض مؤكد — إيقاف القبول']}/><p className="form-hint full-field">تسجيل الحالة هنا توثيق إداري محلي فقط؛ لا يُعد إقرارًا إلكترونيًا موقعًا أو بديلًا عن تقييم الاستقلالية المهني.</p></FormCard>}<SearchBox value={query} onChange={setQuery} placeholder="ابحث عن ملف أو عميل"/><section className="audit-card"><div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>العميل</th><th>السنة</th><th>نوع المهمة</th><th>الإطار</th><th>الأهمية النسبية</th><th>الفترة المخططة</th><th>الأتعاب (د.أ)</th><th>الاستقلالية</th><th>تعارض المصالح</th><th>الحالة</th><th></th></tr></thead><tbody>{db.engagements.filter(e=>`${db.clients.find(c=>c.id===e.clientId)?.name} ${e.year} ${e.type}`.toLowerCase().includes(query.toLowerCase())).map(e=><tr key={e.id}><td className="cell-strong">{db.clients.find(c=>c.id===e.clientId)?.name||'—'}</td><td>{e.year}</td><td>{e.type}</td><td>{e.framework}</td><td>{e.materiality||'—'}</td><td>{e.plannedStart||'—'} / {e.plannedEnd||'—'}</td><td>{e.feeJod||'—'}</td><td><span className={`audit-pill ${e.independenceStatus==='مكتمل'?'':'risk-pill'}`}>{e.independenceStatus||'غير مسجل'}</span></td><td>{e.conflictCheck||'غير مسجل'}</td><td><select className="inline-select" value={e.status} onChange={v=>{const nextStatus=(v.target as HTMLSelectElement).value;if(nextStatus==='مغلق'){const gate=evaluateEngagementClosure({engagementId:e.id,workpapers:db.workpapers.filter(x=>x.engagementId===e.id),evidence:db.evidence.filter(x=>x.engagementId===e.id),findings:db.findings.filter(x=>x.engagementId===e.id),risks:db.risks.filter(x=>x.engagementId===e.id),trialBalance:db.trialBalance.filter(x=>x.engagementId===e.id),operations:db.operations});if(!gate.allowed){setNotice('تم منع إغلاق الملف: '+gate.blockers.map(x=>x.title+' ('+x.count+')').join('؛ '));return;}const warnings=gate.warnings.map(x=>x.title+' ('+x.count+')').join('؛ ');if(!window.confirm('اجتاز الملف بوابة الإقفال الإدارية. هذا لا يمثل اعتمادًا مهنيًا تلقائيًا.'+(warnings?'\nتنبيهات غير مانعة: '+warnings:'')+'\nهل تريد إغلاق الملف؟'))return;}setDB(p=>({...p,engagements:p.engagements.map(x=>x.id===e.id?{...x,status:nextStatus}:x)}));}}>{['التخطيط','العمل الميداني','المراجعة','الإقفال','مغلق','ملغى'].map(s=><option key={s}>{s}</option>)}</select></td><td><button className="audit-text-button" onClick={()=>{setSelectedEngagement(e.id);setModule('planning');}}>فتح ←</button></td></tr>)}</tbody></table></div>{!db.engagements.length&&<Empty text="أنشئ ملف تدقيق بعد إضافة العميل."/>}</section></>}
-   {module==='planning'&&<><SectionIntro text="سجّل المخاطر على مستوى المهمة، مع تقدير الاحتمالية والأثر واستجابة التدقيق." action={headerActions()}/>{noEngagement?<Empty text="اختر ملف تدقيق من أعلى الصفحة أو أنشئ ملفًا أولًا."/>:<>{showForm&&<FormCard title="تسجيل خطر" onCancel={()=>setShowForm(false)} onSave={submitForm}><Field label="وصف الخطر *" value={form.title||''} onChange={v=>update('title',v)}/><Field label="مجال الحساب / العملية" value={form.area||''} onChange={v=>update('area',v)}/><SelectField label="الاحتمالية" value={form.likelihood||'متوسط'} onChange={v=>update('likelihood',v)} options={['منخفض','متوسط','مرتفع']}/><SelectField label="الأثر" value={form.impact||'متوسط'} onChange={v=>update('impact',v)} options={['منخفض','متوسط','مرتفع']}/><Field label="استجابة التدقيق المقترحة" value={form.response||''} onChange={v=>update('response',v)}/></FormCard>}<div className="audit-stats compact-stats"><Stat label="المخاطر المسجلة" value={scoped(db.risks).length} hint="لهذا الملف" icon="◎"/><Stat label="مخاطر مرتفعة" value={scoped(db.risks).filter(r=>r.impact==='مرتفع'||r.likelihood==='مرتفع').length} hint="تحتاج تقييمًا" icon="!"/><Stat label="أوراق عمل" value={scoped(db.workpapers).length} hint="مرتبطة بالملف" icon="▧"/><Stat label="الملاحظات" value={scoped(db.findings).length} hint="نتائج مسجلة" icon="⚑"/></div><section className="audit-card"><TableRisk rows={scoped(db.risks)} onDelete={id=>remove('risks',id)}/>{!scoped(db.risks).length&&<Empty text="لم تسجل مخاطر لهذه المهمة بعد."/>}</section><section className="audit-card"><h3>قائمة تحقق للتخطيط</h3><Checklist items={['توثيق فهم المنشأة وبيئتها','توثيق الاستقلالية وقبول/استمرار العميل','تحديد الأهمية النسبية وأساس احتسابها','تحديد المخاطر الجوهرية ومخاطر التحريف الجوهري','تحديد إجراءات الاستجابة للمخاطر','توثيق اجتماع التخطيط وتوزيع المسؤوليات']} checked={db.completionChecks||{}} scope={activeEngagement?.id||'global'} onChange={(item,checked)=>setDB(p=>({...p,completionChecks:{...(p.completionChecks||{}),[`${activeEngagement?.id||'global'}::${item}`]:checked},auditLog:[{id:uid(),at:new Date().toISOString(),action:checked?'تحديد بند تخطيط':'إلغاء تحديد بند تخطيط',entity:'قائمة التخطيط',details:item,engagementId:activeEngagement?.id},...(p.auditLog||[])].slice(0,2000)}))}/></section></>}</>}
-   {module==='trial-balance'&&<><SectionIntro text="استيراد ميزان المراجعة من CSV أو Excel، والتحقق من المجاميع ومراجعة الحسابات لكل ملف تدقيق."/><section className="audit-card"><div className="feature-banner"><div className="feature-icon">≋</div><div><h3>استيراد ميزان المراجعة</h3><p>الأعمدة المتعرف عليها: رقم الحساب، اسم الحساب، مدين، دائن، مدين افتتاحي، دائن افتتاحي، مدين ختامي، دائن ختامي. يمكن استيراد مجموعة أساسية بعمودي مدين ودائن.</p></div></div>{noEngagement?<Empty text="اختر ملف تدقيق من أعلى الصفحة قبل استيراد ميزان المراجعة."/>:<div className="tb-import-row"><label className="tb-upload">＋ اختر ملف CSV / Excel<input type="file" accept=".csv,.txt,.xlsx,.xls" onChange={e=>importTrialBalance(e.target.files?.[0])}/></label><span className="muted-copy">{tbBusy?'جارٍ قراءة الملف…':`الملف الحالي: ${activeEngagement?.year} · ${currentClient?.name||'العميل'}`}</span></div>}{tbError&&<p className="audit-warning">{tbError}</p>}</section>{currentTB.length>0&&<><div className="audit-stats compact-stats"><Stat label="عدد الحسابات" value={currentTB.length} hint="في ملف التدقيق الحالي" icon="≋"/><Stat label="مدين الحركة" value={Number(tbTotals.debit.toFixed(3))} hint="حسب الملف المستورد" icon="↙"/><Stat label="دائن الحركة" value={Number(tbTotals.credit.toFixed(3))} hint="حسب الملف المستورد" icon="↗"/><Stat label="فرق المدين والدائن" value={Number((tbTotals.debit-tbTotals.credit).toFixed(3))} hint={Math.abs(toFils(tbTotals.debit)-toFils(tbTotals.credit))<=1?'متوازن حسابيًا':'يحتاج إلى مراجعة'} icon="≠"/></div><section className="audit-card tb-analytics-card"><div className="audit-card-head"><div><h3>تحليلات ميزان المراجعة</h3><p className="muted-copy">فحوصات حسابية وجودة بيانات قابلة للتفسير؛ لا تصدر حكمًا تدقيقيًا تلقائيًا.</p></div><button className="audit-secondary" onClick={()=>download('trial-balance-analytics.csv',['severity,category,account_code,account_name,title,amount,detail',...tbAnalytics.issues.map(issue=>[issue.severity,issue.category,issue.code,issue.name,issue.title,issue.amount??'',issue.detail].map(csvCell).join(','))].join('\n'),'text/csv;charset=utf-8')}>تصدير نتائج التحليل</button></div><div className="tb-analytics-controls"><label className="audit-field"><span>الأهمية النسبية (د.أ)</span><input type="number" min="0" step="0.001" value={tbMateriality} onChange={e=>setTbMateriality(e.target.value)} aria-label="الأهمية النسبية بالدينار الأردني"/></label><p className="muted-copy">تستخدم القيمة لترتيب أرصدة وحركات الحسابات للمراجعة، ولا تعني أن الحساب محرف.</p></div><div className="audit-stats compact-stats"><Stat label="أخطاء بيانات/اتزان" value={tbAnalytics.counts.error} hint="تحتاج تحققًا أوليًا" icon="!"/><Stat label="تنبيهات جودة البيانات" value={tbAnalytics.counts.warning} hint="راجع السجل المعني" icon="⚑"/><Stat label="مؤشرات الأهمية النسبية" value={tbAnalytics.counts.info} hint="أولوية للفحص وليست استنتاجًا" icon="◎"/><Stat label="حالة المجاميع" value={Object.values(tbAnalytics.differences).filter(v=>Math.abs(v)>tbAnalytics.tolerance).length} hint={tbAnalytics.balanced?'متوازن ضمن هامش السماح':'يوجد فرق أو بيانات رقمية غير صالحة'} icon={tbAnalytics.balanced?'✓':'≠'}/></div><div className="tb-difference-strip"><span>فرق الافتتاحي <strong>{tbAnalytics.differences.opening.toLocaleString('en-US',{minimumFractionDigits:3,maximumFractionDigits:3})}</strong></span><span>فرق الحركة <strong>{tbAnalytics.differences.movement.toLocaleString('en-US',{minimumFractionDigits:3,maximumFractionDigits:3})}</strong></span><span>فرق الختامي <strong>{tbAnalytics.differences.closing.toLocaleString('en-US',{minimumFractionDigits:3,maximumFractionDigits:3})}</strong></span></div>{tbAnalytics.issues.length===0?<p className="tb-analytics-empty">لم تُكتشف استثناءات وفق الفحوصات الحالية. هذا لا يثبت اكتمال البيانات أو صحة المعالجة المحاسبية.</p>:<div className="audit-table-wrap"><table className="audit-table tb-issues-table"><thead><tr><th>الأولوية</th><th>الحساب</th><th>الفحص</th><th>التفسير والإجراء المقترح</th><th>المبلغ (د.أ)</th></tr></thead><tbody>{tbAnalytics.issues.map(issue=><tr key={issue.id}><td><span className={`tb-severity tb-severity-${issue.severity}`}>{issue.severity==='error'?'خطأ':issue.severity==='warning'?'تنبيه':'أولوية فحص'}</span></td><td>{issue.code||'—'}{issue.name&&<small className="tb-account-name">{issue.name}</small>}</td><td className="cell-strong">{issue.title}</td><td>{issue.detail}</td><td className="money-cell">{issue.amount===null?'—':issue.amount.toLocaleString('en-US',{minimumFractionDigits:3,maximumFractionDigits:3})}</td></tr>)}</tbody></table></div>}<p className="audit-warning">تعتمد النتائج على الأعمدة المستوردة وقيمها. راجع mapping الحسابات والإشارات ونطاق البيانات، ووثّق استنتاجك في ورقة العمل؛ لا يُغني هذا المحرك عن إجراءات التدقيق أو حكم المدقق.</p></section><section className="audit-card"><div className="audit-card-head"><h3>تفاصيل ميزان المراجعة</h3><button className="audit-secondary" onClick={()=>download('trial-balance.csv',['account_code,account_name,opening_debit,opening_credit,debit,credit,closing_debit,closing_credit',...currentTB.map(r=>[r.code,r.name,r.openingDebit,r.openingCredit,r.debit,r.credit,r.closingDebit,r.closingCredit].map(csvCell).join(','))].join('\n'),'text/csv;charset=utf-8')}>تصدير CSV</button></div><div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>رقم الحساب</th><th>اسم الحساب</th><th className="money-cell">مدين افتتاحي</th><th className="money-cell">دائن افتتاحي</th><th className="money-cell">مدين</th><th className="money-cell">دائن</th><th className="money-cell">مدين ختامي</th><th className="money-cell">دائن ختامي</th></tr></thead><tbody>{currentTB.map(r=><tr key={r.id}><td>{r.code||'—'}</td><td className="cell-strong">{r.name}</td><td className="money-cell">{r.openingDebit.toLocaleString('en-US',{minimumFractionDigits:3,maximumFractionDigits:3})}</td><td className="money-cell">{r.openingCredit.toLocaleString('en-US',{minimumFractionDigits:3,maximumFractionDigits:3})}</td><td className="money-cell">{r.debit.toLocaleString('en-US',{minimumFractionDigits:3,maximumFractionDigits:3})}</td><td className="money-cell">{r.credit.toLocaleString('en-US',{minimumFractionDigits:3,maximumFractionDigits:3})}</td><td className="money-cell">{r.closingDebit.toLocaleString('en-US',{minimumFractionDigits:3,maximumFractionDigits:3})}</td><td className="money-cell">{r.closingCredit.toLocaleString('en-US',{minimumFractionDigits:3,maximumFractionDigits:3})}</td></tr>)}</tbody></table></div><p className="audit-warning">التحقق من توازن الإجماليات حسابي فقط. لا يثبت صحة التصنيف أو اكتمال ميزان المراجعة، ويجب مراجعة الأعمدة والإشارات قبل الاعتماد.</p></section></>}</>}
-   {module==='workpapers'&&<><SectionIntro text="أوراق عمل رقمية تتضمن الإجراء والاستنتاج وعلامات التدقيق، وحالة المراجعة وسجل إصدارات محلي. السجل المحلي ليس سجلًا غير قابل للتلاعب." action={headerActions()}/>{noEngagement?<Empty text="اختر ملف تدقيق أولًا."/>:<>{showForm&&<FormCard title="إنشاء ورقة عمل رقمية" onCancel={()=>setShowForm(false)} onSave={submitForm}><Field label="مرجع ورقة العمل" value={form.ref||''} onChange={v=>update('ref',v)} placeholder="WP-001"/><Field label="عنوان ورقة العمل *" value={form.title||''} onChange={v=>update('title',v)}/><Field label="مجال التدقيق" value={form.area||''} onChange={v=>update('area',v)}/><Field label="المُعدّ" value={form.preparer||''} onChange={v=>update('preparer',v)}/><Field label="المراجع" value={form.reviewer||''} onChange={v=>update('reviewer',v)}/><label className="audit-field full-field"><span>إجراء التدقيق / خطوات الاختبار</span><textarea value={form.procedure||''} onChange={e=>update('procedure',e.target.value)} rows={3} placeholder="حدّد الهدف، المجتمع، العينة، الخطوات، ومعيار تقييم الاستثناءات"/></label><label className="audit-field full-field"><span>النتيجة والاستنتاج</span><textarea value={form.conclusion||''} onChange={e=>update('conclusion',e.target.value)} rows={3}/></label><label className="audit-field full-field"><span>علامات التدقيق (Tickmarks)</span><textarea value={form.tickmarks||''} onChange={e=>update('tickmarks',e.target.value)} rows={2} placeholder="مثال: ✓ مطابق للمستند؛ C تمت المطابقة؛ ? استفسار مطلوب"/></label></FormCard>}<section className="audit-card"><div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>المرجع</th><th>عنوان الورقة</th><th>المجال</th><th>المُعدّ</th><th>المراجع</th><th>الحالة</th><th></th></tr></thead><tbody>{scoped(db.workpapers).map(w=><tr key={w.id}><td className="cell-strong">{w.ref}<small className="table-sub">v{w.version||1}</small>{scoped(db.trialBalance).some(tb=>tb.engagementId===w.engagementId)&&(!w.sourceFingerprint||w.sourceFingerprint!==fingerprintTrialBalanceRows(scoped(db.trialBalance).filter(tb=>tb.engagementId===w.engagementId)))&&<small className="table-sub danger-text">{!w.sourceFingerprint?'لقطة المصدر غير مسجلة — راجع قبل الاعتماد':'بيانات المصدر تغيّرت — أعد المراجعة'}</small>}</td><td>{w.title}<small className="table-sub">{w.procedure||w.conclusion||'لا يوجد إجراء موثق بعد'}</small><small className="table-sub">الاستنتاج: {w.conclusion||'—'}</small><small className="table-sub">Tickmarks: {w.tickmarks||'—'}</small>{(w.history||[]).length>0&&<details className="history-details"><summary>سجل الإصدارات ({(w.history||[]).length})</summary>{(w.history||[]).slice().reverse().map((h,i)=><div key={`${h.version}-${i}`} className="history-entry"><strong>v{h.version} · {h.action}</strong><small>{new Date(h.at).toLocaleString('ar-JO')} · {h.actor}</small><small>{h.note||h.status}</small></div>)}</details>}</td><td>{w.area}</td><td>{w.preparer||'—'}</td><td>{w.reviewer||'—'}{w.reviewNotes&&<small className="table-sub">{w.reviewNotes}</small>}</td><td><select className="inline-select" value={w.status} onChange={e=>{const next=e.target.value;let reviewerCandidate:string| null=w.reviewer||'';if(next==='معتمد'){reviewerCandidate=window.prompt('أدخل اسم المراجع المستقل لاعتماد ورقة العمل:',w.reviewer||'');if(reviewerCandidate===null)return;}const reviewerIdentity=String(reviewerCandidate||'').trim();const transition=validateLocalWorkpaperTransition(w,next,reviewerIdentity);if(!transition.valid){window.alert(transition.reason);return;}if(next==='معتمد'&&!window.confirm(transition.reason+'\nهذا الاعتماد في الوضع المحلي لا يثبت هوية رقمية. هل تريد المتابعة؟'))return;const now=new Date().toISOString();setDB(p=>({...p,workpapers:p.workpapers.map(x=>{if(x.id!==w.id)return x;const history=[...(x.history||[]),{version:(x.version||1)+1,at:now,actor:reviewerIdentity||x.reviewer||'مستخدم محلي',action:`تغيير الحالة إلى ${next}`,status:next,note:next==='تعديلات مطلوبة'?(x.reviewNotes||'يرجى توثيق ملاحظات المراجع'):''}];return {...x,status:next,reviewer:next==='معتمد'?reviewerIdentity:x.reviewer,sourceFingerprint:next==='معتمد'?(fingerprintTrialBalanceRows(p.trialBalance.filter(tb=>tb.engagementId===x.engagementId))||x.sourceFingerprint):x.sourceFingerprint,sourceSnapshotAt:next==='معتمد'?now:x.sourceSnapshotAt,sourceSnapshotReviewedBy:next==='معتمد'?reviewerIdentity:x.sourceSnapshotReviewedBy,version:(x.version||1)+1,history,updatedAt:today()};}),auditLog:[{id:uid(),at:now,action:'تحديث حالة ورقة عمل',entity:'ورقة عمل',details:`${w.ref}: ${w.status} ← ${next}${reviewerIdentity?' · المراجع: '+reviewerIdentity:''}`,engagementId:w.engagementId,actorId:cloudSession?.user?.id||('local-reviewer:'+reviewerIdentity)},...(p.auditLog||[])].slice(0,2000)}));}}>{['مسودة','قيد التنفيذ','بانتظار المراجعة','تعديلات مطلوبة','معتمد'].map(s=><option key={s}>{s}</option>)}</select><small className="table-sub">{w.updatedAt}</small></td><td><button className="audit-text-button" onClick={()=>{const note=window.prompt('أدخل ملاحظة المراجع (اتركها فارغة لمسحها):',w.reviewNotes||'');if(note===null)return;const now=new Date().toISOString();setDB(p=>({...p,workpapers:p.workpapers.map(x=>x.id===w.id?{...x,reviewNotes:note,reviewNotesStatus:note.trim()?'open':'resolved',version:(x.version||1)+1,history:[...(x.history||[]),{version:(x.version||1)+1,at:now,actor:x.reviewer||'مستخدم محلي',action:note.trim()?'تسجيل ملاحظة مراجعة':'مسح ملاحظة مراجعة',status:x.status,note:note.trim()}],updatedAt:today()}:x),auditLog:[{id:uid(),at:now,action:'تحديث ملاحظة مراجعة',entity:'ورقة عمل',details:`${w.ref}: ${note.trim()||'تم مسح الملاحظة'}`,engagementId:w.engagementId},...(p.auditLog||[])].slice(0,2000)}));}}>ملاحظة المراجع</button>{w.reviewNotes?.trim()&&<button className="audit-text-button" onClick={()=>{const resolved=w.reviewNotesStatus==='resolved';const nextStatus=resolved?'open':'resolved';const now=new Date().toISOString();setDB(p=>({...p,workpapers:p.workpapers.map(x=>x.id===w.id?{...x,reviewNotesStatus:nextStatus,version:(x.version||1)+1,history:[...(x.history||[]),{version:(x.version||1)+1,at:now,actor:x.reviewer||'مستخدم محلي',action:resolved?'إعادة فتح ملاحظة المراجع':'تحديد ملاحظة المراجع كمعالجة',status:x.status,note:x.reviewNotes||''}],updatedAt:today()}:x),auditLog:[{id:uid(),at:now,action:resolved?'إعادة فتح ملاحظة مراجعة':'معالجة ملاحظة مراجعة',entity:'ورقة عمل',details:`${w.ref}: ${resolved?'أعيد فتح الملاحظة':'سُجلت كمعالجة'}`,engagementId:w.engagementId},...(p.auditLog||[])].slice(0,2000)}));}}>{w.reviewNotesStatus==='resolved'?'إعادة فتح الملاحظة':'تمت معالجة الملاحظة'}</button>}<button className="audit-text-button danger-text" onClick={()=>remove('workpapers',w.id)}>إزالة</button></td></tr>)}</tbody></table></div>{!scoped(db.workpapers).length&&<Empty text="لا توجد أوراق عمل في هذا الملف. أضف أول ورقة عمل."/>}</section></>}</>}
-   {module==='evidence'&&<><SectionIntro text="فهرس الأدلة يربط كل دليل بمرجعه ومصدره وورقة العمل ذات الصلة." action={headerActions()}/>{noEngagement?<Empty text="اختر ملف تدقيق أولًا."/>:<>{showForm&&<FormCard title="تسجيل دليل تدقيق" onCancel={()=>{setShowForm(false);setEvidenceFile(null);}} onSave={submitForm}><Field label="وصف الدليل *" value={form.title||''} onChange={v=>update('title',v)}/><SelectField label="نوع الدليل" value={form.type||'مستند'} onChange={v=>update('type',v)} options={['مستند','تأكيد خارجي','ملاحظة مباشرة','استفسار','إعادة احتساب','إجراء تحليلي','أخرى']}/><Field label="مرجع المصدر / اسم الملف" value={form.reference||''} onChange={v=>update('reference',v)}/><Field label="مرجع ورقة العمل" value={form.workpaperRef||''} onChange={v=>update('workpaperRef',v)}/><label className="audit-field full-field"><span>ملاحظات حول المصدر والكفاية</span><textarea value={form.notes||''} onChange={e=>update('notes',e.target.value)} rows={3}/></label><label className="audit-field full-field"><span>إرفاق صورة أو ملف (اختياري، حتى 25 ميغابايت)</span><input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.txt,.csv,.xlsx,.xls,.docx" onChange={e=>setEvidenceFile(e.target.files?.[0]||null)}/><small className="form-hint">{evidenceFile?`الملف المحدد: ${evidenceFile.name} (${(evidenceFile.size/1024).toFixed(1)} كيلوبايت)`:"يحفظ المرفق بعد تشفيره محليًا؛ لا يُضمّن ملف المرفق نفسه داخل نسخة بيانات JSON العادية."}</small></label></FormCard>}<div className="audit-card"><div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>الدليل</th><th>النوع</th><th>المرجع</th><th>ورقة العمل</th><th>المرفق</th><th>تاريخ الفهرسة</th><th></th></tr></thead><tbody>{scoped(db.evidence).map(e=><tr key={e.id}><td className="cell-strong">{e.title}<small className="table-sub">{e.notes}</small></td><td>{e.type}</td><td>{e.reference||'—'}</td><td>{e.workpaperRef||'—'}</td><td><LocalEvidenceAttachment row={e} passphrase={vaultPassphrase}/></td><td>{e.addedAt}</td><td><button className="audit-text-button danger-text" onClick={()=>remove('evidence',e.id)}>إزالة</button></td></tr>)}</tbody></table></div>{!scoped(db.evidence).length&&<Empty text="لم تُفهرس أدلة لهذه المهمة بعد."/>}<p className="audit-warning">المرفقات تُشفّر قبل تخزينها في IndexedDB، لكنها ليست ضمن نسخة البيانات JSON العادية. استخدم النسخة الاحتياطية المشفّرة للمساحة واحتفظ بمرفقاتك عبر النسخ/الاستعادة المدعومة.</p></div></>}</>}
-   {module==='findings'&&<><SectionIntro text="وثّق الحالة والمعيار والسبب والأثر والتوصية، ثم تابع حالة المعالجة." action={headerActions()}/>{noEngagement?<Empty text="اختر ملف تدقيق أولًا."/>:<>{showForm&&<FormCard title="تسجيل ملاحظة تدقيق" onCancel={()=>setShowForm(false)} onSave={submitForm}><Field label="عنوان الملاحظة *" value={form.title||''} onChange={v=>update('title',v)}/><Field label="المعيار" value={form.criteria||''} onChange={v=>update('criteria',v)}/><label className="audit-field full-field"><span>الحالة / الوقائع</span><textarea value={form.condition||''} onChange={e=>update('condition',e.target.value)} rows={2}/></label><label className="audit-field full-field"><span>الأثر / المخاطر</span><textarea value={form.effect||''} onChange={e=>update('effect',e.target.value)} rows={2}/></label><label className="audit-field full-field"><span>التوصية</span><textarea value={form.recommendation||''} onChange={e=>update('recommendation',e.target.value)} rows={2}/></label><SelectField label="ورقة العمل المرتبطة" value={form.workpaperRef||''} onChange={v=>update('workpaperRef',v)} options={['|||— اختر مرجع الورقة —',...scoped(db.workpapers).map(w=>`${w.ref}|||${w.ref} — ${w.title}`)]}/><SelectField label="الدليل المرتبط" value={form.evidenceId||''} onChange={v=>update('evidenceId',v)} options={['|||— اختر دليلًا —',...scoped(db.evidence).map(e=>`${e.id}|||${e.title}${e.reference?' — '+e.reference:''}`)]}/><p className="form-hint full-field">ترتبط الملاحظة بورقة عمل ودليل محددين لتسهيل التتبّع والمراجعة. يمكن حفظ الملاحظة دون الربط، لكن ذلك سيظهر كعنصر يحتاج استكمالًا قبل الإقفال.</p><SelectField label="الأهمية" value={form.severity||'متوسطة'} onChange={v=>update('severity',v)} options={['منخفضة','متوسطة','مرتفعة','حرجة']}/></FormCard>}<div className="audit-card"><div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>الملاحظة</th><th>الأهمية</th><th>المعيار / الحالة</th><th>ورقة العمل / الدليل</th><th>التوصية</th><th>الحالة</th><th></th></tr></thead><tbody>{scoped(db.findings).map(f=><tr key={f.id}><td className="cell-strong">{f.title}</td><td><span className={`audit-pill ${f.severity==='حرجة'||f.severity==='مرتفعة'?'risk-pill':''}`}>{f.severity}</span></td><td>{f.criteria||'—'}<small className="table-sub">{f.condition}</small></td><td>{f.workpaperRef||'—'}<small className="table-sub">{(f.evidenceIds||[]).map(id=>db.evidence.find(ev=>ev.id===id)?.title||'دليل غير موجود').join('، ')||'لا يوجد دليل مرتبط'}</small></td><td>{f.recommendation||'—'}</td><td><select className="inline-select" value={f.status} onChange={e=>setDB(p=>({...p,findings:p.findings.map(x=>x.id===f.id?{...x,status:e.target.value}:x)}))}>{['مفتوحة','قيد المعالجة','بانتظار التحقق','مغلقة'].map(s=><option key={s}>{s}</option>)}</select></td><td><button className="audit-text-button danger-text" onClick={()=>remove('findings',f.id)}>إزالة</button></td></tr>)}</tbody></table></div>{!scoped(db.findings).length&&<Empty text="لا توجد ملاحظات مسجلة لهذا الملف."/>}</div></>}</>}
-   {module==='reports'&&<><SectionIntro text="تقييم اكتمال ملف التدقيق قبل إعداد مخرجاته وتصدير البيانات."/><div className="audit-card"><h3>قائمة جاهزية الإقفال</h3><Checklist items={['تحديث تقييم المخاطر وإكمال استجابات التدقيق','إكمال أوراق العمل وإغلاق ملاحظات المراجعة','ربط الأدلة والمستندات بأوراق العمل','تقييم الملاحظات والتعديلات المقترحة','مراجعة الأحداث اللاحقة والاستمرارية عند الانطباق','توثيق خطاب الإقرارات ومراسلات الحوكمة عند الانطباق','إجراء مراجعة الشريك / مراجعة الجودة عند وجوبها','إعداد مسودة التقرير ومراجعتها مهنيًا','توثيق الموافقة النهائية على الإقفال']} checked={db.completionChecks||{}} scope={activeEngagement?.id||'global'} onChange={(item,checked)=>setDB(p=>({...p,completionChecks:{...(p.completionChecks||{}),[`${activeEngagement?.id||'global'}::${item}`]:checked},auditLog:[{id:uid(),at:new Date().toISOString(),action:checked?'تحديد بند إقفال':'إلغاء تحديد بند إقفال',entity:'قائمة الإقفال',details:item,engagementId:activeEngagement?.id},...(p.auditLog||[])].slice(0,2000)}))}/><p className="audit-warning">علامات قائمة التحقق للتنظيم فقط ولا تثبت استيفاء متطلبات معيارية أو قانونية. لا يصدر النظام رأيًا تدقيقيًا تلقائيًا.</p></div><section className="audit-card traceability-card"><div className="audit-card-head"><div><h3>مصفوفة تتبّع الأدلة</h3><p className="muted-copy">تحقق من ارتباط كل دليل مفهرس بورقة عمل موجودة ضمن ملف التدقيق الحالي.</p></div><button className="audit-secondary" onClick={()=>download('ledgerly-evidence-traceability.csv',['evidence_title,evidence_type,evidence_reference,workpaper_reference,workpaper_title,workpaper_status,link_status',...evidenceTraceability.map(row=>[row.item.title,row.item.type,row.item.reference,row.item.workpaperRef,row.workpaper?.title||'',row.workpaper?.status||'',row.status].map(csvCell).join(','))].join('\n'),'text/csv;charset=utf-8')}>تصدير مصفوفة التتبع</button></div><div className="audit-stats compact-stats"><Stat label="الأدلة المفهرسة" value={evidenceTraceability.length} hint="في ملف التدقيق الحالي" icon="⌁"/><Stat label="أدلة مرتبطة" value={evidenceTraceability.filter(row=>row.status==='مرتبط').length} hint="مرجع مطابق لورقة عمل" icon="✓"/><Stat label="بلا مرجع" value={evidenceTraceability.filter(row=>row.status==='غير مرتبط').length} hint="تحتاج قرارًا من المدقق" icon="—"/><Stat label="مرجع غير موجود" value={evidenceTraceability.filter(row=>row.status==='مرجع ورقة العمل غير موجود').length} hint="راجع المرجع أو السجل" icon="!"/></div>{evidenceTraceability.length===0?<Empty text="لا توجد أدلة مفهرسة لهذا الملف حتى الآن."/>:<div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>الدليل</th><th>النوع / المرجع</th><th>مرجع ورقة العمل</th><th>ورقة العمل المطابقة</th><th>حالة الربط</th></tr></thead><tbody>{evidenceTraceability.map(({item,workpaper,status})=><tr key={item.id}><td className="cell-strong">{item.title}<small className="table-sub">{item.addedAt}</small></td><td>{item.type}<small className="table-sub">{item.reference||'لا يوجد مرجع مستند'}</small></td><td>{item.workpaperRef||'—'}</td><td>{workpaper?<>{workpaper.title}<small className="table-sub">{workpaper.status} · {workpaper.ref}</small></>:'—'}</td><td><span className={`audit-pill ${status==='مرتبط'?'': 'risk-pill'}`}>{status}</span></td></tr>)}</tbody></table></div>}<p className="audit-warning">وجود مرجع مطابق يثبت الارتباط الإداري فقط؛ لا يثبت كفاية الدليل أو ملاءمته. يجب تقييم الأدلة والإجراءات والاستنتاجات مهنيًا.</p></section><div className="audit-content-grid"><div className="audit-card"><h3>ملخص ملف التدقيق الحالي</h3><div className="summary-lines"><SummaryLine label="العميل" value={currentClient?.name||'لم يُحدد'}/><SummaryLine label="السنة المالية" value={activeEngagement?.year||'—'}/><SummaryLine label="أوراق العمل" value={`${scoped(db.workpapers).length} (${scoped(db.workpapers).filter(w=>w.status==='معتمد').length} معتمدة)`}/><SummaryLine label="الأدلة المفهرسة" value={String(scoped(db.evidence).length)}/><SummaryLine label="الملاحظات المفتوحة" value={String(scoped(db.findings).filter(f=>f.status!=='مغلقة').length)}/><SummaryLine label="المخاطر" value={String(scoped(db.risks).length)}/></div></div><div className="audit-card"><h3>تصدير واستعادة</h3><p className="muted-copy">صدّر نسخة JSON من سجلات هذا المتصفح للاحتفاظ بنسخة احتياطية. هذا ليس نظام نسخ احتياطي آمنًا أو متزامنًا مع السحابة.</p><div className="stack-actions"><button className="audit-primary" onClick={()=>download('brp-full-backup.json',JSON.stringify(db,null,2))}>تصدير كل البيانات (JSON)</button><button className="audit-secondary" onClick={()=>download('brp-engagement-summary.csv',['client,year,type,status,workpapers,evidence,open_findings',...db.engagements.map(e=>[db.clients.find(c=>c.id===e.clientId)?.name||'',e.year,e.type,e.status,db.workpapers.filter(w=>w.engagementId===e.id).length,db.evidence.filter(x=>x.engagementId===e.id).length,db.findings.filter(x=>x.engagementId===e.id&&x.status!=='مغلقة').length].map(csvCell).join(','))].join('\n'),'text/csv;charset=utf-8')}>تصدير ملخص ملفات (CSV)</button></div></div></div></>}
+   {module==='clients'&&<>
+   <SectionIntro text="سجل مركزي للعملاء ومعلوماتهم الأساسية." action={headerActions()}/>{showForm&&<FormCard title="إضافة عميل" onCancel={()=>setShowForm(false)} onSave={submitForm}>
+   <Field label="اسم العميل *" value={form.name||''} onChange={v=>update('name',v)} placeholder="اسم المنشأة القانوني"/>
+   <Field label="القطاع" value={form.industry||''} onChange={v=>update('industry',v)} placeholder="تجارة، تصنيع، خدمات..."/>
+   <Field label="الرقم الضريبي" value={form.taxNumber||''} onChange={v=>update('taxNumber',v)}/>
+   <Field label="بيانات التواصل" value={form.contact||''} onChange={v=>update('contact',v)} placeholder="اسم الشخص / هاتف / بريد"/>
+   <SelectField label="قبول / استمرار العميل" value={form.acceptance||'بانتظار التقييم'} onChange={v=>update('acceptance',v)} options={['بانتظار التقييم','مقبول','استمرار','مرفوض']}/>
+   <SelectField label="فحص الاستقلالية مكتمل؟" value={form.independenceChecked||'لا'} onChange={v=>update('independenceChecked',v)} options={['لا','نعم']}/>
+   </FormCard>}<SearchBox value={query} onChange={setQuery} placeholder="ابحث باسم العميل أو القطاع"/>
+   <section className="audit-card">
+   <div className="audit-table-wrap">
+   <table className="audit-table">
+   <thead>
+   <tr>
+   <th>اسم العميل</th>
+   <th>القطاع</th>
+   <th>الرقم الضريبي</th>
+   <th>قبول / استمرار</th>
+   <th>الاستقلالية</th>
+   <th>تاريخ الإضافة</th>
+   <th>الحالة</th>
+   <th>
+   </th>
+   </tr>
+   </thead>
+   <tbody>{db.clients.filter(c=>`${c.name} ${c.industry} ${c.taxNumber}`.toLowerCase().includes(query.toLowerCase())).map(c=>
+   <tr key={c.id}>
+   <td className="cell-strong">{c.name}</td>
+   <td>{c.industry}</td>
+   <td>{c.taxNumber||'—'}</td>
+   <td>{c.acceptance||'بانتظار التقييم'}</td>
+   <td>
+   <span className={`audit-pill ${c.independenceChecked?'':'risk-pill'}`}>{c.independenceChecked?'مكتمل':'غير مكتمل'}</span>
+   </td>
+   <td>{c.createdAt}</td>
+   <td>
+   <span className="audit-pill">{c.status}</span>
+   </td>
+   <td>
+   <button className="audit-text-button danger-text" onClick={()=>remove('clients',c.id)}>أرشفة</button>
+   </td>
+   </tr>)}</tbody>
+   </table>
+   </div>{!db.clients.length&&<Empty text="لم تتم إضافة عملاء. أضف أول عميل للبدء."/>}</section>
+   </>}
+   {module==='engagements'&&<>
+   <SectionIntro text="كل مهمة تدقيق مرتبطة بعميل وسنة مالية ونطاق عمل محدد." action={headerActions()}/>{showForm&&<FormCard title="فتح ملف تدقيق" onCancel={()=>setShowForm(false)} onSave={submitForm}>
+   <SelectField label="العميل *" value={form.clientId||''} onChange={v=>update('clientId',v)} options={['|||— اختر العميل —',...db.clients.map(c=>`${c.id}|||${c.name}`)]}/>{form.clientId&&<p className="form-hint">العميل المحدد: {db.clients.find(c=>c.id===form.clientId)?.name}</p>}<Field label="السنة المالية *" value={form.year||''} onChange={v=>update('year',v)} type="number"/>
+   <SelectField label="نوع المهمة" value={form.type||'تدقيق سنوي'} onChange={v=>update('type',v)} options={['تدقيق سنوي','تدقيق مرحلي','مهمة خاصة','إجراءات متفق عليها']}/>
+   <SelectField label="الإطار المحاسبي" value={form.framework||'IFRS'} onChange={v=>update('framework',v)} options={['IFRS','IFRS for SMEs','معايير محلية','غير محدد']}/>
+   <Field label="الشريك المسؤول" value={form.partner||''} onChange={v=>update('partner',v)}/>
+   <Field label="الأهمية النسبية (قيمة تخطيطية)" value={form.materiality||''} onChange={v=>update('materiality',v)} type="number"/>
+   <label className="audit-field full-field">
+   <span>نطاق المهمة</span>
+   <textarea value={form.scope||''} onChange={e=>update('scope',e.target.value)} rows={2} placeholder="الفترات، المواقع، الوحدات، الاستثناءات…"/>
+   </label>
+   <Field label="تاريخ البدء المخطط" value={form.plannedStart||''} onChange={v=>update('plannedStart',v)} type="date"/>
+   <Field label="تاريخ الانتهاء المخطط" value={form.plannedEnd||''} onChange={v=>update('plannedEnd',v)} type="date"/>
+   <Field label="الأتعاب المتفق عليها (د.أ)" value={form.feeJod||''} onChange={v=>update('feeJod',v)} type="number"/>
+   <Field label="ساعات العمل المخططة" value={form.budgetHours||''} onChange={v=>update('budgetHours',v)} type="number"/>
+   <Field label="فريق المهمة" value={form.team||''} onChange={v=>update('team',v)} placeholder="الاسم — الدور، مفصولًا بفواصل"/>
+   <SelectField label="تقييم الاستقلالية والإقرارات" value={form.independenceStatus||'غير مكتمل'} onChange={v=>update('independenceStatus',v)} options={['غير مكتمل','قيد المراجعة','مكتمل','مشكلة تستلزم المعالجة']}/>
+   <SelectField label="فحص تعارض المصالح" value={form.conflictCheck||'لم يُجرَ بعد'} onChange={v=>update('conflictCheck',v)} options={['لم يُجرَ بعد','لا يوجد تعارض معروف','تعارض محتمل — يتطلب تقييمًا','تعارض مؤكد — إيقاف القبول']}/>
+   <p className="form-hint full-field">تسجيل الحالة هنا توثيق إداري محلي فقط؛ لا يُعد إقرارًا إلكترونيًا موقعًا أو بديلًا عن تقييم الاستقلالية المهني.</p>
+   </FormCard>}<SearchBox value={query} onChange={setQuery} placeholder="ابحث عن ملف أو عميل"/>
+   <section className="audit-card">
+   <div className="audit-table-wrap">
+   <table className="audit-table">
+   <thead>
+   <tr>
+   <th>العميل</th>
+   <th>السنة</th>
+   <th>نوع المهمة</th>
+   <th>الإطار</th>
+   <th>الأهمية النسبية</th>
+   <th>الفترة المخططة</th>
+   <th>الأتعاب (د.أ)</th>
+   <th>الاستقلالية</th>
+   <th>تعارض المصالح</th>
+   <th>الحالة</th>
+   <th>
+   </th>
+   </tr>
+   </thead>
+   <tbody>{db.engagements.filter(e=>`${db.clients.find(c=>c.id===e.clientId)?.name} ${e.year} ${e.type}`.toLowerCase().includes(query.toLowerCase())).map(e=>
+   <tr key={e.id}>
+   <td className="cell-strong">{db.clients.find(c=>c.id===e.clientId)?.name||'—'}</td>
+   <td>{e.year}</td>
+   <td>{e.type}</td>
+   <td>{e.framework}</td>
+   <td>{e.materiality||'—'}</td>
+   <td>{e.plannedStart||'—'} / {e.plannedEnd||'—'}</td>
+   <td>{e.feeJod||'—'}</td>
+   <td>
+   <span className={`audit-pill ${e.independenceStatus==='مكتمل'?'':'risk-pill'}`}>{e.independenceStatus||'غير مسجل'}</span>
+   </td>
+   <td>{e.conflictCheck||'غير مسجل'}</td>
+   <td>
+   <select className="inline-select" value={e.status} onChange={v=>{const nextStatus=(v.target as HTMLSelectElement).value;if(nextStatus==='مغلق'){const gate=evaluateEngagementClosure({engagementId:e.id,workpapers:db.workpapers.filter(x=>x.engagementId===e.id),evidence:db.evidence.filter(x=>x.engagementId===e.id),findings:db.findings.filter(x=>x.engagementId===e.id),risks:db.risks.filter(x=>x.engagementId===e.id),trialBalance:db.trialBalance.filter(x=>x.engagementId===e.id),operations:db.operations});if(!gate.allowed){setNotice('تم منع إغلاق الملف: '+gate.blockers.map(x=>x.title+' ('+x.count+')').join('؛ '));return;}const warnings=gate.warnings.map(x=>x.title+' ('+x.count+')').join('؛ ');if(!window.confirm('اجتاز الملف بوابة الإقفال الإدارية. هذا لا يمثل اعتمادًا مهنيًا تلقائيًا.'+(warnings?'\nتنبيهات غير مانعة: '+warnings:'')+'\nهل تريد إغلاق الملف؟'))return;}setDB(p=>({...p,engagements:p.engagements.map(x=>x.id===e.id?{...x,status:nextStatus}:x)}));}}>{['التخطيط','العمل الميداني','المراجعة','الإقفال','مغلق','ملغى'].map(s=>
+   <option key={s}>{s}</option>)}</select>
+   </td>
+   <td>
+   <button className="audit-text-button" onClick={()=>{setSelectedEngagement(e.id);setModule('planning');}}>فتح ←</button>
+   </td>
+   </tr>)}</tbody>
+   </table>
+   </div>{!db.engagements.length&&<Empty text="أنشئ ملف تدقيق بعد إضافة العميل."/>}</section>
+   </>}
+   {module==='planning'&&<>
+   <SectionIntro text="سجّل المخاطر على مستوى المهمة، مع تقدير الاحتمالية والأثر واستجابة التدقيق." action={headerActions()}/>{noEngagement?<Empty text="اختر ملف تدقيق من أعلى الصفحة أو أنشئ ملفًا أولًا."/>:<>{showForm&&<FormCard title="تسجيل خطر" onCancel={()=>setShowForm(false)} onSave={submitForm}>
+   <Field label="وصف الخطر *" value={form.title||''} onChange={v=>update('title',v)}/>
+   <Field label="مجال الحساب / العملية" value={form.area||''} onChange={v=>update('area',v)}/>
+   <SelectField label="الاحتمالية" value={form.likelihood||'متوسط'} onChange={v=>update('likelihood',v)} options={['منخفض','متوسط','مرتفع']}/>
+   <SelectField label="الأثر" value={form.impact||'متوسط'} onChange={v=>update('impact',v)} options={['منخفض','متوسط','مرتفع']}/>
+   <Field label="استجابة التدقيق المقترحة" value={form.response||''} onChange={v=>update('response',v)}/>
+   </FormCard>}<div className="audit-stats compact-stats">
+   <Stat label="المخاطر المسجلة" value={scoped(db.risks).length} hint="لهذا الملف" icon="◎"/>
+   <Stat label="مخاطر مرتفعة" value={scoped(db.risks).filter(r=>r.impact==='مرتفع'||r.likelihood==='مرتفع').length} hint="تحتاج تقييمًا" icon="!"/>
+   <Stat label="أوراق عمل" value={scoped(db.workpapers).length} hint="مرتبطة بالملف" icon="▧"/>
+   <Stat label="الملاحظات" value={scoped(db.findings).length} hint="نتائج مسجلة" icon="⚑"/>
+   </div>
+   <section className="audit-card">
+   <TableRisk rows={scoped(db.risks)} onDelete={id=>remove('risks',id)}/>{!scoped(db.risks).length&&<Empty text="لم تسجل مخاطر لهذه المهمة بعد."/>}</section>
+   <section className="audit-card">
+   <h3>قائمة تحقق للتخطيط</h3>
+   <Checklist items={['توثيق فهم المنشأة وبيئتها','توثيق الاستقلالية وقبول/استمرار العميل','تحديد الأهمية النسبية وأساس احتسابها','تحديد المخاطر الجوهرية ومخاطر التحريف الجوهري','تحديد إجراءات الاستجابة للمخاطر','توثيق اجتماع التخطيط وتوزيع المسؤوليات']} checked={db.completionChecks||{}} scope={activeEngagement?.id||'global'} onChange={(item,checked)=>setDB(p=>({...p,completionChecks:{...(p.completionChecks||{}),[`${activeEngagement?.id||'global'}::${item}`]:checked},auditLog:[{id:uid(),at:new Date().toISOString(),action:checked?'تحديد بند تخطيط':'إلغاء تحديد بند تخطيط',entity:'قائمة التخطيط',details:item,engagementId:activeEngagement?.id},...(p.auditLog||[])].slice(0,2000)}))}/>
+   </section>
+   </>}</>}
+   {module==='trial-balance'&&<>
+   <SectionIntro text="استيراد ميزان المراجعة من CSV أو Excel، والتحقق من المجاميع ومراجعة الحسابات لكل ملف تدقيق."/>
+   <section className="audit-card">
+   <div className="feature-banner">
+   <div className="feature-icon">≋</div>
+   <div>
+   <h3>استيراد ميزان المراجعة</h3>
+   <p>الأعمدة المتعرف عليها: رقم الحساب، اسم الحساب، مدين، دائن، مدين افتتاحي، دائن افتتاحي، مدين ختامي، دائن ختامي. يمكن استيراد مجموعة أساسية بعمودي مدين ودائن.</p>
+   </div>
+   </div>{noEngagement?<Empty text="اختر ملف تدقيق من أعلى الصفحة قبل استيراد ميزان المراجعة."/>:<div className="tb-import-row">
+   <label className="tb-upload">＋ اختر ملف CSV / Excel<input type="file" accept=".csv,.txt,.xlsx,.xls" onChange={e=>importTrialBalance(e.target.files?.[0])}/>
+   </label>
+   <span className="muted-copy">{tbBusy?'جارٍ قراءة الملف…':`الملف الحالي: ${activeEngagement?.year} · ${currentClient?.name||'العميل'}`}</span>
+   </div>}{tbError&&<p className="audit-warning">{tbError}</p>}</section>{currentTB.length>0&&<>
+   <div className="audit-stats compact-stats">
+   <Stat label="عدد الحسابات" value={currentTB.length} hint="في ملف التدقيق الحالي" icon="≋"/>
+   <Stat label="مدين الحركة" value={Number(tbTotals.debit.toFixed(3))} hint="حسب الملف المستورد" icon="↙"/>
+   <Stat label="دائن الحركة" value={Number(tbTotals.credit.toFixed(3))} hint="حسب الملف المستورد" icon="↗"/>
+   <Stat label="فرق المدين والدائن" value={Number((tbTotals.debit-tbTotals.credit).toFixed(3))} hint={Math.abs(toFils(tbTotals.debit)-toFils(tbTotals.credit))<=1?'متوازن حسابيًا':'يحتاج إلى مراجعة'} icon="≠"/>
+   </div>
+   <section className="audit-card tb-analytics-card">
+   <div className="audit-card-head">
+   <div>
+   <h3>تحليلات ميزان المراجعة</h3>
+   <p className="muted-copy">فحوصات حسابية وجودة بيانات قابلة للتفسير؛ لا تصدر حكمًا تدقيقيًا تلقائيًا.</p>
+   </div>
+   <button className="audit-secondary" onClick={()=>download('trial-balance-analytics.csv',['severity,category,account_code,account_name,title,amount,detail',...tbAnalytics.issues.map(issue=>[issue.severity,issue.category,issue.code,issue.name,issue.title,issue.amount??'',issue.detail].map(csvCell).join(','))].join('\n'),'text/csv;charset=utf-8')}>تصدير نتائج التحليل</button>
+   </div>
+   <div className="tb-analytics-controls">
+   <label className="audit-field">
+   <span>الأهمية النسبية (د.أ)</span>
+   <input type="number" min="0" step="0.001" value={tbMateriality} onChange={e=>setTbMateriality(e.target.value)} aria-label="الأهمية النسبية بالدينار الأردني"/>
+   </label>
+   <p className="muted-copy">تستخدم القيمة لترتيب أرصدة وحركات الحسابات للمراجعة، ولا تعني أن الحساب محرف.</p>
+   </div>
+   <div className="audit-stats compact-stats">
+   <Stat label="أخطاء بيانات/اتزان" value={tbAnalytics.counts.error} hint="تحتاج تحققًا أوليًا" icon="!"/>
+   <Stat label="تنبيهات جودة البيانات" value={tbAnalytics.counts.warning} hint="راجع السجل المعني" icon="⚑"/>
+   <Stat label="مؤشرات الأهمية النسبية" value={tbAnalytics.counts.info} hint="أولوية للفحص وليست استنتاجًا" icon="◎"/>
+   <Stat label="حالة المجاميع" value={Object.values(tbAnalytics.differences).filter(v=>Math.abs(v)>tbAnalytics.tolerance).length} hint={tbAnalytics.balanced?'متوازن ضمن هامش السماح':'يوجد فرق أو بيانات رقمية غير صالحة'} icon={tbAnalytics.balanced?'✓':'≠'}/>
+   </div>
+   <div className="tb-difference-strip">
+   <span>فرق الافتتاحي <strong>{tbAnalytics.differences.opening.toLocaleString('en-US',{minimumFractionDigits:3,maximumFractionDigits:3})}</strong>
+   </span>
+   <span>فرق الحركة <strong>{tbAnalytics.differences.movement.toLocaleString('en-US',{minimumFractionDigits:3,maximumFractionDigits:3})}</strong>
+   </span>
+   <span>فرق الختامي <strong>{tbAnalytics.differences.closing.toLocaleString('en-US',{minimumFractionDigits:3,maximumFractionDigits:3})}</strong>
+   </span>
+   </div>{tbAnalytics.issues.length===0?<p className="tb-analytics-empty">لم تُكتشف استثناءات وفق الفحوصات الحالية. هذا لا يثبت اكتمال البيانات أو صحة المعالجة المحاسبية.</p>:<div className="audit-table-wrap">
+   <table className="audit-table tb-issues-table">
+   <thead>
+   <tr>
+   <th>الأولوية</th>
+   <th>الحساب</th>
+   <th>الفحص</th>
+   <th>التفسير والإجراء المقترح</th>
+   <th>المبلغ (د.أ)</th>
+   </tr>
+   </thead>
+   <tbody>{tbAnalytics.issues.map(issue=>
+   <tr key={issue.id}>
+   <td>
+   <span className={`tb-severity tb-severity-${issue.severity}`}>{issue.severity==='error'?'خطأ':issue.severity==='warning'?'تنبيه':'أولوية فحص'}</span>
+   </td>
+   <td>{issue.code||'—'}{issue.name&&<small className="tb-account-name">{issue.name}</small>}</td>
+   <td className="cell-strong">{issue.title}</td>
+   <td>{issue.detail}</td>
+   <td className="money-cell">{issue.amount===null?'—':issue.amount.toLocaleString('en-US',{minimumFractionDigits:3,maximumFractionDigits:3})}</td>
+   </tr>)}</tbody>
+   </table>
+   </div>}<p className="audit-warning">تعتمد النتائج على الأعمدة المستوردة وقيمها. راجع mapping الحسابات والإشارات ونطاق البيانات، ووثّق استنتاجك في ورقة العمل؛ لا يُغني هذا المحرك عن إجراءات التدقيق أو حكم المدقق.</p>
+   </section>
+   <section className="audit-card">
+   <div className="audit-card-head">
+   <h3>تفاصيل ميزان المراجعة</h3>
+   <button className="audit-secondary" onClick={()=>download('trial-balance.csv',['account_code,account_name,opening_debit,opening_credit,debit,credit,closing_debit,closing_credit',...currentTB.map(r=>[r.code,r.name,r.openingDebit,r.openingCredit,r.debit,r.credit,r.closingDebit,r.closingCredit].map(csvCell).join(','))].join('\n'),'text/csv;charset=utf-8')}>تصدير CSV</button>
+   </div>
+   <div className="audit-table-wrap">
+   <table className="audit-table">
+   <thead>
+   <tr>
+   <th>رقم الحساب</th>
+   <th>اسم الحساب</th>
+   <th className="money-cell">مدين افتتاحي</th>
+   <th className="money-cell">دائن افتتاحي</th>
+   <th className="money-cell">مدين</th>
+   <th className="money-cell">دائن</th>
+   <th className="money-cell">مدين ختامي</th>
+   <th className="money-cell">دائن ختامي</th>
+   </tr>
+   </thead>
+   <tbody>{currentTB.map(r=>
+   <tr key={r.id}>
+   <td>{r.code||'—'}</td>
+   <td className="cell-strong">{r.name}</td>
+   <td className="money-cell">{r.openingDebit.toLocaleString('en-US',{minimumFractionDigits:3,maximumFractionDigits:3})}</td>
+   <td className="money-cell">{r.openingCredit.toLocaleString('en-US',{minimumFractionDigits:3,maximumFractionDigits:3})}</td>
+   <td className="money-cell">{r.debit.toLocaleString('en-US',{minimumFractionDigits:3,maximumFractionDigits:3})}</td>
+   <td className="money-cell">{r.credit.toLocaleString('en-US',{minimumFractionDigits:3,maximumFractionDigits:3})}</td>
+   <td className="money-cell">{r.closingDebit.toLocaleString('en-US',{minimumFractionDigits:3,maximumFractionDigits:3})}</td>
+   <td className="money-cell">{r.closingCredit.toLocaleString('en-US',{minimumFractionDigits:3,maximumFractionDigits:3})}</td>
+   </tr>)}</tbody>
+   </table>
+   </div>
+   <p className="audit-warning">التحقق من توازن الإجماليات حسابي فقط. لا يثبت صحة التصنيف أو اكتمال ميزان المراجعة، ويجب مراجعة الأعمدة والإشارات قبل الاعتماد.</p>
+   </section>
+   </>}</>}
+   {module==='workpapers'&&<>
+   <SectionIntro text="أوراق عمل رقمية تتضمن الإجراء والاستنتاج وعلامات التدقيق، وحالة المراجعة وسجل إصدارات محلي. السجل المحلي ليس سجلًا غير قابل للتلاعب." action={headerActions()}/>{noEngagement?<Empty text="اختر ملف تدقيق أولًا."/>:<>{showForm&&<FormCard title="إنشاء ورقة عمل رقمية" onCancel={()=>setShowForm(false)} onSave={submitForm}>
+   <Field label="مرجع ورقة العمل" value={form.ref||''} onChange={v=>update('ref',v)} placeholder="WP-001"/>
+   <Field label="عنوان ورقة العمل *" value={form.title||''} onChange={v=>update('title',v)}/>
+   <Field label="مجال التدقيق" value={form.area||''} onChange={v=>update('area',v)}/>
+   <Field label="المُعدّ" value={form.preparer||''} onChange={v=>update('preparer',v)}/>
+   <Field label="المراجع" value={form.reviewer||''} onChange={v=>update('reviewer',v)}/>
+   <label className="audit-field full-field">
+   <span>إجراء التدقيق / خطوات الاختبار</span>
+   <textarea value={form.procedure||''} onChange={e=>update('procedure',e.target.value)} rows={3} placeholder="حدّد الهدف، المجتمع، العينة، الخطوات، ومعيار تقييم الاستثناءات"/>
+   </label>
+   <label className="audit-field full-field">
+   <span>النتيجة والاستنتاج</span>
+   <textarea value={form.conclusion||''} onChange={e=>update('conclusion',e.target.value)} rows={3}/>
+   </label>
+   <label className="audit-field full-field">
+   <span>علامات التدقيق (Tickmarks)</span>
+   <textarea value={form.tickmarks||''} onChange={e=>update('tickmarks',e.target.value)} rows={2} placeholder="مثال: ✓ مطابق للمستند؛ C تمت المطابقة؛ ? استفسار مطلوب"/>
+   </label>
+   </FormCard>}<section className="audit-card">
+   <div className="audit-table-wrap">
+   <table className="audit-table">
+   <thead>
+   <tr>
+   <th>المرجع</th>
+   <th>عنوان الورقة</th>
+   <th>المجال</th>
+   <th>المُعدّ</th>
+   <th>المراجع</th>
+   <th>الحالة</th>
+   <th>
+   </th>
+   </tr>
+   </thead>
+   <tbody>{scoped(db.workpapers).map(w=>
+   <tr key={w.id}>
+   <td className="cell-strong">{w.ref}<small className="table-sub">v{w.version||1}</small>{scoped(db.trialBalance).some(tb=>tb.engagementId===w.engagementId)&&(!w.sourceFingerprint||w.sourceFingerprint!==fingerprintTrialBalanceRows(scoped(db.trialBalance).filter(tb=>tb.engagementId===w.engagementId)))&&<small className="table-sub danger-text">{!w.sourceFingerprint?'لقطة المصدر غير مسجلة — راجع قبل الاعتماد':'بيانات المصدر تغيّرت — أعد المراجعة'}</small>}</td>
+   <td>{w.title}<small className="table-sub">{w.procedure||w.conclusion||'لا يوجد إجراء موثق بعد'}</small>
+   <small className="table-sub">الاستنتاج: {w.conclusion||'—'}</small>
+   <small className="table-sub">Tickmarks: {w.tickmarks||'—'}</small>{(w.history||[]).length>0&&<details className="history-details">
+   <summary>سجل الإصدارات ({(w.history||[]).length})</summary>{(w.history||[]).slice().reverse().map((h,i)=>
+   <div key={`${h.version}-${i}`} className="history-entry">
+   <strong>v{h.version} · {h.action}</strong>
+   <small>{new Date(h.at).toLocaleString('ar-JO')} · {h.actor}</small>
+   <small>{h.note||h.status}</small>
+   </div>)}</details>}</td>
+   <td>{w.area}</td>
+   <td>{w.preparer||'—'}</td>
+   <td>{w.reviewer||'—'}{w.reviewNotes&&<small className="table-sub">{w.reviewNotes}</small>}</td>
+   <td>
+   <select className="inline-select" value={w.status} onChange={e=>{const next=e.target.value;
+   let reviewerCandidate:string| null=w.reviewer||'';
+   if(next==='معتمد'){reviewerCandidate=window.prompt('أدخل اسم المراجع المستقل لاعتماد ورقة العمل:',w.reviewer||'');
+   if(reviewerCandidate===null)return;
+   }const reviewerIdentity=String(reviewerCandidate||'').trim();
+   const transition=validateLocalWorkpaperTransition(w,next,reviewerIdentity);
+   if(!transition.valid){window.alert(transition.reason);
+   return;
+   }if(next==='معتمد'&&!window.confirm(transition.reason+'\nهذا الاعتماد في الوضع المحلي لا يثبت هوية رقمية. هل تريد المتابعة؟'))return;
+   const now=new Date().toISOString();
+   setDB(p=>({...p,workpapers:p.workpapers.map(x=>{if(x.id!==w.id)return x;
+   const history=[...(x.history||[]),{version:(x.version||1)+1,at:now,actor:reviewerIdentity||x.reviewer||'مستخدم محلي',action:`تغيير الحالة إلى ${next}`,status:next,note:next==='تعديلات مطلوبة'?(x.reviewNotes||'يرجى توثيق ملاحظات المراجع'):''}];
+   return {...x,status:next,reviewer:next==='معتمد'?reviewerIdentity:x.reviewer,sourceFingerprint:next==='معتمد'?(fingerprintTrialBalanceRows(p.trialBalance.filter(tb=>tb.engagementId===x.engagementId))||x.sourceFingerprint):x.sourceFingerprint,sourceSnapshotAt:next==='معتمد'?now:x.sourceSnapshotAt,sourceSnapshotReviewedBy:next==='معتمد'?reviewerIdentity:x.sourceSnapshotReviewedBy,version:(x.version||1)+1,history,updatedAt:today()};
+   }),auditLog:[{id:uid(),at:now,action:'تحديث حالة ورقة عمل',entity:'ورقة عمل',details:`${w.ref}: ${w.status} ← ${next}${reviewerIdentity?' · المراجع: '+reviewerIdentity:''}`,engagementId:w.engagementId,actorId:cloudSession?.user?.id||('local-reviewer:'+reviewerIdentity)},...(p.auditLog||[])].slice(0,2000)}));
+   }}>{['مسودة','قيد التنفيذ','بانتظار المراجعة','تعديلات مطلوبة','معتمد'].map(s=>
+   <option key={s}>{s}</option>)}</select>
+   <small className="table-sub">{w.updatedAt}</small>
+   </td>
+   <td>
+   <button className="audit-text-button" onClick={()=>{const note=window.prompt('أدخل ملاحظة المراجع (اتركها فارغة لمسحها):',w.reviewNotes||'');
+   if(note===null)return;
+   const now=new Date().toISOString();
+   setDB(p=>({...p,workpapers:p.workpapers.map(x=>x.id===w.id?{...x,reviewNotes:note,reviewNotesStatus:note.trim()?'open':'resolved',version:(x.version||1)+1,history:[...(x.history||[]),{version:(x.version||1)+1,at:now,actor:x.reviewer||'مستخدم محلي',action:note.trim()?'تسجيل ملاحظة مراجعة':'مسح ملاحظة مراجعة',status:x.status,note:note.trim()}],updatedAt:today()}:x),auditLog:[{id:uid(),at:now,action:'تحديث ملاحظة مراجعة',entity:'ورقة عمل',details:`${w.ref}: ${note.trim()||'تم مسح الملاحظة'}`,engagementId:w.engagementId},...(p.auditLog||[])].slice(0,2000)}));
+   }}>ملاحظة المراجع</button>{w.reviewNotes?.trim()&&<button className="audit-text-button" onClick={()=>{const resolved=w.reviewNotesStatus==='resolved';
+   const nextStatus=resolved?'open':'resolved';
+   const now=new Date().toISOString();
+   setDB(p=>({...p,workpapers:p.workpapers.map(x=>x.id===w.id?{...x,reviewNotesStatus:nextStatus,version:(x.version||1)+1,history:[...(x.history||[]),{version:(x.version||1)+1,at:now,actor:x.reviewer||'مستخدم محلي',action:resolved?'إعادة فتح ملاحظة المراجع':'تحديد ملاحظة المراجع كمعالجة',status:x.status,note:x.reviewNotes||''}],updatedAt:today()}:x),auditLog:[{id:uid(),at:now,action:resolved?'إعادة فتح ملاحظة مراجعة':'معالجة ملاحظة مراجعة',entity:'ورقة عمل',details:`${w.ref}: ${resolved?'أعيد فتح الملاحظة':'سُجلت كمعالجة'}`,engagementId:w.engagementId},...(p.auditLog||[])].slice(0,2000)}));
+   }}>{w.reviewNotesStatus==='resolved'?'إعادة فتح الملاحظة':'تمت معالجة الملاحظة'}</button>}<button className="audit-text-button danger-text" onClick={()=>remove('workpapers',w.id)}>إزالة</button>
+   </td>
+   </tr>)}</tbody>
+   </table>
+   </div>{!scoped(db.workpapers).length&&<Empty text="لا توجد أوراق عمل في هذا الملف. أضف أول ورقة عمل."/>}</section>
+   </>}</>}
+   {module==='evidence'&&<>
+   <SectionIntro text="فهرس الأدلة يربط كل دليل بمرجعه ومصدره وورقة العمل ذات الصلة." action={headerActions()}/>{noEngagement?<Empty text="اختر ملف تدقيق أولًا."/>:<>{showForm&&<FormCard title="تسجيل دليل تدقيق" onCancel={()=>{setShowForm(false);setEvidenceFile(null);}} onSave={submitForm}>
+   <Field label="وصف الدليل *" value={form.title||''} onChange={v=>update('title',v)}/>
+   <SelectField label="نوع الدليل" value={form.type||'مستند'} onChange={v=>update('type',v)} options={['مستند','تأكيد خارجي','ملاحظة مباشرة','استفسار','إعادة احتساب','إجراء تحليلي','أخرى']}/>
+   <Field label="مرجع المصدر / اسم الملف" value={form.reference||''} onChange={v=>update('reference',v)}/>
+   <Field label="مرجع ورقة العمل" value={form.workpaperRef||''} onChange={v=>update('workpaperRef',v)}/>
+   <label className="audit-field full-field">
+   <span>ملاحظات حول المصدر والكفاية</span>
+   <textarea value={form.notes||''} onChange={e=>update('notes',e.target.value)} rows={3}/>
+   </label>
+   <label className="audit-field full-field">
+   <span>إرفاق صورة أو ملف (اختياري، حتى 25 ميغابايت)</span>
+   <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.txt,.csv,.xlsx,.xls,.docx" onChange={e=>setEvidenceFile(e.target.files?.[0]||null)}/>
+   <small className="form-hint">{evidenceFile?`الملف المحدد: ${evidenceFile.name} (${(evidenceFile.size/1024).toFixed(1)} كيلوبايت)`:"يحفظ المرفق بعد تشفيره محليًا؛ لا يُضمّن ملف المرفق نفسه داخل نسخة بيانات JSON العادية."}</small>
+   </label>
+   </FormCard>}<div className="audit-card">
+   <div className="audit-table-wrap">
+   <table className="audit-table">
+   <thead>
+   <tr>
+   <th>الدليل</th>
+   <th>النوع</th>
+   <th>المرجع</th>
+   <th>ورقة العمل</th>
+   <th>المرفق</th>
+   <th>تاريخ الفهرسة</th>
+   <th>
+   </th>
+   </tr>
+   </thead>
+   <tbody>{scoped(db.evidence).map(e=>
+   <tr key={e.id}>
+   <td className="cell-strong">{e.title}<small className="table-sub">{e.notes}</small>
+   </td>
+   <td>{e.type}</td>
+   <td>{e.reference||'—'}</td>
+   <td>{e.workpaperRef||'—'}</td>
+   <td>
+   <LocalEvidenceAttachment row={e} passphrase={vaultPassphrase}/>
+   </td>
+   <td>{e.addedAt}</td>
+   <td>
+   <button className="audit-text-button danger-text" onClick={()=>remove('evidence',e.id)}>إزالة</button>
+   </td>
+   </tr>)}</tbody>
+   </table>
+   </div>{!scoped(db.evidence).length&&<Empty text="لم تُفهرس أدلة لهذه المهمة بعد."/>}<p className="audit-warning">المرفقات تُشفّر قبل تخزينها في IndexedDB، لكنها ليست ضمن نسخة البيانات JSON العادية. استخدم النسخة الاحتياطية المشفّرة للمساحة واحتفظ بمرفقاتك عبر النسخ/الاستعادة المدعومة.</p>
+   </div>
+   </>}</>}
+   {module==='findings'&&<>
+   <SectionIntro text="وثّق الحالة والمعيار والسبب والأثر والتوصية، ثم تابع حالة المعالجة." action={headerActions()}/>{noEngagement?<Empty text="اختر ملف تدقيق أولًا."/>:<>{showForm&&<FormCard title="تسجيل ملاحظة تدقيق" onCancel={()=>setShowForm(false)} onSave={submitForm}>
+   <Field label="عنوان الملاحظة *" value={form.title||''} onChange={v=>update('title',v)}/>
+   <Field label="المعيار" value={form.criteria||''} onChange={v=>update('criteria',v)}/>
+   <label className="audit-field full-field">
+   <span>الحالة / الوقائع</span>
+   <textarea value={form.condition||''} onChange={e=>update('condition',e.target.value)} rows={2}/>
+   </label>
+   <label className="audit-field full-field">
+   <span>الأثر / المخاطر</span>
+   <textarea value={form.effect||''} onChange={e=>update('effect',e.target.value)} rows={2}/>
+   </label>
+   <label className="audit-field full-field">
+   <span>التوصية</span>
+   <textarea value={form.recommendation||''} onChange={e=>update('recommendation',e.target.value)} rows={2}/>
+   </label>
+   <SelectField label="ورقة العمل المرتبطة" value={form.workpaperRef||''} onChange={v=>update('workpaperRef',v)} options={['|||— اختر مرجع الورقة —',...scoped(db.workpapers).map(w=>`${w.ref}|||${w.ref} — ${w.title}`)]}/>
+   <SelectField label="الدليل المرتبط" value={form.evidenceId||''} onChange={v=>update('evidenceId',v)} options={['|||— اختر دليلًا —',...scoped(db.evidence).map(e=>`${e.id}|||${e.title}${e.reference?' — '+e.reference:''}`)]}/>
+   <p className="form-hint full-field">ترتبط الملاحظة بورقة عمل ودليل محددين لتسهيل التتبّع والمراجعة. يمكن حفظ الملاحظة دون الربط، لكن ذلك سيظهر كعنصر يحتاج استكمالًا قبل الإقفال.</p>
+   <SelectField label="الأهمية" value={form.severity||'متوسطة'} onChange={v=>update('severity',v)} options={['منخفضة','متوسطة','مرتفعة','حرجة']}/>
+   </FormCard>}<div className="audit-card">
+   <div className="audit-table-wrap">
+   <table className="audit-table">
+   <thead>
+   <tr>
+   <th>الملاحظة</th>
+   <th>الأهمية</th>
+   <th>المعيار / الحالة</th>
+   <th>ورقة العمل / الدليل</th>
+   <th>التوصية</th>
+   <th>الحالة</th>
+   <th>
+   </th>
+   </tr>
+   </thead>
+   <tbody>{scoped(db.findings).map(f=>
+   <tr key={f.id}>
+   <td className="cell-strong">{f.title}</td>
+   <td>
+   <span className={`audit-pill ${f.severity==='حرجة'||f.severity==='مرتفعة'?'risk-pill':''}`}>{f.severity}</span>
+   </td>
+   <td>{f.criteria||'—'}<small className="table-sub">{f.condition}</small>
+   </td>
+   <td>{f.workpaperRef||'—'}<small className="table-sub">{(f.evidenceIds||[]).map(id=>db.evidence.find(ev=>ev.id===id)?.title||'دليل غير موجود').join('، ')||'لا يوجد دليل مرتبط'}</small>
+   </td>
+   <td>{f.recommendation||'—'}</td>
+   <td>
+   <select className="inline-select" value={f.status} onChange={e=>setDB(p=>({...p,findings:p.findings.map(x=>x.id===f.id?{...x,status:e.target.value}:x)}))}>{['مفتوحة','قيد المعالجة','بانتظار التحقق','مغلقة'].map(s=>
+   <option key={s}>{s}</option>)}</select>
+   </td>
+   <td>
+   <button className="audit-text-button danger-text" onClick={()=>remove('findings',f.id)}>إزالة</button>
+   </td>
+   </tr>)}</tbody>
+   </table>
+   </div>{!scoped(db.findings).length&&<Empty text="لا توجد ملاحظات مسجلة لهذا الملف."/>}</div>
+   </>}</>}
+   {module==='reports'&&<>
+   <SectionIntro text="تقييم اكتمال ملف التدقيق قبل إعداد مخرجاته وتصدير البيانات."/>
+   <div className="audit-card">
+   <h3>قائمة جاهزية الإقفال</h3>
+   <Checklist items={['تحديث تقييم المخاطر وإكمال استجابات التدقيق','إكمال أوراق العمل وإغلاق ملاحظات المراجعة','ربط الأدلة والمستندات بأوراق العمل','تقييم الملاحظات والتعديلات المقترحة','مراجعة الأحداث اللاحقة والاستمرارية عند الانطباق','توثيق خطاب الإقرارات ومراسلات الحوكمة عند الانطباق','إجراء مراجعة الشريك / مراجعة الجودة عند وجوبها','إعداد مسودة التقرير ومراجعتها مهنيًا','توثيق الموافقة النهائية على الإقفال']} checked={db.completionChecks||{}} scope={activeEngagement?.id||'global'} onChange={(item,checked)=>setDB(p=>({...p,completionChecks:{...(p.completionChecks||{}),[`${activeEngagement?.id||'global'}::${item}`]:checked},auditLog:[{id:uid(),at:new Date().toISOString(),action:checked?'تحديد بند إقفال':'إلغاء تحديد بند إقفال',entity:'قائمة الإقفال',details:item,engagementId:activeEngagement?.id},...(p.auditLog||[])].slice(0,2000)}))}/>
+   <p className="audit-warning">علامات قائمة التحقق للتنظيم فقط ولا تثبت استيفاء متطلبات معيارية أو قانونية. لا يصدر النظام رأيًا تدقيقيًا تلقائيًا.</p>
+   </div>
+   <section className="audit-card traceability-card">
+   <div className="audit-card-head">
+   <div>
+   <h3>مصفوفة تتبّع الأدلة</h3>
+   <p className="muted-copy">تحقق من ارتباط كل دليل مفهرس بورقة عمل موجودة ضمن ملف التدقيق الحالي.</p>
+   </div>
+   <button className="audit-secondary" onClick={()=>download('ledgerly-evidence-traceability.csv',['evidence_title,evidence_type,evidence_reference,workpaper_reference,workpaper_title,workpaper_status,link_status',...evidenceTraceability.map(row=>[row.item.title,row.item.type,row.item.reference,row.item.workpaperRef,row.workpaper?.title||'',row.workpaper?.status||'',row.status].map(csvCell).join(','))].join('\n'),'text/csv;charset=utf-8')}>تصدير مصفوفة التتبع</button>
+   </div>
+   <div className="audit-stats compact-stats">
+   <Stat label="الأدلة المفهرسة" value={evidenceTraceability.length} hint="في ملف التدقيق الحالي" icon="⌁"/>
+   <Stat label="أدلة مرتبطة" value={evidenceTraceability.filter(row=>row.status==='مرتبط').length} hint="مرجع مطابق لورقة عمل" icon="✓"/>
+   <Stat label="بلا مرجع" value={evidenceTraceability.filter(row=>row.status==='غير مرتبط').length} hint="تحتاج قرارًا من المدقق" icon="—"/>
+   <Stat label="مرجع غير موجود" value={evidenceTraceability.filter(row=>row.status==='مرجع ورقة العمل غير موجود').length} hint="راجع المرجع أو السجل" icon="!"/>
+   </div>{evidenceTraceability.length===0?<Empty text="لا توجد أدلة مفهرسة لهذا الملف حتى الآن."/>:<div className="audit-table-wrap">
+   <table className="audit-table">
+   <thead>
+   <tr>
+   <th>الدليل</th>
+   <th>النوع / المرجع</th>
+   <th>مرجع ورقة العمل</th>
+   <th>ورقة العمل المطابقة</th>
+   <th>حالة الربط</th>
+   </tr>
+   </thead>
+   <tbody>{evidenceTraceability.map(({item,workpaper,status})=>
+   <tr key={item.id}>
+   <td className="cell-strong">{item.title}<small className="table-sub">{item.addedAt}</small>
+   </td>
+   <td>{item.type}<small className="table-sub">{item.reference||'لا يوجد مرجع مستند'}</small>
+   </td>
+   <td>{item.workpaperRef||'—'}</td>
+   <td>{workpaper?<>{workpaper.title}<small className="table-sub">{workpaper.status} · {workpaper.ref}</small>
+   </>:'—'}</td>
+   <td>
+   <span className={`audit-pill ${status==='مرتبط'?'': 'risk-pill'}`}>{status}</span>
+   </td>
+   </tr>)}</tbody>
+   </table>
+   </div>}<p className="audit-warning">وجود مرجع مطابق يثبت الارتباط الإداري فقط؛ لا يثبت كفاية الدليل أو ملاءمته. يجب تقييم الأدلة والإجراءات والاستنتاجات مهنيًا.</p>
+   </section>
+   <div className="audit-content-grid">
+   <div className="audit-card">
+   <h3>ملخص ملف التدقيق الحالي</h3>
+   <div className="summary-lines">
+   <SummaryLine label="العميل" value={currentClient?.name||'لم يُحدد'}/>
+   <SummaryLine label="السنة المالية" value={activeEngagement?.year||'—'}/>
+   <SummaryLine label="أوراق العمل" value={`${scoped(db.workpapers).length} (${scoped(db.workpapers).filter(w=>w.status==='معتمد').length} معتمدة)`}/>
+   <SummaryLine label="الأدلة المفهرسة" value={String(scoped(db.evidence).length)}/>
+   <SummaryLine label="الملاحظات المفتوحة" value={String(scoped(db.findings).filter(f=>f.status!=='مغلقة').length)}/>
+   <SummaryLine label="المخاطر" value={String(scoped(db.risks).length)}/>
+   </div>
+   </div>
+   <div className="audit-card">
+   <h3>تصدير واستعادة</h3>
+   <p className="muted-copy">صدّر نسخة JSON من سجلات هذا المتصفح للاحتفاظ بنسخة احتياطية. هذا ليس نظام نسخ احتياطي آمنًا أو متزامنًا مع السحابة.</p>
+   <div className="stack-actions">
+   <button className="audit-primary" onClick={()=>download('brp-full-backup.json',JSON.stringify(db,null,2))}>تصدير كل البيانات (JSON)</button>
+   <button className="audit-secondary" onClick={()=>download('brp-engagement-summary.csv',['client,year,type,status,workpapers,evidence,open_findings',...db.engagements.map(e=>[db.clients.find(c=>c.id===e.clientId)?.name||'',e.year,e.type,e.status,db.workpapers.filter(w=>w.engagementId===e.id).length,db.evidence.filter(x=>x.engagementId===e.id).length,db.findings.filter(x=>x.engagementId===e.id&&x.status!=='مغلقة').length].map(csvCell).join(','))].join('\n'),'text/csv;charset=utf-8')}>تصدير ملخص ملفات (CSV)</button>
+   </div>
+   </div>
+   </div>
+   </>}
    {module==='intelligence'&&<AuditIntelligence engagementId={activeEngagement?.id} engagements={db.engagements} clients={db.clients} trialBalance={db.trialBalance} workpapers={db.workpapers} evidence={db.evidence} findings={db.findings} risks={db.risks} operations={db.operations} vaultPassphrase={vaultPassphrase} onOperationsChange={operations=>setDB(previous=>({...previous,operations:normalizeAuditOperations(operations)}))} onAddEvidence={row=>setDB(previous=>({...previous,evidence:[...previous.evidence,{...row,notes:row.notes||'',addedAt:row.addedAt||new Date().toISOString()} as Evidence],auditLog:[{id:uid(),at:new Date().toISOString(),action:'إضافة دليل',entity:'دليل',details:row.title+' · '+row.reference,engagementId:row.engagementId,actorId:cloudSession?.user?.id||'local-workstation'},...previous.auditLog].slice(0,2000)}))} onOpenCopilot={()=>setModule('ai-assistant')} onOpenReconciliation={()=>setModule('reconciliation')}/>}
    {module==='ai-assistant'&&<><SectionIntro text="مساعد اختياري يعمل على ملخص منقّح من ملف التدقيق الحالي. لا يرسل ملفات الأدلة ولا يحفظ نتيجة الذكاء الاصطناعي في سجلات المهمة."/><AuditCopilot config={supabaseConfig} context={aiCopilotContext} hasEngagement={!!activeEngagement}/></>}
    {module==='reconciliation'&&<Suspense fallback={<section className="audit-card">جارٍ تحميل وحدة المطابقة البنكية…</section>}><Reconciliation/></Suspense>}
-   {module==='settings'&&<><SectionIntro text="إعدادات المكتب والمنهجية والاتصال السحابي. بيانات التدقيق المهنية تبقى محلية حتى تفعيل المزامنة الآمنة."/><section className="audit-card"><div className="audit-card-head"><div><h3>حالة الاتصال السحابي</h3><p className="muted-copy">فحص إعدادات الاتصال. تسجيل الدخول السحابي متاح، لكن مزامنة بيانات التدقيق محجوبة حتى إكمال التشفير طرفًا لطرف وإدارة مفاتيح المكتب واختبارات الاستعادة.</p></div><span className={supabaseConfig.configured ? "audit-pill" : "audit-pill risk-pill"}>{supabaseConfig.configured ? "الإعدادات موجودة" : "غير مهيأ"}</span></div><div className="summary-lines"><SummaryLine label="عنوان Supabase" value={supabaseConfig.configured ? supabaseConfig.config.url : "لم يتم ضبطه"}/><SummaryLine label="مفتاح المتصفح" value={supabaseConfig.configured ? "موجود — مفتاح anon/publishable فقط" : supabaseConfig.reason === "unsafe-key" ? "مرفوض: يبدو أنه مفتاح سري" : "غير موجود أو غير صالح"}/><SummaryLine label="حالة المصادقة والمزامنة" value="المزامنة اختيارية — لا رفع تلقائي"/></div></section><CloudAuthPanel config={supabaseConfig} onSessionChange={setCloudSession}/>{supabaseConfig.configured&&<section className="audit-card cloud-sync-release-gate"><h3>المزامنة السحابية محجوبة مؤقتًا</h3><p className="audit-warning">لم نفعّل رفع أو استعادة لقطات مساحة العمل عبر السحابة في هذه النسخة؛ يلزم إكمال تشفير طرف لطرف وإدارة آمنة لمفتاح مكتب التدقيق واختبارات استرجاعه قبل رفع بيانات مهنية. تسجيل الدخول السحابي وإعداد المكتب لا يعنيان أن بيانات التدقيق متزامنة أو محمية بمفتاح لا يراه الخادم.</p><p className="muted-copy">للاختبار استخدم المخزن المحلي المشفّر والنسخة الاحتياطية المشفّرة. لا تستخدم مزامنة سحابية بديلة أو ترفع JSON عاديًا يحوي بيانات عميل.</p></section>}<div className="audit-content-grid"><div className="audit-card"><h3>المنهجية</h3><div className="summary-lines"><SummaryLine label="العملة الافتراضية" value="JOD — دينار أردني"/><SummaryLine label="المنطقة الزمنية" value="Asia/Amman"/><SummaryLine label="الإطار الافتراضي" value="يُحدد لكل مهمة"/><SummaryLine label="الخصوصية" value="تخزين محلي في المتصفح"/></div></div><div className="audit-card"><h3>إدارة البيانات المحلية</h3><p className="muted-copy">تُحفظ مساحة العمل في IndexedDB بعد تشفير AES-GCM. تعتمد إمكانية الاستعادة على كلمة المرور والنسخة الاحتياطية المشفّرة؛ حماية الجهاز وكلمة المرور وخطة النسخ الاحتياطي تظل مطلوبة.</p><div className="stack-actions"><button className="audit-primary" onClick={()=>void exportEncryptedBackup()}>تنزيل نسخة احتياطية مشفّرة</button><button className="audit-secondary" onClick={()=>{if(!window.confirm('سيصدّر هذا الخيار ملف JSON غير مشفّر يحتوي بيانات العمل. احفظه في مكان آمن. هل تريد المتابعة؟'))return;download('brp-local-data-plaintext.json',JSON.stringify(db,null,2));}}>تصدير JSON غير مشفّر</button><label className="audit-secondary restore-upload">استعادة نسخة مشفّرة<input type="file" accept=".json,application/json" onChange={e=>{void restoreVaultBackup(e.target.files?.[0]);e.currentTarget.value='';}}/></label><button className="audit-secondary" onClick={()=>void lockLocalVault()}>قفل المخزن المحلي</button><button className="audit-danger" onClick={()=>{if(window.confirm('سيتم حذف كل البيانات المحلية من هذا المتصفح. هل أنت متأكد؟')){setDB(emptyDB);setSelectedEngagement('');setNotice('تم مسح بيانات النموذج المحلي.');}}}>مسح كل البيانات المحلية</button></div>{restoreError&&<p className="audit-warning">{restoreError}</p>}</div></div><section className="audit-card"><div className="audit-card-head"><div><h3>سلامة سجل النشاط المحلي</h3><p className="muted-copy">تُربط أحداث السجل بسلسلة SHA-256 لكشف تعديلات لا تتوافق مع البصمات المحفوظة. تبقى هذه السلسلة محلية وليست سجلًا خادميًا غير قابل للتلاعب.</p></div><span className={auditChainHealth.valid?'audit-pill':'audit-pill risk-pill'}>{auditChainHealth.reason==='loading'?'جارٍ الفحص':auditChainHealth.valid?'البصمات سليمة':'تعذر التحقق'}</span></div><div className="summary-lines"><SummaryLine label="أحداث تم التحقق منها" value={String(auditChainHealth.checked)}/><SummaryLine label="أحداث بانتظار البصمة" value={String(auditChainHealth.unsealed)}/><SummaryLine label="نتيجة التحقق" value={auditChainHealth.reason}/></div><div className="stack-actions"><button className="audit-secondary" onClick={()=>void verifyAuditChain(db.auditLog).then(result=>{setAuditChainHealth(result);setNotice(result.valid?'اكتمل فحص سلسلة البصمات.':'فشل التحقق من سلسلة البصمات؛ احتفظ بنسخة ولا تعاود ختم السجل.');})}>فحص السلسلة الآن</button><button className="audit-secondary" onClick={()=>void auditChainCsv(db.auditLog).then(csv=>download('ledgerly-local-audit-chain.csv',csv,'text/csv;charset=utf-8'))}>تصدير سجل البصمات</button></div></section><section className="audit-card"><h3>حدود النسخة الحالية قبل الإنتاج</h3><div className="check-grid"><div>✓ تسجيل الدخول السحابي متاح عند إعداد Supabase؛ الوضع المحلي لا يوفّر هوية أو صلاحيات مستخدمين.</div><div>✓ أدوار المكاتب تُطبّق على الخادم في الوضع السحابي؛ يلزم إكمال اختبار حسابين حقيقيين في مكتبين منفصلين.</div><div>! مزامنة لقطات مساحة المكتب معطّلة في هذه النسخة حتى يكتمل التشفير طرفًا لطرف وإدارة المفاتيح واختبارات الاستعادة.</div><div>✓ مساحة العمل والمرفقات تُخزّن مشفّرة محليًا؛ حماية الجهاز وكلمة مرور المخزن والنسخ الاحتياطية مطلوبة.</div><div>! رفع الأدلة السحابي غير متاح في هذه النسخة؛ يجب إكمال بوابة رفع آمنة وفحص البرمجيات الخبيثة واختبارات النطاق والاحتفاظ قبل إطلاقه.</div><div>! سلسلة البصمات المحلية تكشف تعديلات على الأحداث المحفوظة، لكنها ليست سجلًا خادميًا غير قابل للتلاعب.</div><div>! فحص البرمجيات الخبيثة والاحتفاظ القانوني وخطة استعادة الكوارث ومراجعة الاختراق المستقلة ما زالت بوابات إطلاق مطلوبة.</div><div>! دعوات أعضاء المكاتب يجب أن تبقى معطّلة حتى اجتياز اختبارات الأدوار والعزل الحية.</div></div></section><section className="audit-card"><div className="audit-card-head"><div><h3>سجل النشاط المحلي</h3><p>آخر 2,000 حدث مسجل داخل هذا المتصفح؛ ليس سجلًا غير قابل للتعديل أو بديلًا عن سجل خادمي.</p></div><button className="audit-secondary" onClick={()=>download('brp-audit-log.csv',['timestamp,action,entity,details,engagement_id',...(db.auditLog||[]).map(x=>[x.at,x.action,x.entity,x.details,x.engagementId||''].map(csvCell).join(','))].join('\n'),'text/csv;charset=utf-8')}>تصدير سجل النشاط</button></div>{(db.auditLog||[]).length?<div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>الوقت</th><th>الإجراء</th><th>الكيان</th><th>التفاصيل</th></tr></thead><tbody>{(db.auditLog||[]).slice(0,100).map(x=><tr key={x.id}><td>{new Date(x.at).toLocaleString('ar-JO-u-nu-latn')}</td><td>{x.action}</td><td>{x.entity}</td><td>{x.details}</td></tr>)}</tbody></table></div>:<Empty text="لم تُسجل أحداث بعد."/>}</section></>}
+   {module==='settings'&&<>
+   <SectionIntro text="إعدادات المكتب والمنهجية والاتصال السحابي. بيانات التدقيق المهنية تبقى محلية حتى تفعيل المزامنة الآمنة."/>
+   <section className="audit-card">
+   <div className="audit-card-head">
+   <div>
+   <h3>حالة الاتصال السحابي</h3>
+   <p className="muted-copy">فحص إعدادات الاتصال. تسجيل الدخول السحابي متاح، لكن مزامنة بيانات التدقيق محجوبة حتى إكمال التشفير طرفًا لطرف وإدارة مفاتيح المكتب واختبارات الاستعادة.</p>
+   </div>
+   <span className={supabaseConfig.configured ? "audit-pill" : "audit-pill risk-pill"}>{supabaseConfig.configured ? "الإعدادات موجودة" : "غير مهيأ"}</span>
+   </div>
+   <div className="summary-lines">
+   <SummaryLine label="عنوان Supabase" value={supabaseConfig.configured ? supabaseConfig.config.url : "لم يتم ضبطه"}/>
+   <SummaryLine label="مفتاح المتصفح" value={supabaseConfig.configured ? "موجود — مفتاح anon/publishable فقط" : supabaseConfig.reason === "unsafe-key" ? "مرفوض: يبدو أنه مفتاح سري" : "غير موجود أو غير صالح"}/>
+   <SummaryLine label="حالة المصادقة والمزامنة" value="المزامنة اختيارية — لا رفع تلقائي"/>
+   </div>
+   </section>
+   <CloudAuthPanel config={supabaseConfig} onSessionChange={setCloudSession}/>{supabaseConfig.configured&&<section className="audit-card cloud-sync-release-gate">
+   <h3>المزامنة السحابية محجوبة مؤقتًا</h3>
+   <p className="audit-warning">لم نفعّل رفع أو استعادة لقطات مساحة العمل عبر السحابة في هذه النسخة؛ يلزم إكمال تشفير طرف لطرف وإدارة آمنة لمفتاح مكتب التدقيق واختبارات استرجاعه قبل رفع بيانات مهنية. تسجيل الدخول السحابي وإعداد المكتب لا يعنيان أن بيانات التدقيق متزامنة أو محمية بمفتاح لا يراه الخادم.</p>
+   <p className="muted-copy">للاختبار استخدم المخزن المحلي المشفّر والنسخة الاحتياطية المشفّرة. لا تستخدم مزامنة سحابية بديلة أو ترفع JSON عاديًا يحوي بيانات عميل.</p>
+   </section>}<div className="audit-content-grid">
+   <div className="audit-card">
+   <h3>المنهجية</h3>
+   <div className="summary-lines">
+   <SummaryLine label="العملة الافتراضية" value="JOD — دينار أردني"/>
+   <SummaryLine label="المنطقة الزمنية" value="Asia/Amman"/>
+   <SummaryLine label="الإطار الافتراضي" value="يُحدد لكل مهمة"/>
+   <SummaryLine label="الخصوصية" value="تخزين محلي في المتصفح"/>
+   </div>
+   </div>
+   <div className="audit-card">
+   <h3>إدارة البيانات المحلية</h3>
+   <p className="muted-copy">تُحفظ مساحة العمل في IndexedDB بعد تشفير AES-GCM. تعتمد إمكانية الاستعادة على كلمة المرور والنسخة الاحتياطية المشفّرة؛ حماية الجهاز وكلمة المرور وخطة النسخ الاحتياطي تظل مطلوبة.</p>
+   <div className="stack-actions">
+   <button className="audit-primary" onClick={()=>void exportEncryptedBackup()}>تنزيل نسخة احتياطية مشفّرة</button>
+   <button className="audit-secondary" onClick={()=>{if(!window.confirm('سيصدّر هذا الخيار ملف JSON غير مشفّر يحتوي بيانات العمل. احفظه في مكان آمن. هل تريد المتابعة؟'))return;download('brp-local-data-plaintext.json',JSON.stringify(db,null,2));}}>تصدير JSON غير مشفّر</button>
+   <label className="audit-secondary restore-upload">استعادة نسخة مشفّرة<input type="file" accept=".json,application/json" onChange={e=>{void restoreVaultBackup(e.target.files?.[0]);e.currentTarget.value='';}}/>
+   </label>
+   <button className="audit-secondary" onClick={()=>void lockLocalVault()}>قفل المخزن المحلي</button>
+   <button className="audit-danger" onClick={()=>{if(window.confirm('سيتم حذف كل البيانات المحلية من هذا المتصفح. هل أنت متأكد؟')){setDB(emptyDB);setSelectedEngagement('');setNotice('تم مسح بيانات النموذج المحلي.');}}}>مسح كل البيانات المحلية</button>
+   </div>{restoreError&&<p className="audit-warning">{restoreError}</p>}</div>
+   </div>
+   <section className="audit-card">
+   <div className="audit-card-head">
+   <div>
+   <h3>سلامة سجل النشاط المحلي</h3>
+   <p className="muted-copy">تُربط أحداث السجل بسلسلة SHA-256 لكشف تعديلات لا تتوافق مع البصمات المحفوظة. تبقى هذه السلسلة محلية وليست سجلًا خادميًا غير قابل للتلاعب.</p>
+   </div>
+   <span className={auditChainHealth.valid?'audit-pill':'audit-pill risk-pill'}>{auditChainHealth.reason==='loading'?'جارٍ الفحص':auditChainHealth.valid?'البصمات سليمة':'تعذر التحقق'}</span>
+   </div>
+   <div className="summary-lines">
+   <SummaryLine label="أحداث تم التحقق منها" value={String(auditChainHealth.checked)}/>
+   <SummaryLine label="أحداث بانتظار البصمة" value={String(auditChainHealth.unsealed)}/>
+   <SummaryLine label="نتيجة التحقق" value={auditChainHealth.reason}/>
+   </div>
+   <div className="stack-actions">
+   <button className="audit-secondary" onClick={()=>void verifyAuditChain(db.auditLog).then(result=>{setAuditChainHealth(result);setNotice(result.valid?'اكتمل فحص سلسلة البصمات.':'فشل التحقق من سلسلة البصمات؛ احتفظ بنسخة ولا تعاود ختم السجل.');})}>فحص السلسلة الآن</button>
+   <button className="audit-secondary" onClick={()=>void auditChainCsv(db.auditLog).then(csv=>download('ledgerly-local-audit-chain.csv',csv,'text/csv;charset=utf-8'))}>تصدير سجل البصمات</button>
+   </div>
+   </section>
+   <section className="audit-card">
+   <h3>حدود النسخة الحالية قبل الإنتاج</h3>
+   <div className="check-grid">
+   <div>✓ تسجيل الدخول السحابي متاح عند إعداد Supabase؛ الوضع المحلي لا يوفّر هوية أو صلاحيات مستخدمين.</div>
+   <div>✓ أدوار المكاتب تُطبّق على الخادم في الوضع السحابي؛ يلزم إكمال اختبار حسابين حقيقيين في مكتبين منفصلين.</div>
+   <div>! مزامنة لقطات مساحة المكتب معطّلة في هذه النسخة حتى يكتمل التشفير طرفًا لطرف وإدارة المفاتيح واختبارات الاستعادة.</div>
+   <div>✓ مساحة العمل والمرفقات تُخزّن مشفّرة محليًا؛ حماية الجهاز وكلمة مرور المخزن والنسخ الاحتياطية مطلوبة.</div>
+   <div>! رفع الأدلة السحابي غير متاح في هذه النسخة؛ يجب إكمال بوابة رفع آمنة وفحص البرمجيات الخبيثة واختبارات النطاق والاحتفاظ قبل إطلاقه.</div>
+   <div>! سلسلة البصمات المحلية تكشف تعديلات على الأحداث المحفوظة، لكنها ليست سجلًا خادميًا غير قابل للتلاعب.</div>
+   <div>! فحص البرمجيات الخبيثة والاحتفاظ القانوني وخطة استعادة الكوارث ومراجعة الاختراق المستقلة ما زالت بوابات إطلاق مطلوبة.</div>
+   <div>! دعوات أعضاء المكاتب يجب أن تبقى معطّلة حتى اجتياز اختبارات الأدوار والعزل الحية.</div>
+   </div>
+   </section>
+   <section className="audit-card">
+   <div className="audit-card-head">
+   <div>
+   <h3>سجل النشاط المحلي</h3>
+   <p>آخر 2,000 حدث مسجل داخل هذا المتصفح؛ ليس سجلًا غير قابل للتعديل أو بديلًا عن سجل خادمي.</p>
+   </div>
+   <button className="audit-secondary" onClick={()=>download('brp-audit-log.csv',['timestamp,action,entity,details,engagement_id',...(db.auditLog||[]).map(x=>[x.at,x.action,x.entity,x.details,x.engagementId||''].map(csvCell).join(','))].join('\n'),'text/csv;charset=utf-8')}>تصدير سجل النشاط</button>
+   </div>{(db.auditLog||[]).length?<div className="audit-table-wrap">
+   <table className="audit-table">
+   <thead>
+   <tr>
+   <th>الوقت</th>
+   <th>الإجراء</th>
+   <th>الكيان</th>
+   <th>التفاصيل</th>
+   </tr>
+   </thead>
+   <tbody>{(db.auditLog||[]).slice(0,100).map(x=>
+   <tr key={x.id}>
+   <td>{new Date(x.at).toLocaleString('ar-JO-u-nu-latn')}</td>
+   <td>{x.action}</td>
+   <td>{x.entity}</td>
+   <td>{x.details}</td>
+   </tr>)}</tbody>
+   </table>
+   </div>:<Empty text="لم تُسجل أحداث بعد."/>}</section>
+   </>}
    <footer className="audit-footer">Bank Reconciliation Pro · منصة أولية لإدارة أعمال التدقيق <span>•</span> لا تصدر رأيًا تدقيقيًا تلقائيًا <span>•</span> البيانات محلية</footer>
   </main>
   {storageLoadError&&<div className="ledgerly-recovery-overlay" role="alertdialog" aria-modal="true" aria-labelledby="ledgerly-recovery-title">
