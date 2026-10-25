@@ -3,7 +3,7 @@ name: Ledgerly Windows Installer
 on:
   workflow_dispatch:
   push:
-    branches: [main, 'feat/six-service-platform-foundation']
+    branches: [main, 'feat/six-service-platform-foundation', 'fix/security-audit-review-oct-2026']
     tags:
       - "ledgerly-v*"
 
