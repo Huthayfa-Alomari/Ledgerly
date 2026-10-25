@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, phase-0-ci-baseline]
+    branches: [main, phase-0-ci-baseline, 'fix/security-audit-review-oct-2026']
   pull_request:
-    branches: [main]
+    branches: [main, 'feat/six-service-platform-foundation']
 
 permissions:
   contents: read
