@@ -213,3 +213,15 @@ test('OCR Arabic and English trained data are downloaded during production build
   assert.match(reconciliation, /langPath: `\$\{import\.meta\.env\.BASE_URL\}tessdata`/);
   assert.doesNotMatch(html, /tessdata\.projectnaptha\.com/);
 });
+
+
+test('packaged Electron app serves local assets through a restricted secure protocol', () => {
+  const main = readFileSync(new URL('../desktop/main.cjs', import.meta.url), 'utf8');
+  assert.match(main, /registerSchemesAsPrivileged/);
+  assert.match(main, /supportFetchAPI: true/);
+  assert.match(main, /protocol\.handle\('ledgerly', handlePackagedAsset\)/);
+  assert.match(main, /path\.relative\(packagedRoot, target\)/);
+  assert.match(main, /url\.hostname !== 'app'/);
+  assert.match(main, /loadURL\('ledgerly:\/\/app\/index\.html'\)/);
+  assert.doesNotMatch(main, /nodeIntegration: true|webSecurity: false/);
+});
