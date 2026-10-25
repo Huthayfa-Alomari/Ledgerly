@@ -38,7 +38,7 @@ store=false requests that the Responses API not store the response. This is not 
 ## Mandatory rollout gates — keep AI disabled until complete
 
 1. Decide which firm roles may use AI, and obtain the firm's documented approval for external processing.
-2. Add durable per-user/per-firm rate limits, monthly spend caps, usage accounting, and an administrative kill switch. The current function has a feature gate but does not yet implement durable quotas; therefore do not set LEDGERLY_AI_ENABLED=true in production.
+2. Keep monthly spend caps and usage accounting as rollout gates. The database-backed per-user quota is implemented, but the AI kill switch, firm-level budget controls, and live authorization/isolation checks must be verified before production enablement.
 3. Test two-firm isolation and role authorization using authenticated integration tests against the live Supabase project.
 4. Review the exact provider/model, data-processing terms, retention settings, and regional/legal requirements.
 5. Add evaluation cases for Arabic/English outputs, unsupported claims, fabricated references, prompt injection, malformed input, timeouts, and provider errors.
