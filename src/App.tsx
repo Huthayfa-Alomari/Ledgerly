@@ -15,7 +15,7 @@ import { csvCell } from './lib/csv.mjs';
 import { deleteLocalEvidenceFile, getLocalEvidenceFile, saveLocalEvidenceFile } from './lib/local-evidence-files';
 import { fromFils, toFils, parseJodAmount } from './lib/jod-money.mjs';
 import { validateLocalWorkpaperTransition } from './lib/audit-operations-engine.mjs';
-import { evaluateEngagementClosure, fingerprintTrialBalanceRows, summarizeTrialBalanceForCopilot } from './lib/audit-intelligence.mjs';
+import { evaluateEngagementClosure, fingerprintTrialBalanceRows } from './lib/audit-intelligence.mjs';
 import { MAX_IMPORT_FILE_BYTES, MAX_WORKSHEET_ROWS, worksheetDimensionIssue, matrixDimensionIssue } from './lib/import-safety.mjs';
 
 const Reconciliation = lazy(() => import('./Reconciliation'));
