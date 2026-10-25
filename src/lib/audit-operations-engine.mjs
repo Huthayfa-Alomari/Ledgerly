@@ -202,7 +202,7 @@ export function parseUblInvoiceXml(xml) {
   if (!rawSource.trim() || rawSource.length > 10 * 1024 * 1024) throw new Error('ملف XML فارغ أو يتجاوز حد 10 ميغابايت.');
   // Remove non-markup regions before regex tag extraction; fake UBL tags in comments,
   // CDATA and processing instructions must never override actual invoice fields.
-  const source = rawSource.replace(/<!--[\\s\\S]*?-->/g, '').replace(/<!\\[CDATA\\[[\\s\\S]*?\\]\\]>/g, '').replace(/<\\?[\\s\\S]*?\\?>/g, '');
+  const source = rawSource.replace(/<!--[\s\S]*?-->/g, '').replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, '').replace(/<\?[\s\S]*?\?>/g, '');
   if (/<!DOCTYPE|<!ENTITY/i.test(source)) throw new Error('تم رفض XML الذي يحتوي تعريف كيانات أو DOCTYPE.');
   if (!/<(?:[A-Za-z0-9_-]+:)?Invoice(?:\s|>)/i.test(source)) throw new Error('لم يعثر على عنصر UBL Invoice.');
   const version = readTag(source, 'UBLVersionID');
