@@ -210,7 +210,7 @@ test('OCR Arabic and English trained data are downloaded during production build
   assert.match(prepare, /\['ara', 'eng'\]/);
   assert.match(prepare, /tessdata\.projectnaptha\.com\/4\.0\.0/);
   assert.match(prepare, /bytes\[0\] !== 0x1f \|\| bytes\[1\] !== 0x8b/);
-  assert.match(reconciliation, /langPath: new URL\\(/);
+  assert.match(reconciliation, /langPath: new URL\(/);
   assert.doesNotMatch(html, /tessdata\.projectnaptha\.com/);
 });
 
