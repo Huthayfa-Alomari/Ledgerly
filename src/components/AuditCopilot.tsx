@@ -1,13 +1,12 @@
 import { useMemo, useState } from 'react';
 import type { SupabaseConfigResult } from '../lib/supabase-config';
 
-type Issue = { ref: string; severity: 'error' | 'warning' | 'info'; category: string; title: string; amount: number | null; accountCode?: string; sourceRowNumber?: number | null };
-type AccountSummary = { ref: string; accountCode: string; accountName: string; sourceRowNumber: number | null; openingNetJod: number | null; periodDebitJod: number | null; periodCreditJod: number | null; movementNetJod: number | null; closingNetJod: number | null; comparativeNetJod: number | null; varianceJod: number | null; variancePercent: number | null; statementLineKey: string };
+type Issue = { ref: string; severity: 'error' | 'warning' | 'info'; category: string; title: string };
 type CopilotContext = {
   fiscalYear: string;
   engagementType: string;
   counts: { riskCount: number; openRiskCount: number; workpaperCount: number; approvedWorkpaperCount: number; evidenceCount: number; unlinkedEvidenceCount: number; openFindingCount: number };
-  trialBalance: { accountCount: number; balanced: boolean; differences: { opening: number; movement: number; closing: number }; counts: { error: number; warning: number; info: number; total: number }; issues: Issue[]; accounts: AccountSummary[] };
+  trialBalance: { accountCount: number; balanced: boolean; counts: { error: number; warning: number; info: number; total: number }; issues: Issue[] };
 };
 type Observation = { title: string; whyItMatters: string; suggestedNextStep: string; sourceRefs: string[]; confidence: 'low' | 'medium' | 'high' };
 type CopilotResult = { summary: string; observations: Observation[]; questions: string[]; limitations: string[] };
@@ -23,8 +22,7 @@ export default function AuditCopilot({ config, context, hasEngagement }: Props) 
   const [result, setResult] = useState<CopilotResult | null>(null);
   const [model, setModel] = useState('');
   const [disclaimer, setDisclaimer] = useState('');
-  const availableRefs = useMemo(() => new Set([...context.trialBalance.issues.map(issue => issue.ref), ...context.trialBalance.accounts.map(account => account.ref)]), [context]);
-  const issueSources = useMemo(() => new Map(context.trialBalance.issues.map(issue => [issue.ref, { accountCode: issue.accountCode || '', sourceRowNumber: issue.sourceRowNumber ?? null }])), [context]);
+  const availableRefs = useMemo(() => new Set(context.trialBalance.issues.map(issue => issue.ref)), [context]);
 
   async function runCopilot() {
     setError('');
@@ -89,7 +87,7 @@ export default function AuditCopilot({ config, context, hasEngagement }: Props) 
         <div><span>الأدلة غير المرتبطة</span><strong>{context.counts.unlinkedEvidenceCount}</strong></div>
         <div><span>الملاحظات المفتوحة</span><strong>{context.counts.openFindingCount}</strong></div>
       </div>
-      {context.trialBalance.accounts.length > 0 && <details className="ai-context-accounts"><summary>معاينة الحسابات التي قد يستند إليها المساعد ({context.trialBalance.accounts.length})</summary><div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>المرجع</th><th>الحساب</th><th>الحركة الصافية</th><th>الختامي</th><th>المقارن</th><th>الفرق</th><th>صف المصدر</th></tr></thead><tbody>{context.trialBalance.accounts.map(account => <tr key={account.ref}><td>{account.ref}</td><td className="cell-strong">{account.accountName || '—'}<small className="table-sub">{account.accountCode}</small></td><td>{account.movementNetJod === null ? '—' : account.movementNetJod.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}</td><td>{account.closingNetJod === null ? '—' : account.closingNetJod.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}</td><td>{account.comparativeNetJod === null ? 'غير متاح' : account.comparativeNetJod.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}</td><td>{account.varianceJod === null ? '—' : account.varianceJod.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}</td><td>{account.sourceRowNumber ?? '—'}</td></tr>)}</tbody></table></div><p className="muted-copy">الفرق يساوي الختامي ناقص المقارن المدخل يدويًا. هذا يبين مقدار التغيّر ولا يفسّر سببه من دون تفاصيل القيود والأدلة.</p></details>}
+
       <label className="audit-field ai-prompt-field"><span>ما الذي تريد من المساعد مراجعته؟</span><textarea rows={4} value={prompt} onChange={e => setPrompt(e.target.value)} maxLength={2000} placeholder="مثال: اقترح إجراءات متابعة للفرق في الحركة والرصيد الختامي." /></label>
       <label className="ai-consent"><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} /><span>أوافق على إرسال السؤال والملخص المجمع الظاهر أعلاه إلى مزود الذكاء الاصطناعي الخارجي لمعالجته. لن تُرسل ملفات الأدلة أو أسماء العملاء من هذا النموذج، ولا تُحفظ المحادثة في Ledgerly.</span></label>
       <p className="audit-warning">لا تُدخل أسماء أشخاص أو عملاء أو أرقامًا ضريبية أو معلومات سرية في السؤال. تُرسل المؤشرات الإجمالية فقط؛ لا تُرسل أسماء الحسابات أو أرصدتها الفردية. لا تستخدم المساعد مع بيانات عميل حقيقية إلا بعد موافقة مكتبك والتحقق من التزامات السرية وسياسة مزود الخدمة.</p>
@@ -102,7 +100,7 @@ export default function AuditCopilot({ config, context, hasEngagement }: Props) 
       {result.observations.length > 0 && <div className="ai-observations">{result.observations.map((item, index) => <article className="ai-observation" key={index}>
         <div className="ai-observation-head"><strong>{item.title}</strong><span className={`ai-confidence ai-confidence-${item.confidence}`}>{item.confidence === 'high' ? 'ثقة مرتفعة' : item.confidence === 'medium' ? 'ثقة متوسطة' : 'ثقة منخفضة'}</span></div>
         <p><b>لماذا يستحق المراجعة؟</b> {item.whyItMatters}</p><p><b>خطوة مقترحة:</b> {item.suggestedNextStep}</p>
-        {item.sourceRefs.length > 0 && <p className="ai-source-refs"><b>مراجع قابلة للتتبّع:</b> {item.sourceRefs.map(ref => { const source = issueSources.get(ref); return source?.accountCode ? `${ref} (حساب ${source.accountCode}${source.sourceRowNumber ? '، صف المصدر ' + source.sourceRowNumber : ''})` : ref; }).join('، ')}</p>}
+        {item.sourceRefs.length > 0 && <p className="ai-source-refs"><b>مراجع قابلة للتتبّع:</b> {item.sourceRefs.join('، ')}</p>}
       </article>)}</div>}
       {result.questions.length > 0 && <div className="ai-result-section"><h4>أسئلة تحتاج إجابة</h4><ul>{result.questions.map((x,i)=><li key={i}>{x}</li>)}</ul></div>}
       {result.limitations.length > 0 && <div className="ai-result-section"><h4>حدود التحليل</h4><ul>{result.limitations.map((x,i)=><li key={i}>{x}</li>)}</ul></div>}
