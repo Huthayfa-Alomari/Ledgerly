@@ -101,8 +101,8 @@ test('AI copilot requires explicit consent and submits only a minimized engageme
 });
 
 test('AI copilot sends aggregate-only context and excludes account-level values', () => {
-  assert.match(app, /accounts:\[\]/);
   assert.doesNotMatch(app, /accounts:summarizeTrialBalanceForCopilot/);
+  assert.doesNotMatch(app, /differences:tbAnalytics\.differences/);
   const panel = readFileSync(new URL('../src/components/AuditCopilot.tsx', import.meta.url), 'utf8');
   assert.match(panel, /تُرسل أعدادًا ومؤشرات إجمالية فقط/);
   assert.match(panel, /context\.trialBalance\.issues\.map\(issue => issue\.ref\)/);
