@@ -199,3 +199,17 @@ test('OCR worker and core are imported as local build assets instead of a CDN wo
   assert.match(reconciliation, /tesseract\.js-core\/tesseract-core\.wasm\.js\?url/);
   assert.match(reconciliation, /workerPath: tesseractWorkerUrl, corePath: tesseractCoreUrl/);
 });
+
+
+test('OCR Arabic and English trained data are downloaded during production build and loaded locally', () => {
+  const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  const prepare = readFileSync(new URL('../scripts/prepare-ocr-data.mjs', import.meta.url), 'utf8');
+  const reconciliation = readFileSync(new URL('../src/Reconciliation.tsx', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  assert.equal(packageJson.scripts.prebuild, 'npm run prepare:ocr');
+  assert.match(prepare, /\['ara', 'eng'\]/);
+  assert.match(prepare, /tessdata\.projectnaptha\.com\/4\.0\.0/);
+  assert.match(prepare, /bytes\[0\] !== 0x1f \|\| bytes\[1\] !== 0x8b/);
+  assert.match(reconciliation, /langPath: `\$\{import\.meta\.env\.BASE_URL\}tessdata`/);
+  assert.doesNotMatch(html, /tessdata\.projectnaptha\.com/);
+});
