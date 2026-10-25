@@ -8,7 +8,7 @@ export function toFils(value) {
   if (!Number.isFinite(scaled)) throw new RangeError('JOD amount exceeds the supported fils range');
   const fils = Math.round(Math.abs(scaled) + Number.EPSILON);
   if (!Number.isSafeInteger(fils)) throw new RangeError('JOD amount exceeds the supported fils range');
-  return Math.sign(scaled) * fils;
+  return fils === 0 ? 0 : Math.sign(scaled) * fils;
 }
 
 /** Convert an integer fils value back to JOD. */
@@ -77,9 +77,20 @@ export function parseJodAmount(value, options = {}) {
   if (!text) return invalid('missing-numeric-value');
 
   const plainDecimal = /^[+-]?(?:\d+(?:\.\d{1,3})?|\.\d{1,3})$/;
-  const groupedInteger = /^[+-]?[1-9]\d{0,2}(?:,\d{3}){2,}$/;
-  const groupedDecimal = /^[+-]?[1-9]\d{0,2}(?:,\d{3})+\.\d{1,3}$/;
-  const canonical = plainDecimal.test(text) || groupedInteger.test(text) || groupedDecimal.test(text);
+  const groupedInteger = /^[+-]?\d{1,3}(?:,\d{3})+$/;
+  const groupedDecimal = /^[+-]?\d{1,3}(?:,\d{3})+\.\d{1,3}$/;
+  const commaMode = options.commaMode === 'thousands' || options.commaMode === 'decimal' ? options.commaMode : 'strict';
+  if (commaMode === 'decimal' && text.includes(',') && !text.includes('.')) {
+    if (!/^[+-]?\d+,\d{1,3}$/.test(text)) return invalid('ambiguous-or-malformed-number');
+    text = text.replace(',', '.');
+  } else if (commaMode === 'decimal' && text.includes(',') && text.includes('.')) {
+    if (!/^[+-]?\d{1,3}(?:\.\d{3})+,\d{1,3}$/.test(text)) return invalid('ambiguous-or-malformed-number');
+    text = text.replace(/\./g, '').replace(',', '.');
+  }
+  const canonical = plainDecimal.test(text) ||
+    groupedDecimal.test(text) ||
+    (commaMode === 'thousands' && groupedInteger.test(text)) ||
+    (commaMode === 'strict' && /^[+-]?\d{1,3}(?:,\d{3}){2,}$/.test(text));
   if (!canonical) return invalid('ambiguous-or-malformed-number');
 
   const numericText = text.replace(/,/g, '');
