@@ -100,11 +100,11 @@ test('AI copilot requires explicit consent and submits only a minimized engageme
   assert.match(css, /\.ai-consent/);
 });
 
-test('AI copilot receives account-level comparative values with traceable account references', () => {
-  assert.match(app, /summarizeTrialBalanceForCopilot/);
+test('AI copilot sends aggregate-only context and excludes account-level values', () => {
+  assert.match(app, /accounts:\[\]/);\n  assert.doesNotMatch(app, /accounts:summarizeTrialBalanceForCopilot/);
   const panel = readFileSync(new URL('../src/components/AuditCopilot.tsx', import.meta.url), 'utf8');
-  assert.match(panel, /ai-context-accounts/);
-  assert.match(panel, /availableRefs = useMemo\(\(\) => new Set\(\[\.\.\.context\.trialBalance\.issues\.map\(issue => issue\.ref\), \.\.\.context\.trialBalance\.accounts\.map\(account => account\.ref\)\]\)/);
+  assert.match(panel, /تُرسل أعدادًا ومؤشرات إجمالية فقط/);
+  assert.match(panel, /context\.trialBalance\.issues\.map\(issue => issue\.ref\)/);
   const edge = readFileSync(new URL('../supabase/functions/ledgerly-ai-assistant/index.ts', import.meta.url), 'utf8');
   assert.match(edge, /const rawAccounts = Array\.isArray\(tb\.accounts\)/);
   assert.match(edge, /ACC-\\d\{3\}/);
