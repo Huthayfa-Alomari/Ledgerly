@@ -153,3 +153,22 @@ test('mobile 390px layout reduces hero space and keeps the selected nav obvious'
   assert.match(css, /\.audit-table td\{overflow-wrap:anywhere;word-break:normal/);
   assert.match(css, /\.stat-hint\{color:#53635a\}/);
 });
+
+
+test('production CSP has no wildcard Supabase or development endpoints and injects the configured project origin', () => {
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const vite = readFileSync(new URL('../vite.config.ts', import.meta.url), 'utf8');
+  const csp = html.match(/Content-Security-Policy" content="([^"]+)"/)?.[1] ?? '';
+  assert.match(csp, /__LEDGERLY_CONNECT_SOURCES__/);
+  assert.doesNotMatch(csp, /https:\/\/\*\.supabase\.co|127\.0\.0\.1:5173|cdn\.jsdelivr\.net/);
+  assert.match(vite, /loadEnv\(mode, process\.cwd\(\), 'VITE_'\)/);
+  assert.match(vite, /endpoint\.origin/);
+  assert.match(vite, /html\.replace\('__LEDGERLY_CONNECT_SOURCES__'/);
+});
+
+test('OCR worker and core are imported as local build assets instead of a CDN worker script', () => {
+  const reconciliation = readFileSync(new URL('../src/Reconciliation.tsx', import.meta.url), 'utf8');
+  assert.match(reconciliation, /tesseract\.js\/dist\/worker\.min\.js\?url/);
+  assert.match(reconciliation, /tesseract\.js-core\/tesseract-core\.wasm\.js\?url/);
+  assert.match(reconciliation, /workerPath: tesseractWorkerUrl, corePath: tesseractCoreUrl/);
+});
