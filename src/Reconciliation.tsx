@@ -268,7 +268,7 @@ export default function App() {
           if (!useOcr) throw new Error(t('أُلغي OCR. لم يتم رفع الملف إلى أي خادم بواسطة التطبيق.', 'OCR cancelled. The app did not upload the file.'));
           const pageIssue = ocrPageIssue(doc.numPages); if (pageIssue) throw new Error(limitMessage(pageIssue));
           setOcr(true);
-          const worker = await createWorker('ara+eng', { workerPath: tesseractWorkerUrl, corePath: tesseractCoreUrl, langPath: 'https://tessdata.projectnaptha.com/4.0.0' });
+          const worker = await createWorker('ara+eng', undefined, { workerPath: tesseractWorkerUrl, corePath: tesseractCoreUrl, langPath: 'https://tessdata.projectnaptha.com/4.0.0' });
           try {
             const ocrLines: string[] = [];
             let totalOcrPixels = 0;
