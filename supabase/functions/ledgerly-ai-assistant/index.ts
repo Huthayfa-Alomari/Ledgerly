@@ -40,7 +40,7 @@ function sanitize(input: unknown) {
     const candidate = typeof q.category === "string" ? q.category : "";
     const category = Object.hasOwn(allowedIssueTitles, candidate) ? candidate : "invalid-data";
     return [{
-      ref: typeof q.ref === "string" && /^TB-\d{2}$/.test(q.ref) ? q.ref : \`TB-\${String(i + 1).padStart(2, "0")}\`,
+      ref: typeof q.ref === "string" && /^TB-\d{2}$/.test(q.ref) ? q.ref : "TB-" + String(i + 1).padStart(2, "0"),
       severity: category.startsWith("unbalanced-") || category === "invalid-data" ? "error" : category.startsWith("material-") ? "info" : "warning",
       category,
       title: allowedIssueTitles[category],
