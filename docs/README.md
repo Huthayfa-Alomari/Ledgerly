@@ -35,3 +35,8 @@
 ## Added implementation notes
 
 | [`10-ai-copilot.md`](10-ai-copilot.md) | AI Copilot architecture, privacy minimization, server-side secrets, and mandatory production rollout gates | Before enabling any AI provider call |
+
+
+## Windows pilot build (offline OCR)
+
+The security-review branch packages the Arabic (`ara`) and English (`eng`) Tesseract trained-data files into the production `public/tessdata/` assets during `npm run build`. The Electron packaged app serves its static assets through the restricted `ledgerly://app/` protocol. Before distributing a pilot installer, verify the Windows workflow artifact and manually test scanned Arabic/English PDFs with network access disabled.
