@@ -112,6 +112,17 @@ test('AI copilot sends aggregate-only context and excludes account-level values'
   assert.match(edge, /do not infer the cause of a variance/);
 });
 
+test('AI edge function applies a database-backed per-user quota and fails closed', () => {
+  const edge = readFileSync(new URL('../supabase/functions/ledgerly-ai-assistant/index.ts', import.meta.url), 'utf8');
+  const migration = readFileSync(new URL('../db/supabase/migrations/202610250001_ai_rate_limit.sql', import.meta.url), 'utf8');
+  assert.match(edge, /ledgerly_consume_ai_rate_limit/);
+  assert.match(edge, /p_limit: 10, p_window_seconds: 3600/);
+  assert.match(edge, /if \(rateError\)/);
+  assert.match(migration, /security definer/i);
+  assert.match(migration, /grant execute .* to service_role/i);
+  assert.match(migration, /request_count <= p_limit/);
+});
+
 test('AI edge function is gated, authenticated, server-key only, and does not store requests', () => {
   const edge = readFileSync(new URL('../supabase/functions/ledgerly-ai-assistant/index.ts', import.meta.url), 'utf8');
   assert.match(edge, /LEDGERLY_AI_ENABLED/);
