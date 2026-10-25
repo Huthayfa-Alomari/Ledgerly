@@ -3,6 +3,8 @@ import * as XLSX from 'xlsx';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { createWorker } from 'tesseract.js';
+import tesseractWorkerUrl from 'tesseract.js/dist/worker.min.js?url';
+import tesseractCoreUrl from 'tesseract.js-core/tesseract-core.wasm.js?url';
 import { detectColumns, normalizeRows, validateRows, matchTransactions } from './core.mjs';
 import { MAX_IMPORT_FILE_BYTES, MAX_WORKSHEET_ROWS, MAX_WORKSHEET_COLUMNS, MAX_WORKSHEET_CELLS, fileSizeIssue, worksheetDimensionIssue, matrixDimensionIssue, pdfPageIssue, pdfTextItemIssue, ocrPageIssue, ocrPixelIssue } from './lib/import-safety.mjs';
 
@@ -266,7 +268,7 @@ export default function App() {
           if (!useOcr) throw new Error(t('أُلغي OCR. لم يتم رفع الملف إلى أي خادم بواسطة التطبيق.', 'OCR cancelled. The app did not upload the file.'));
           const pageIssue = ocrPageIssue(doc.numPages); if (pageIssue) throw new Error(limitMessage(pageIssue));
           setOcr(true);
-          const worker = await createWorker('ara+eng');
+          const worker = await createWorker('ara+eng', undefined, { workerPath: tesseractWorkerUrl, corePath: tesseractCoreUrl, langPath: 'https://tessdata.projectnaptha.com/4.0.0' });
           try {
             const ocrLines: string[] = [];
             let totalOcrPixels = 0;
@@ -328,7 +330,7 @@ export default function App() {
       <div className="eyebrow">{t('المرحلة الأولى · استيراد البيانات', 'STAGE 1 · DATA IMPORT')}</div>
       <h1>{t('ابدأ من بيانات واضحة.', 'Start with clean data.')}</h1>
       <p>{t('استورد كشف البنك أو دفتر الأستاذ، راجع الأعمدة، وتحقق من البيانات قبل بدء المطابقة.', 'Import a bank statement or ledger, map columns, and validate the data before reconciliation.')}</p>
-      <div className="privacy"><span className="shield">✓</span><span><b>{t('المعالجة على جهازك', 'Processed on your device')}</b><small>{t('لا يوجد خادم خلفي أو نقطة رفع للملفات. OCR قد يجلب بيانات اللغة عند أول تشغيل.', 'No backend or file-upload endpoint. OCR may fetch language data on first use.')}</small></span></div>
+      <div className="privacy"><span className="shield">✓</span><span><b>{t('المعالجة على جهازك', 'Processed on your device')}</b><small>{t('لا يوجد خادم خلفي أو نقطة رفع للملفات. OCR قد يجلب بيانات اللغة عند أول تشغيل.', 'No backend or file-upload endpoint. OCR downloads trained language data only; worker and OCR engine are bundled locally.')}</small></span></div>
     </section>
     <section className="panel">
       <div className="section-title"><div><span className="step">01</span><h2>{t('استيراد ملف', 'Import a file')}</h2></div><span className="muted">{t('Excel · CSV · PDF', 'Excel · CSV · PDF')}</span></div>
