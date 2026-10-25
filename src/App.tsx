@@ -271,7 +271,6 @@ function App() {
   trialBalance:{
    accountCount:tbAnalytics.accountCount,
    balanced:tbAnalytics.balanced,
-   differences:tbAnalytics.differences,
    counts:tbAnalytics.counts,
    issues:tbAnalytics.issues.slice(0,20).map((issue,index)=>({
     ref:'TB-'+String(index+1).padStart(2,'0'),
@@ -279,7 +278,6 @@ function App() {
     category:issue.category,
     title:issue.title,
    })),
-   accounts:[]
   }
  }),[db,activeEngagement,tbAnalytics,evidenceTraceability]);
  const dashboardSignals = useMemo(()=>{
