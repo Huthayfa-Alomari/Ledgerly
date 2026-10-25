@@ -5,6 +5,7 @@ import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { createWorker } from 'tesseract.js';
 import tesseractWorkerUrl from 'tesseract.js/dist/worker.min.js?url';
 import tesseractCoreUrl from 'tesseract.js-core/tesseract-core.wasm.js?url';
+const createWorkerWithLocalAssets = createWorker as unknown as (langs: string, oem: undefined, options: { workerPath: string; corePath: string; langPath: string }) => ReturnType<typeof createWorker>;
 import { detectColumns, normalizeRows, validateRows, matchTransactions } from './core.mjs';
 import { MAX_IMPORT_FILE_BYTES, MAX_WORKSHEET_ROWS, MAX_WORKSHEET_COLUMNS, MAX_WORKSHEET_CELLS, fileSizeIssue, worksheetDimensionIssue, matrixDimensionIssue, pdfPageIssue, pdfTextItemIssue, ocrPageIssue, ocrPixelIssue } from './lib/import-safety.mjs';
 
@@ -268,7 +269,7 @@ export default function App() {
           if (!useOcr) throw new Error(t('أُلغي OCR. لم يتم رفع الملف إلى أي خادم بواسطة التطبيق.', 'OCR cancelled. The app did not upload the file.'));
           const pageIssue = ocrPageIssue(doc.numPages); if (pageIssue) throw new Error(limitMessage(pageIssue));
           setOcr(true);
-          const worker = await createWorker('ara+eng', undefined, { workerPath: tesseractWorkerUrl, corePath: tesseractCoreUrl, langPath: 'https://tessdata.projectnaptha.com/4.0.0' });
+          const worker = await createWorkerWithLocalAssets('ara+eng', undefined, { workerPath: tesseractWorkerUrl, corePath: tesseractCoreUrl, langPath: 'https://tessdata.projectnaptha.com/4.0.0' });
           try {
             const ocrLines: string[] = [];
             let totalOcrPixels = 0;
