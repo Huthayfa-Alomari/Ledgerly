@@ -105,5 +105,6 @@ jobs:
           name: Ledgerly ${{ github.ref_name }}
           generate_release_notes: true
           fail_on_unmatched_files: true
-          files: release/*.exe
+          files: |
+            release/*.exe
             release/SHA256SUMS.txt
