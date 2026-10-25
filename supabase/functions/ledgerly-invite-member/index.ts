@@ -61,7 +61,7 @@ Deno.serve(async (req: Request) => {
   if (rolesError || !roles?.length) return json(403, { error: "Only firm administrators or managing partners may invite members." });
 
   const { data: existing, error: existingError } = await admin
-    .from("app_user").select("id").ilike("email", email).is("deleted_at", null).limit(1);
+    .from("app_user").select("id").eq("email", email).is("deleted_at", null).limit(1);
   if (existingError) return json(500, { error: "Could not verify the invitee account." });
   if (existing?.length) return json(409, { error: "This email is already linked to a Ledgerly user." });
 
@@ -70,7 +70,9 @@ Deno.serve(async (req: Request) => {
     redirectTo,
   });
   if (inviteError || !invitation.user) {
-    return json(409, { error: inviteError?.message || "The invitation could not be sent. The email may already have an account." });
+    // Keep provider diagnostics in server logs only; never disclose raw auth-provider errors.
+    console.error("Ledgerly invite provider failed", { code: inviteError?.code ?? "unknown" });
+    return json(409, { error: "The invitation could not be sent. Verify the address and invitation settings, then try again." });
   }
 
   const { data: record, error: recordError } = await admin.rpc("ledgerly_add_firm_invited_member", {
@@ -85,9 +87,9 @@ Deno.serve(async (req: Request) => {
   if (recordError) {
     // Roll back the just-created pending auth account if membership provisioning fails.
     await admin.auth.admin.deleteUser(invitation.user.id);
-    if (recordError.code === "23505") return json(409, { error: recordError.message });
+    if (recordError.code === "23505") return json(409, { error: "This member or role assignment already exists." });
     if (recordError.code === "42501") return json(403, { error: "You are not authorized to invite members to this firm." });
-    if (recordError.code === "22023") return json(400, { error: recordError.message });
+    if (recordError.code === "22023") return json(400, { error: "The invitation details failed validation." });
     return json(500, { error: "Invitation provisioning failed. The pending auth account was rolled back." });
   }
 
