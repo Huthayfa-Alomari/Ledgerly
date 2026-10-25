@@ -14,16 +14,11 @@ function count(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0
     ? Math.min(Math.floor(value), 1000000) : 0;
 }
-function number(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value)
-    ? Math.max(-1e15, Math.min(1e15, value)) : 0;
-}
 function sanitize(input: unknown) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("invalid context");
   const x = input as Record<string, unknown>;
   const c = x.counts && typeof x.counts === "object" ? x.counts as Record<string, unknown> : {};
   const tb = x.trialBalance && typeof x.trialBalance === "object" ? x.trialBalance as Record<string, unknown> : {};
-  const d = tb.differences && typeof tb.differences === "object" ? tb.differences as Record<string, unknown> : {};
   const tc = tb.counts && typeof tb.counts === "object" ? tb.counts as Record<string, unknown> : {};
   const allowedIssueTitles: Record<string, string> = {
     "invalid-data": "قيمة رقمية غير صالحة",
@@ -110,6 +105,17 @@ Deno.serve(async (req: Request) => {
   try { context = sanitize(body.context); } catch { return reply(400, { error: "ملخص البيانات غير صالح." }); }
   const contextJson = JSON.stringify(context);
   if (contextJson.length > 10000) return reply(413, { error: "ملخص البيانات أكبر من الحد المسموح." });
+
+  // Atomic database-backed per-user quota: 10 requests per rolling hour.
+  // Fail closed until the rate-limit migration is applied successfully.
+  const { data: rateAllowed, error: rateError } = await admin.rpc("ledgerly_consume_ai_rate_limit", {
+    p_user_id: user.id, p_limit: 10, p_window_seconds: 3600,
+  });
+  if (rateError) {
+    console.error("Ledgerly AI rate-limit check unavailable", { code: rateError.code ?? "unknown" });
+    return reply(503, { error: "خدمة الذكاء الاصطناعي غير متاحة مؤقتًا؛ يلزم التحقق من إعدادات حد الاستخدام." });
+  }
+  if (rateAllowed !== true) return reply(429, { error: "تم بلوغ حد الاستخدام: 10 طلبات خلال ساعة. حاول لاحقًا." });
 
   const instructions = [
     "You are Ledgerly Audit Copilot for external-audit professionals.",
