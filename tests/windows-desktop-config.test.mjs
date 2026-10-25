@@ -25,6 +25,11 @@ test('Windows package creates a named NSIS installer without deleting local data
   assert.equal(pkg.build.nsis.createDesktopShortcut, true);
   assert.equal(pkg.build.win.target[0].target, 'nsis');
 });
+test('packaged asset path uses a syntactically valid URL slash regex', () => {
+  const main = read('../desktop/main.cjs');
+  assert.ok(main.includes(String.raw`replace(/^\\/+/, '')`));
+  assert.doesNotThrow(() => new Function(main));
+});
 test('Electron window disables Node integration and enables context isolation and sandbox', () => {
   const main = read('../desktop/main.cjs');
   assert.match(main, /nodeIntegration: false/);
