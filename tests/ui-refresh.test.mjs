@@ -185,6 +185,14 @@ test('production CSP has no wildcard Supabase or development endpoints and injec
   assert.match(vite, /html\.replace\('__LEDGERLY_CONNECT_SOURCES__'/);
 });
 
+test('amount separator convention belongs to each imported file and preserves the other source', () => {
+  const reconciliation = readFileSync(new URL('../src/Reconciliation.tsx', import.meta.url), 'utf8');
+  assert.match(reconciliation, /type ImportedFile = \{[^}]*commaMode: 'strict' \| 'thousands' \| 'decimal'/);
+  assert.match(reconciliation, /commaMode: 'strict', note/);
+  assert.match(reconciliation, /if \(assignedRole === 'bank'\) setBankData\(normalizeRows\(file\.rows, file\.mapping, \{ commaMode: nextMode \}\)\)/);
+  assert.match(reconciliation, /if \(assignedRole === 'ledger'\) setLedgerData\(normalizeRows\(file\.rows, file\.mapping, \{ commaMode: nextMode \}\)\)/);
+});
+
 test('OCR worker and core are imported as local build assets instead of a CDN worker script', () => {
   const reconciliation = readFileSync(new URL('../src/Reconciliation.tsx', import.meta.url), 'utf8');
   assert.match(reconciliation, /tesseract\.js\/dist\/worker\.min\.js\?url/);
