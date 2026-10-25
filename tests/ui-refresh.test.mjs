@@ -106,8 +106,8 @@ test('AI copilot sends aggregate-only context and excludes account-level values'
   assert.match(panel, /تُرسل أعدادًا ومؤشرات إجمالية فقط/);
   assert.match(panel, /context\.trialBalance\.issues\.map\(issue => issue\.ref\)/);
   const edge = readFileSync(new URL('../supabase/functions/ledgerly-ai-assistant/index.ts', import.meta.url), 'utf8');
-  assert.match(edge, /const rawAccounts = Array\.isArray\(tb\.accounts\)/);
-  assert.match(edge, /ACC-\\d\{3\}/);
+  assert.match(edge, /accounts: \[\]/);
+  assert.doesNotMatch(edge, /accountName: typeof q\.accountName/);
   assert.match(edge, /do not infer the cause of a variance/);
 });
 
