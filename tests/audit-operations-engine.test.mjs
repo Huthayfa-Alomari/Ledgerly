@@ -195,3 +195,20 @@ test('indexed invoice matcher does not treat a repeated exact reference with con
   assert.equal(result.results[0].match.status, 'reference-conflict');
   assert.equal(result.conflictCount, 1);
 });
+
+
+test('UBL parser ignores comment, CDATA and processing-instruction spoofed values', () => {
+  const xml = '<Invoice><cbc:ID>REAL-1</cbc:ID><cbc:DocumentCurrencyCode>JOD</cbc:DocumentCurrencyCode>' +
+    '<!-- <cbc:ID>FAKE-9</cbc:ID><cbc:PayableAmount>1.000</cbc:PayableAmount> -->' +
+    '<cac:LegalMonetaryTotal><cbc:PayableAmount>116.000</cbc:PayableAmount></cac:LegalMonetaryTotal>' +
+    '<![CDATA[<cbc:PayableAmount>2.000</cbc:PayableAmount><cbc:ID>FAKE-CDATA</cbc:ID>]]>' +
+    '<?fake <cbc:ID>FAKE-PI</cbc:ID> ?>' +
+    '</Invoice>';
+  const result = parseUblInvoiceXml(xml);
+  assert.equal(result.invoiceId, 'REAL-1');
+  assert.equal(result.payableAmount, 116);
+});
+
+test('UBL parser still rejects actual DOCTYPE declarations', () => {
+  assert.throws(() => parseUblInvoiceXml('<!DOCTYPE Invoice [<!ENTITY x "bad">]><Invoice/>'), /DOCTYPE/);
+});
