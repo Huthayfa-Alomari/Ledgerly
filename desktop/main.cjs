@@ -42,7 +42,7 @@ async function handlePackagedAsset(request) {
   try {
     const url = new URL(request.url);
     if (url.hostname !== 'app') return new Response('Not found', { status: 404 });
-    const pathname = decodeURIComponent(url.pathname).replace(/^\\/+/, '') || 'index.html';
+    const pathname = decodeURIComponent(url.pathname).replace(/^\/+/, '') || 'index.html';
     const target = path.resolve(packagedRoot, pathname);
     const relative = path.relative(packagedRoot, target);
     if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
