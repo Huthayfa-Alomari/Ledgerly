@@ -27,7 +27,7 @@ test('Windows package creates a named NSIS installer without deleting local data
 });
 test('packaged asset path uses a valid regular expression and main process parses', () => {
   const main = read('../desktop/main.cjs');
-  assert.ok(main.includes(String.raw`replace(/^\\/+/, '')`));
+  assert.ok(main.includes(String.raw`replace(/^\/+/, '')`));
   assert.doesNotThrow(() => new Function(main));
 });
 test('Electron window disables Node integration and enables context isolation and sandbox', () => {
