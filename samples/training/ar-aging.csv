@@ -1,0 +1,4 @@
+customer_code,customer_name,current,days_1_30,days_31_60,days_61_90,over_90,total,notes
+C-001,Al Amal Stores,4000.00,2000.00,1000.00,0.00,0.00,7000.00,Request confirmation and inspect subsequent receipts
+C-002,City Market,1000.00,0.00,1500.00,500.00,1000.00,4000.00,Older balance needs follow-up; aging alone does not prove impairment
+C-003,Green Basket,1000.00,0.00,0.00,0.00,0.00,1000.00,Check invoice and delivery evidence
