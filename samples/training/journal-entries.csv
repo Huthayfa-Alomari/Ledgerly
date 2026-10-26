@@ -1,0 +1,9 @@
+journal_id,date,account_code,account_name,debit,credit,description,prepared_by,approved_by,source_document
+JE-001,2025-01-05,1000,Bank,5000.00,0.00,Opening cash transfer,clerk01,manager01,BANK-001
+JE-001,2025-01-05,3000,Owner equity,0.00,5000.00,Opening cash transfer,clerk01,manager01,BANK-001
+JE-014,2025-06-12,1100,Accounts receivable,2500.00,0.00,Customer invoice INV-014,clerk02,manager01,INV-014
+JE-014,2025-06-12,4000,Sales revenue,0.00,2500.00,Customer invoice INV-014,clerk02,manager01,INV-014
+JE-031,2025-12-31,1100,Accounts receivable,5000.00,0.00,Year-end sales entry - supporting docs to inspect,supervisor,supervisor,NO-REF-PROVIDED
+JE-031,2025-12-31,4000,Sales revenue,0.00,5000.00,Year-end sales entry - supporting docs to inspect,supervisor,supervisor,NO-REF-PROVIDED
+JE-032,2025-12-31,6100,Rent expense,1200.00,0.00,December rent accrual,clerk01,manager01,RENT-DEC
+JE-032,2025-12-31,2000,Accounts payable,0.00,1200.00,December rent accrual,clerk01,manager01,RENT-DEC

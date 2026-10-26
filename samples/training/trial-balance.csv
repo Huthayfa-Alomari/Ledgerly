@@ -1,0 +1,11 @@
+account_code,account_name,debit,credit
+1000,Bank,10000.00,0.00
+1100,Accounts receivable,12000.00,0.00
+1200,Inventory,20000.00,0.00
+1500,Equipment,30000.00,0.00
+2000,Accounts payable,0.00,8000.00
+3000,Owner equity,0.00,40000.00
+4000,Sales revenue,0.00,70000.00
+5000,Cost of goods sold,35000.00,0.00
+6100,Rent expense,5000.00,0.00
+6200,Salaries expense,6000.00,0.00
