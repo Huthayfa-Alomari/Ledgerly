@@ -1,0 +1,6 @@
+date,description,debit,credit,balance,reference
+2025-12-01,Opening balance,0.00,10000.00,10000.00,OPEN-01
+2025-12-04,Customer receipt A,0.00,1500.00,11500.00,RCPT-104
+2025-12-08,Supplier payment B,800.00,0.00,10700.00,PAY-208
+2025-12-20,Customer receipt C,0.00,750.00,11450.00,RCPT-120
+2025-12-29,Supplier payment D,600.00,0.00,10850.00,PAY-229
