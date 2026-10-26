@@ -4,3 +4,4 @@ date,description,debit,credit,balance,reference
 2025-12-08,Supplier payment B,800.00,0.00,10700.00,PAY-208
 2025-12-20,Customer receipt C,0.00,750.00,11450.00,RCPT-120
 2025-12-29,Supplier payment D,600.00,0.00,10850.00,PAY-229
+2025-12-31,Bank service fee,100.00,0.00,10750.00,BANK-FEE
