@@ -95,20 +95,32 @@ test('AI copilot requires explicit consent and submits only a minimized engageme
   assert.match(panel, /checked={consent}/);
   assert.match(panel, /if \(!consent\)/);
   assert.match(panel, /ledgerly-ai-assistant/);
-  assert.match(panel, /لا تُرسل أسماء العملاء أو أرقامهم الضريبية/);
+  assert.match(panel, /لن تُرسل ملفات الأدلة أو أسماء العملاء/);
   assert.match(panel, /sourceRefs: Array\.isArray/);
   assert.match(css, /\.ai-consent/);
 });
 
-test('AI copilot receives account-level comparative values with traceable account references', () => {
-  assert.match(app, /summarizeTrialBalanceForCopilot/);
+test('AI copilot sends aggregate-only context and excludes account-level values', () => {
+  assert.doesNotMatch(app, /accounts:summarizeTrialBalanceForCopilot/);
+  assert.doesNotMatch(app, /differences:tbAnalytics\.differences/);
   const panel = readFileSync(new URL('../src/components/AuditCopilot.tsx', import.meta.url), 'utf8');
-  assert.match(panel, /ai-context-accounts/);
-  assert.match(panel, /availableRefs = useMemo\(\(\) => new Set\(\[\.\.\.context\.trialBalance\.issues\.map\(issue => issue\.ref\), \.\.\.context\.trialBalance\.accounts\.map\(account => account\.ref\)\]\)/);
+  assert.match(panel, /تُرسل أعدادًا ومؤشرات إجمالية فقط/);
+  assert.match(panel, /context\.trialBalance\.issues\.map\(issue => issue\.ref\)/);
   const edge = readFileSync(new URL('../supabase/functions/ledgerly-ai-assistant/index.ts', import.meta.url), 'utf8');
-  assert.match(edge, /const rawAccounts = Array\.isArray\(tb\.accounts\)/);
-  assert.match(edge, /ACC-\\d\{3\}/);
+  assert.match(edge, /accounts: \[\]/);
+  assert.doesNotMatch(edge, /accountName: typeof q\.accountName/);
   assert.match(edge, /do not infer the cause of a variance/);
+});
+
+test('AI edge function applies a database-backed per-user quota and fails closed', () => {
+  const edge = readFileSync(new URL('../supabase/functions/ledgerly-ai-assistant/index.ts', import.meta.url), 'utf8');
+  const migration = readFileSync(new URL('../db/supabase/migrations/202610250001_ai_rate_limit.sql', import.meta.url), 'utf8');
+  assert.match(edge, /ledgerly_consume_ai_rate_limit/);
+  assert.match(edge, /p_limit: 10, p_window_seconds: 3600/);
+  assert.match(edge, /if \(rateError\)/);
+  assert.match(migration, /security definer/i);
+  assert.match(migration, /grant execute .* to service_role/i);
+  assert.match(migration, /request_count <= p_limit/);
 });
 
 test('AI edge function is gated, authenticated, server-key only, and does not store requests', () => {
@@ -133,6 +145,14 @@ test('AI edge function allowlists context categories and fixed labels server-sid
 });
 
 
+test('member invitation uses exact normalized email lookup and does not return provider errors', () => {
+  const invite = readFileSync(new URL('../supabase/functions/ledgerly-invite-member/index.ts', import.meta.url), 'utf8');
+  assert.match(invite, /\.eq\("email", email\)/);
+  assert.doesNotMatch(invite, /\.ilike\("email", email\)/);
+  assert.doesNotMatch(invite, /inviteError\?\.message/);
+  assert.doesNotMatch(invite, /error: recordError\.message/);
+});
+
 test('invoice matching UI requires unique workpaper links and supports encrypted source archives', () => {
   const panel = readFileSync(new URL('../src/AuditOperationsPanels.tsx', import.meta.url), 'utf8');
   assert.match(panel, /matchInvoiceRegisterToJournal/);
@@ -151,4 +171,57 @@ test('mobile 390px layout reduces hero space and keeps the selected nav obvious'
   assert.match(css, /\.audit-sidebar nav button\.active\{background:#244f3c;color:#fff/);
   assert.match(css, /\.audit-table td\{overflow-wrap:anywhere;word-break:normal/);
   assert.match(css, /\.stat-hint\{color:#53635a\}/);
+});
+
+
+test('production CSP has no wildcard Supabase or development endpoints and injects the configured project origin', () => {
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const vite = readFileSync(new URL('../vite.config.ts', import.meta.url), 'utf8');
+  const csp = html.match(/Content-Security-Policy" content="([^"]+)"/)?.[1] ?? '';
+  assert.match(csp, /__LEDGERLY_CONNECT_SOURCES__/);
+  assert.doesNotMatch(csp, /https:\/\/\*\.supabase\.co|127\.0\.0\.1:5173|cdn\.jsdelivr\.net/);
+  assert.match(vite, /loadEnv\(mode, process\.cwd\(\), 'VITE_'\)/);
+  assert.match(vite, /endpoint\.origin/);
+  assert.match(vite, /html\.replace\('__LEDGERLY_CONNECT_SOURCES__'/);
+});
+
+test('amount separator convention belongs to each imported file and preserves the other source', () => {
+  const reconciliation = readFileSync(new URL('../src/Reconciliation.tsx', import.meta.url), 'utf8');
+  assert.match(reconciliation, /type ImportedFile = \{[^}]*commaMode: 'strict' \| 'thousands' \| 'decimal'/);
+  assert.match(reconciliation, /commaMode: 'strict', note/);
+  assert.match(reconciliation, /if \(assignedRole === 'bank'\) setBankData\(normalizeRows\(file\.rows, file\.mapping, \{ commaMode: nextMode \}\)\)/);
+  assert.match(reconciliation, /if \(assignedRole === 'ledger'\) setLedgerData\(normalizeRows\(file\.rows, file\.mapping, \{ commaMode: nextMode \}\)\)/);
+});
+
+test('OCR worker and core are imported as local build assets instead of a CDN worker script', () => {
+  const reconciliation = readFileSync(new URL('../src/Reconciliation.tsx', import.meta.url), 'utf8');
+  assert.match(reconciliation, /tesseract\.js\/dist\/worker\.min\.js\?url/);
+  assert.match(reconciliation, /tesseract\.js-core\/tesseract-core\.wasm\.js\?url/);
+  assert.match(reconciliation, /workerPath: tesseractWorkerUrl, corePath: tesseractCoreUrl/);
+});
+
+
+test('OCR Arabic and English trained data are downloaded during production build and loaded locally', () => {
+  const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  const prepare = readFileSync(new URL('../scripts/prepare-ocr-data.mjs', import.meta.url), 'utf8');
+  const reconciliation = readFileSync(new URL('../src/Reconciliation.tsx', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  assert.equal(packageJson.scripts.prebuild, 'npm run prepare:ocr');
+  assert.match(prepare, /\['ara', 'eng'\]/);
+  assert.match(prepare, /tessdata\.projectnaptha\.com\/4\.0\.0/);
+  assert.match(prepare, /bytes\[0\] !== 0x1f \|\| bytes\[1\] !== 0x8b/);
+  assert.match(reconciliation, /langPath: new URL\(/);
+  assert.doesNotMatch(html, /tessdata\.projectnaptha\.com/);
+});
+
+
+test('packaged Electron app serves local assets through a restricted secure protocol', () => {
+  const main = readFileSync(new URL('../desktop/main.cjs', import.meta.url), 'utf8');
+  assert.match(main, /registerSchemesAsPrivileged/);
+  assert.match(main, /supportFetchAPI: true/);
+  assert.match(main, /protocol\.handle\('ledgerly', handlePackagedAsset\)/);
+  assert.match(main, /path\.relative\(packagedRoot, target\)/);
+  assert.match(main, /url\.hostname !== 'app'/);
+  assert.match(main, /loadURL\('ledgerly:\/\/app\/index\.html'\)/);
+  assert.doesNotMatch(main, /nodeIntegration: true|webSecurity: false/);
 });

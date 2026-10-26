@@ -13,7 +13,7 @@ test('application metadata uses Ledgerly branding', () => {
 test('Vite emits relative asset paths for file-based desktop loading', () => {
   const vite = read('../vite.config.ts');
   assert.match(vite, /base: '\.\/'/);
-  assert.match(vite, /plugins:\s*\[\s*react\(\)\s*\]/);
+  assert.match(vite, /plugins:\s*\[react\(\),\s*\{/);
 });
 test('Windows package creates a named NSIS installer without deleting local data on uninstall', () => {
   const pkg = JSON.parse(read('../desktop/package.json'));
@@ -24,6 +24,11 @@ test('Windows package creates a named NSIS installer without deleting local data
   assert.equal(pkg.devDependencies['electron-builder'], '26.15.3');
   assert.equal(pkg.build.nsis.createDesktopShortcut, true);
   assert.equal(pkg.build.win.target[0].target, 'nsis');
+});
+test('packaged asset path uses a valid regular expression and main process parses', () => {
+  const main = read('../desktop/main.cjs');
+  assert.ok(main.includes(String.raw`replace(/^\/+/, '')`));
+  assert.doesNotThrow(() => new Function(main));
 });
 test('Electron window disables Node integration and enables context isolation and sandbox', () => {
   const main = read('../desktop/main.cjs');
@@ -43,7 +48,7 @@ test('version tags publish the built installer as a permanent GitHub Release ass
   assert.match(workflow, /permissions:\s*\n\s*contents: write/);
   assert.match(workflow, /if: startsWith\(github\.ref, 'refs\/tags\/ledgerly-v'\)/);
   assert.ok(workflow.includes('uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64'));
-  assert.ok(workflow.includes('files: release/*.exe'));
+  assert.match(workflow, /files:\s*\|\s*\n\s*release\/\*\.exe\s*\n\s*release\/SHA256SUMS\.txt/);
 });
 test('Windows release uses explicit public cloud variables and fails on high-severity dependency issues', () => {
   const workflow = read('../.github/workflows/windows-release.yml');

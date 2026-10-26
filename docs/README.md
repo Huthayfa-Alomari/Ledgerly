@@ -29,9 +29,14 @@
 3. كل وحدة تنفيذية تترك اختباراتها في `tests/` وتُحدث هذه الصفحة بخطوة واحدة في قائمة الترتيب أعلاه.
 
 | [`08-product-scope-and-delivery-roadmap.md`](08-product-scope-and-delivery-roadmap.md) | Agreed extended product scope, staged delivery gates, safety boundaries and acceptance criteria | Before implementation of new modules |
-| [`../db/supabase/migrations/202610190003_extended_audit_suite.sql`](../db/supabase/migrations/202610190003_extended_audit_suite.sql) | Additive database foundation for independence, workpaper versions, analytics, sampling, PBC, billing, quality, AI advisory and firm dashboards | Staging only after migrations 0001 and 0002 |
+| [`../db/supabase/migrations/20261019131031_brp_extended_audit_suite.sql`](../db/supabase/migrations/202610190003_extended_audit_suite.sql) | Additive database foundation for independence, workpaper versions, analytics, sampling, PBC, billing, quality, AI advisory and firm dashboards | Staging only after migrations 0001 and 0002 |
 
 
 ## Added implementation notes
 
 | [`10-ai-copilot.md`](10-ai-copilot.md) | AI Copilot architecture, privacy minimization, server-side secrets, and mandatory production rollout gates | Before enabling any AI provider call |
+
+
+## Windows pilot build (offline OCR)
+
+The security-review branch packages the Arabic (`ara`) and English (`eng`) Tesseract trained-data files into the production `public/tessdata/` assets during `npm run build`. The Electron packaged app serves its static assets through the restricted `ledgerly://app/` protocol. Before distributing a pilot installer, verify the Windows workflow artifact and manually test scanned Arabic/English PDFs with network access disabled.

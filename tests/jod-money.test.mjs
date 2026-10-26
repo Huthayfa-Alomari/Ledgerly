@@ -76,3 +76,19 @@ test('strict JOD parser never guesses separator conventions or strips unknown su
   assert.equal(parseJodAmount(''), 0);
   assert.equal(parseJodAmount('', { blankAsZero: false }), null);
 });
+
+
+test('explicit comma convention parses common bank-statement amounts without guessing by default', () => {
+  assert.equal(parseJodAmount('5,000'), null, 'strict mode remains conservative');
+  assert.equal(parseJodAmount('5,000', { commaMode: 'thousands' }), 5000);
+  assert.equal(parseJodAmount('12,500', { commaMode: 'thousands' }), 12500);
+  assert.equal(parseJodAmount('1,234.567', { commaMode: 'thousands' }), 1234.567);
+  assert.equal(parseJodAmount('5,000', { commaMode: 'decimal' }), 5);
+  assert.equal(parseJodAmount('1,5', { commaMode: 'decimal' }), 1.5);
+  assert.equal(parseJodAmount('1.234,567', { commaMode: 'decimal' }), 1234.567);
+});
+
+test('rounding never returns negative zero', () => {
+  assert.equal(Object.is(toFils(-0.0001), -0), false);
+  assert.equal(Object.is(roundJod(-0.0001), -0), false);
+});

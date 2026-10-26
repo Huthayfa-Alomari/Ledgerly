@@ -343,3 +343,29 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
  .audit-sidebar nav{gap:4px}
  .audit-sidebar nav button{min-width:65px;min-height:54px;padding:6px 7px;font-size:9px}
 }
+
+
+/* Six-service hub: clearly distinguish existing foundations from planned workflows. */
+.service-catalog-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:16px 0 22px}
+.service-catalog-card{display:flex;flex-direction:column;align-items:stretch;gap:9px;min-width:0;text-align:right;padding:19px;border:1px solid var(--audit-line);border-radius:14px;background:#fff;color:var(--audit-ink);font:inherit;cursor:pointer;box-shadow:0 3px 12px rgba(24,43,40,.018)}
+.service-catalog-card:hover{border-color:#bfd4c5;background:#fbfdfb;transform:translateY(-1px)}
+.service-catalog-card.selected{border-color:#7ca88b;box-shadow:0 0 0 2px #e3f0e7;background:#fbfdfb}
+.service-catalog-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.service-catalog-icon{display:grid;place-items:center;width:38px;height:38px;border-radius:11px;background:#eaf3ed;color:var(--audit-green);font-size:20px;font-weight:700}
+.service-catalog-card strong{font-size:14px;color:#203a2f}
+.service-catalog-card>small{font-size:10px;color:#87958d;direction:ltr;text-align:right}
+.service-catalog-card p{margin:0;color:#687970;font-size:11px;line-height:1.9;flex:1}
+.service-readiness{display:inline-flex;align-items:center;width:max-content;max-width:100%;border-radius:6px;padding:4px 7px;font-size:9px;line-height:1.6;font-weight:650}
+.service-readiness.existing-foundation{background:#eaf4ed;color:#326a49}
+.service-readiness.partial-foundation{background:#fff4df;color:#88672e}
+.service-readiness.planned{background:#f0f2f3;color:#65727a}
+.service-open-hint{font-size:10px;font-weight:650;color:var(--audit-green);margin-top:4px}
+.service-detail-card{margin-top:8px}
+.service-detail-card h4{margin:18px 0 8px;font-size:12px}
+.service-workflow{display:grid;gap:0;padding:0;margin:0;list-style:none}
+.service-workflow li{display:flex;align-items:center;gap:12px;padding:11px 2px;border-bottom:1px solid #edf1ee;font-size:11px;color:#45594d}
+.service-workflow li:last-child{border-bottom:0}
+.service-workflow li span{display:grid;place-items:center;flex:0 0 29px;height:29px;border-radius:8px;background:#f0f5f1;color:#5f826b;font-size:10px;font-weight:700}
+.service-detail-card .audit-card-head{align-items:flex-start}
+@media(max-width:1100px){.service-catalog-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.service-catalog-grid{grid-template-columns:1fr}.service-catalog-card{padding:16px}.service-catalog-card-top{align-items:flex-start}}

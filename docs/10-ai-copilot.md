@@ -38,7 +38,7 @@ store=false requests that the Responses API not store the response. This is not 
 ## Mandatory rollout gates — keep AI disabled until complete
 
 1. Decide which firm roles may use AI, and obtain the firm's documented approval for external processing.
-2. Add durable per-user/per-firm rate limits, monthly spend caps, usage accounting, and an administrative kill switch. The current function has a feature gate but does not yet implement durable quotas; therefore do not set LEDGERLY_AI_ENABLED=true in production.
+2. Keep monthly spend caps and usage accounting as rollout gates. The database-backed per-user quota is implemented, but the AI kill switch, firm-level budget controls, and live authorization/isolation checks must be verified before production enablement.
 3. Test two-firm isolation and role authorization using authenticated integration tests against the live Supabase project.
 4. Review the exact provider/model, data-processing terms, retention settings, and regional/legal requirements.
 5. Add evaluation cases for Arabic/English outputs, unsupported claims, fabricated references, prompt injection, malformed input, timeouts, and provider errors.
@@ -52,3 +52,9 @@ store=false requests that the Responses API not store the response. This is not 
 - The AI only receives a summary. It cannot substantiate claims from raw documents or evidence it has not received.
 - The current interface shows output as text and does not automatically save it to a working paper.
 - The function is gated off by default. Do not enable it until durable cost controls and security tests exist.
+
+## Updated privacy and usage controls (2026-10-25)
+
+- The Edge Function now sends only aggregate workspace counts, high-level balance-check status, and fixed issue-category labels to OpenAI. Account names, account codes, individual balances, and source-row references are excluded from the server-sanitized payload.
+- The function enforces a database-backed limit of 10 requests per user per rolling hour via `ledgerly_consume_ai_rate_limit`. Apply migration `202610250001_ai_rate_limit.sql` to staging before enabling `LEDGERLY_AI_ENABLED`; if the quota check is unavailable, the function fails closed.
+- Explicit in-product consent and the office privacy review remain required. These controls do not replace a legal/privacy review or the office's confidentiality obligations.

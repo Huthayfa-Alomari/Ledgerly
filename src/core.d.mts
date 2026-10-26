@@ -2,9 +2,9 @@ export const FIELD_ALIASES: Record<string, string[]>;
 export function normalizeDigits(value: unknown): string;
 export function normalizeHeader(value: unknown): string;
 export function detectColumns(headers: string[]): Record<string, number>;
-export function parseAmount(input: unknown, options?: { onWarning?: (warning: { rawValue: unknown; reason: string }) => void }): number | null;
+export function parseAmount(input: unknown, options?: { onWarning?: (warning: { rawValue: unknown; reason: string }) => void; commaMode?: 'strict' | 'thousands' | 'decimal' }): number | null;
 export function parseDate(input: unknown): string | null;
-export function normalizeRows(rows: unknown[], mapping: Record<string, number>): Array<{
+export function normalizeRows(rows: unknown[], mapping: Record<string, number>, options?: { commaMode?: 'strict' | 'thousands' | 'decimal' }): Array<{
   sourceRow: number;
   date: string | null;
   description: string;

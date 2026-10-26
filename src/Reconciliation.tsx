@@ -3,6 +3,9 @@ import * as XLSX from 'xlsx';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { createWorker } from 'tesseract.js';
+import tesseractWorkerUrl from 'tesseract.js/dist/worker.min.js?url';
+import tesseractCoreUrl from 'tesseract.js-core/tesseract-core.wasm.js?url';
+const createWorkerWithLocalAssets = createWorker as unknown as (langs: string, oem: undefined, options: { workerPath: string; corePath: string; langPath: string }) => ReturnType<typeof createWorker>;
 import { detectColumns, normalizeRows, validateRows, matchTransactions } from './core.mjs';
 import { MAX_IMPORT_FILE_BYTES, MAX_WORKSHEET_ROWS, MAX_WORKSHEET_COLUMNS, MAX_WORKSHEET_CELLS, fileSizeIssue, worksheetDimensionIssue, matrixDimensionIssue, pdfPageIssue, pdfTextItemIssue, ocrPageIssue, ocrPixelIssue } from './lib/import-safety.mjs';
 
@@ -14,10 +17,11 @@ const LABELS: Record<Field, [string, string]> = {
   debit: ['مدين', 'Debit'], credit: ['دائن', 'Credit'],
   amount: ['المبلغ', 'Amount'], balance: ['الرصيد', 'Balance'],
 };
-type ImportedFile = { name: string; rows: Row[]; headers: string[]; mapping: Record<string, number>; kind: string; note?: string };
+type ImportedFile = { name: string; rows: Row[]; headers: string[]; mapping: Record<string, number>; kind: string; commaMode: 'strict' | 'thousands' | 'decimal'; note?: string };
 
 export default function App() {
   const [lang, setLang] = useState<'ar' | 'en'>('ar');
+  const [assignedRole, setAssignedRole] = useState<'bank' | 'ledger' | null>(null);
   const [file, setFile] = useState<ImportedFile | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -148,7 +152,7 @@ export default function App() {
     }
   }
 
-  const normalized = useMemo(() => file ? normalizeRows(file.rows, file.mapping) : [], [file]);
+  const normalized = useMemo(() => file ? normalizeRows(file.rows, file.mapping, { commaMode: file.commaMode }) : [], [file]);
   const warnings = useMemo(() => validateRows(normalized), [normalized]);
 
   async function handleFile(selected?: File) {
@@ -265,7 +269,7 @@ export default function App() {
           if (!useOcr) throw new Error(t('أُلغي OCR. لم يتم رفع الملف إلى أي خادم بواسطة التطبيق.', 'OCR cancelled. The app did not upload the file.'));
           const pageIssue = ocrPageIssue(doc.numPages); if (pageIssue) throw new Error(limitMessage(pageIssue));
           setOcr(true);
-          const worker = await createWorker('ara+eng');
+          const worker = await createWorkerWithLocalAssets('ara+eng', undefined, { workerPath: tesseractWorkerUrl, corePath: tesseractCoreUrl, langPath: new URL(`${import.meta.env.BASE_URL}tessdata`, window.location.href).href });
           try {
             const ocrLines: string[] = [];
             let totalOcrPixels = 0;
@@ -297,7 +301,9 @@ export default function App() {
         throw new Error(t('صيغة الملف غير مدعومة. استخدم XLSX أو XLS أو CSV أو PDF.', 'Unsupported file. Use XLSX, XLS, CSV, or PDF.'));
       }
       const mapping = detectColumns(headers);
-      setFile({ name: selected.name, rows, headers, mapping, kind, note });
+      setFile({ name: selected.name, rows, headers, mapping, kind, commaMode: 'strict', note });
+      setConfirmed(false);
+      setAssignedRole(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : t('تعذرت قراءة الملف.', 'Could not read file.'));
     } finally { if (releasePdf) { try { await releasePdf(); } catch { /* parser cleanup is best effort */ } } setBusy(false); }
@@ -327,7 +333,7 @@ export default function App() {
       <div className="eyebrow">{t('المرحلة الأولى · استيراد البيانات', 'STAGE 1 · DATA IMPORT')}</div>
       <h1>{t('ابدأ من بيانات واضحة.', 'Start with clean data.')}</h1>
       <p>{t('استورد كشف البنك أو دفتر الأستاذ، راجع الأعمدة، وتحقق من البيانات قبل بدء المطابقة.', 'Import a bank statement or ledger, map columns, and validate the data before reconciliation.')}</p>
-      <div className="privacy"><span className="shield">✓</span><span><b>{t('المعالجة على جهازك', 'Processed on your device')}</b><small>{t('لا يوجد خادم خلفي أو نقطة رفع للملفات. OCR قد يجلب بيانات اللغة عند أول تشغيل.', 'No backend or file-upload endpoint. OCR may fetch language data on first use.')}</small></span></div>
+      <div className="privacy"><span className="shield">✓</span><span><b>{t('المعالجة على جهازك', 'Processed on your device')}</b><small>{t('لا يوجد خادم خلفي أو نقطة رفع للملفات. OCR قد يجلب بيانات اللغة عند أول تشغيل.', 'No backend or file-upload endpoint. OCR downloads trained language data only; worker and OCR engine are bundled locally.')}</small></span></div>
     </section>
     <section className="panel">
       <div className="section-title"><div><span className="step">01</span><h2>{t('استيراد ملف', 'Import a file')}</h2></div><span className="muted">{t('Excel · CSV · PDF', 'Excel · CSV · PDF')}</span></div>
@@ -344,6 +350,7 @@ export default function App() {
         <div className="section-title mapping-heading"><div><span className="step">02</span><h2>{t('راجع تعيين الأعمدة', 'Review column mapping')}</h2></div><button className="secondary compact" type="button" onClick={redetectColumns}>{t('إعادة اكتشاف الأعمدة', 'Re-detect columns')}</button></div>
         <p className="helper">{t('التعيين تلقائي مبدئياً. تأكد من صحة كل عمود قبل اعتماد الاستيراد.', 'Auto-detection is a starting point. Verify every field before accepting the import.')}</p>
         <div className="mapping-grid">{FIELDS.map(field => <label className="map-field" key={field}><span>{LABELS[field][lang === 'ar' ? 0 : 1]}</span><select value={file.mapping[field] === undefined ? '' : String(file.mapping[field])} onChange={e => setMapping(field, e.target.value)}><option value="">{t('غير معيّن', 'Not mapped')}</option>{file.headers.map((h, i) => <option key={`${h}-${i}`} value={i}>{h || `Column ${i + 1}`}</option>)}</select></label>)}</div>
+        <label className="map-field amount-format-choice"><span>{t('صيغة الفاصلة في المبالغ', 'Comma convention for amounts')}</span><select value={file.commaMode} onChange={e => { const nextMode = e.target.value as 'strict' | 'thousands' | 'decimal'; setFile({ ...file, commaMode: nextMode }); if (assignedRole === 'bank') setBankData(normalizeRows(file.rows, file.mapping, { commaMode: nextMode })); if (assignedRole === 'ledger') setLedgerData(normalizeRows(file.rows, file.mapping, { commaMode: nextMode })); setMatchResult(null); setConfirmed(false); }}><option value="strict">{t('تلقائي محافظ — ارفض الملتبس', 'Strict auto — reject ambiguous')}</option><option value="thousands">{t('الفاصلة = آلاف (5,000 = 5000)', 'Comma = thousands (5,000 = 5000)')}</option><option value="decimal">{t('الفاصلة = عشرية (5,000 = 5.000)', 'Comma = decimal (5,000 = 5.000)')}</option></select><small>{t('اختر الصيغة المطابقة للملف قبل اعتماد كشف البنك أو دفتر الأستاذ.', 'Choose the source file convention before assigning the import as bank or ledger.')}</small></label>
         <div className="section-title preview-heading"><div><span className="step">03</span><h2>{t('معاينة البيانات', 'Data preview')}</h2></div><span className="muted">{t('أول 10 صفوف', 'First 10 rows')}</span></div>
         <div className="table-wrap"><table><thead><tr>{(['date', 'description', 'debit', 'credit', 'balance'] as Field[]).map(f => <th key={f}>{LABELS[f][lang === 'ar' ? 0 : 1]}</th>)}<th>{t('حالة التاريخ', 'Date status')}</th></tr></thead><tbody>{preview.map((r, i) => <tr key={i} className={r.isOpeningBalance ? 'opening-balance-row' : undefined}><td>{r.date ?? '—'}</td><td>{r.description || '—'}{r.isOpeningBalance && <small className="row-tag">{t('رصيد افتتاحي', 'Opening balance')}</small>}</td><td>{r.debit ?? '—'}</td><td>{r.credit ?? '—'}</td><td>{r.balance ?? '—'}</td><td>{r.isOpeningBalance ? t('رصيد وليس حركة', 'Balance, not transaction') : r.date ? t('مقروء', 'Parsed') : t('راجع التاريخ', 'Check date')}</td></tr>)}</tbody></table></div>
         <div className="validation">
@@ -351,7 +358,7 @@ export default function App() {
           {warnings.length === 0 ? <p className="good">{t('لم تُكتشف مشكلات أساسية في الحقول المطلوبة.', 'No basic validation issues detected.')}</p> : <ul>{warnings.slice(0, 12).map((w, i) => <li key={i}>{t('الصف', 'Row')} {w.row}: {w.message}</li>)}</ul>}
           {warnings.length > 12 && <small>{t('وملاحظات إضافية', 'Additional warnings')} ({warnings.length - 12})</small>}
         </div>
-        <div className="import-actions"><button className="primary" disabled={file.mapping.date === undefined || (file.mapping.amount === undefined && file.mapping.debit === undefined && file.mapping.credit === undefined)} onClick={() => { setBankData(normalized); setConfirmed(true); setMatchResult(null); }}>{t('اعتماد ككشف بنك', 'Use as bank statement')}</button><button className="secondary" disabled={file.mapping.date === undefined || (file.mapping.amount === undefined && file.mapping.debit === undefined && file.mapping.credit === undefined)} onClick={() => { setLedgerData(normalized); setConfirmed(true); setMatchResult(null); }}>{t('اعتماد كدفتر أستاذ', 'Use as ledger')}</button></div>
+        <div className="import-actions"><button className="primary" disabled={file.mapping.date === undefined || (file.mapping.amount === undefined && file.mapping.debit === undefined && file.mapping.credit === undefined)} onClick={() => { setBankData(normalized); setAssignedRole('bank'); setConfirmed(true); setMatchResult(null); }}>{t('اعتماد ككشف بنك', 'Use as bank statement')}</button><button className="secondary" disabled={file.mapping.date === undefined || (file.mapping.amount === undefined && file.mapping.debit === undefined && file.mapping.credit === undefined)} onClick={() => { setLedgerData(normalized); setAssignedRole('ledger'); setConfirmed(true); setMatchResult(null); }}>{t('اعتماد كدفتر أستاذ', 'Use as ledger')}</button></div>
         {confirmed && <div className="alert success">{t(`تم حفظ ${normalized.length} صفاً في ذاكرة الصفحة. اختر الدور الصحيح للملف؛ يمكنك استيراد الملف الآخر الآن.`, `Saved ${normalized.length} rows in page memory. Assign the correct role; you can now import the other file.`)}</div>}
       </>}
     </section>

@@ -45,6 +45,7 @@ export function parseAmount(input, options = {}) {
   return parseJodAmount(input, {
     blankAsZero: false,
     onWarning: typeof options.onWarning === 'function' ? options.onWarning : undefined,
+    commaMode: options.commaMode,
   });
 }
 export function parseDate(input) {
@@ -71,7 +72,7 @@ function validDate(y, m, d) {
   return `${y.toString().padStart(4, '0')}-${m.toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}`;
 }
 
-export function normalizeRows(rows, mapping) {
+export function normalizeRows(rows, mapping, options = {}) {
   return rows.map((row, index) => {
     const cell = field => {
       if (mapping[field] === undefined) return null;
@@ -79,6 +80,7 @@ export function normalizeRows(rows, mapping) {
     };
     const numericWarnings = [];
     const parseCell = field => parseAmount(cell(field), {
+      commaMode: options.commaMode,
       onWarning: warning => numericWarnings.push({ field, reason: warning.reason, rawValue: String(cell(field) ?? '') }),
     });
     const rawAmount = parseCell('amount');
@@ -136,7 +138,8 @@ export function signedAmount(row) {
 
 function toFils(value) {
   const scaled = value * 1000;
-  return Math.sign(scaled) * Math.round(Math.abs(scaled) + Number.EPSILON);
+  const rounded = Math.round(Math.abs(scaled) + Number.EPSILON);
+  return rounded === 0 ? 0 : Math.sign(scaled) * rounded;
 }
 
 function roundMoney(value) {
