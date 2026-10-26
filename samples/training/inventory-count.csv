@@ -1,0 +1,5 @@
+item_code,item_description,book_quantity,physical_quantity,unit_cost_jod,book_value_jod,notes
+IT-001,Rice 5kg,100,98,4.00,400.00,Investigate count difference and check unit/pack definitions
+IT-002,Olive oil 1L,60,60,3.50,210.00,Trace sample to inventory records and cost invoices
+IT-003,Canned beans,120,115,0.80,96.00,Investigate shortage; do not assume theft
+IT-004,Flour 1kg,200,200,0.45,90.00,Inspect expiry/damage and valuation evidence
